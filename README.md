@@ -2,6 +2,8 @@
 
 Code review easy. GitLab webhooks trigger a deep OpenCode review of a merge request against the cloned codebase.
 
+Agent rules and commit conventions: [AGENTS.md](AGENTS.md).
+
 Clones live with the MR. They are deleted only when the MR is closed or merged. Each `/review` or `/ask` is a separate job that can resume the same OpenCode session.
 
 ## Run
