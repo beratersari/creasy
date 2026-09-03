@@ -68,4 +68,9 @@ class JobRecord(BaseModel):
         data = self.model_dump()
         data.pop("prompt", None)
         data.pop("extra_pids", None)
+        data["jira_id"] = data.get("mr_key") or ""
+        data["agent_mode"] = data.get("agent") or ""
+        data["repo_url"] = data.get("web_url") or ""
+        data.setdefault("attempt", 1)
+        data.setdefault("retry_count", 1)
         return data

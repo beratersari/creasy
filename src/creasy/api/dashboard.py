@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+import asyncio
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
 from creasy.logging import get_logger
@@ -30,18 +34,61 @@ def _mgr(request: Request):
     return request.app.state.manager
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _log_lines(raw: list[str], job: object) -> list[dict[str, str]]:
+    out: list[dict[str, str]] = []
+    for line in raw:
+        out.append(
+            {
+                "timestamp": "",
+                "message": line,
+                "job_id": getattr(job, "job_id", ""),
+                "jira_id": getattr(job, "mr_key", ""),
+            }
+        )
+    return out
+
+
+def _chat_payload(job) -> dict:
+    messages = []
+    for index, row in enumerate(job.chat_snapshot or []):
+        if not isinstance(row, dict):
+            continue
+        messages.append(
+            {
+                "id": row.get("id") or f"msg_{index}",
+                "session_id": row.get("session_id") or job.session_id or "",
+                "role": row.get("role") or "unknown",
+                "parts": row.get("parts") or [],
+            }
+        )
+    return {
+        "job_id": job.job_id,
+        "session_id": job.session_id,
+        "session_ids": [job.session_id] if job.session_id else [],
+        "messages": messages,
+        "chat": job.chat_snapshot,
+        "text": job.text,
+    }
+
+
 @router.get("/api/jobs")
 def api_jobs(
     request: Request,
     mr_key: Optional[str] = None,
+    jira_id: Optional[str] = None,
     filter: str = Query(default="all"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
 ) -> dict:
     _check_token(request)
     jobs = _mgr(request).store.list_all()
-    if mr_key:
-        jobs = [j for j in jobs if j.mr_key == mr_key]
+    key = (mr_key or jira_id or "").strip()
+    if key:
+        jobs = [j for j in jobs if j.mr_key == key]
     filt = (filter or "all").strip().lower()
     if filt == "active":
         jobs = [j for j in jobs if j.status in LIVE_STATUSES]
@@ -60,6 +107,7 @@ def api_jobs(
         "page": page,
         "page_size": page_size,
         "filter": filt,
+        "server_time": _now(),
     }
 
 
@@ -73,7 +121,7 @@ def api_job(job_id: str, request: Request) -> dict:
     lines: list[str] = []
     if log_path.is_file():
         lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]
-    return {"job": job.public_dict(), "system_logs": lines}
+    return {"job": job.public_dict(), "system_logs": _log_lines(lines, job)}
 
 
 @router.get("/api/jobs/{job_id}/chat")
@@ -82,7 +130,25 @@ def api_chat(job_id: str, request: Request) -> dict:
     job = _mgr(request).store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
-    return {"job_id": job.job_id, "session_id": job.session_id, "chat": job.chat_snapshot, "text": job.text}
+    return _chat_payload(job)
+
+
+@router.get("/api/jobs/{job_id}/prompts")
+def api_prompts(job_id: str, request: Request) -> dict:
+    _check_token(request)
+    job = _mgr(request).store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"No job {job_id}")
+    prompts = []
+    if job.prompt:
+        prompts.append(
+            {
+                "id": "user",
+                "text": job.prompt,
+                "posted_at": job.accepted_at or job.started_at or "",
+            }
+        )
+    return {"prompts": prompts}
 
 
 @router.get("/api/jobs/{job_id}/logs")
@@ -98,7 +164,7 @@ def api_logs(job_id: str, request: Request, limit: int = Query(default=2000, ge=
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
         if limit:
             lines = lines[-limit:]
-    return {"job_id": job.job_id, "lines": lines}
+    return {"job_id": job.job_id, "lines": _log_lines(lines, job)}
 
 
 @router.get("/api/jobs/{job_id}/serve-log")
@@ -113,14 +179,58 @@ def api_serve_log(job_id: str, request: Request) -> dict:
 
 
 @router.get("/api/queue")
-def api_queue(request: Request, mr_key: Optional[str] = None) -> dict:
+def api_queue(request: Request, mr_key: Optional[str] = None, jira_id: Optional[str] = None) -> dict:
     _check_token(request)
-    items = _mgr(request).queue.public_items(mr_key=mr_key)
+    key = (mr_key or jira_id or "").strip() or None
+    raw = _mgr(request).queue.public_items(mr_key=key)
+    items = []
+    for row in raw:
+        job = _mgr(request).store.get(row["job_id"])
+        items.append(job.public_dict() if job else {"job_id": row["job_id"], "jira_id": row["mr_key"], "mr_key": row["mr_key"], "status": "queued", "live": False})
     running = []
     for job in _mgr(request).store.list_all():
-        if job.status == "running" and (mr_key is None or job.mr_key == mr_key):
+        if job.status == "running" and (key is None or job.mr_key == key):
             running.append({"mr_key": job.mr_key, "job_id": job.job_id, "trigger": job.trigger})
     return {"items": items, "queued_count": len(items), "running": running}
+
+
+@router.get("/api/meta")
+def api_meta(request: Request) -> dict:
+    from creasy import __version__
+
+    return {"version": __version__, "server_time": _now(), "app_name": "creasy"}
+
+
+@router.get("/api/report-context")
+def api_report_context(request: Request) -> dict:
+    _check_token(request)
+    health = _mgr(request).health()
+    return {
+        "meta": {"app_name": "creasy", "server_time": _now()},
+        "queue": {"items": [], "queued_count": health.get("queued") or 0},
+        "live": {"running": health.get("running") or 0, "queued": health.get("queued") or 0},
+        "server_time": _now(),
+    }
+
+
+@router.websocket("/ws")
+async def dashboard_ws(ws: WebSocket) -> None:
+    await ws.accept()
+    try:
+        while True:
+            manager = ws.app.state.manager
+            health = manager.health()
+            await ws.send_json(
+                {
+                    "running": health.get("running") or 0,
+                    "queue_queued": health.get("queued") or 0,
+                }
+            )
+            await asyncio.sleep(2)
+    except WebSocketDisconnect:
+        return
+    except Exception:
+        return
 
 
 @router.post("/api/jobs/{job_id}/cancel")
@@ -154,21 +264,40 @@ def api_reviews(project_id: int, mr_iid: int, request: Request) -> dict:
 
 
 def spa_dir() -> Path:
-    return Path(__file__).resolve().parents[3] / "web"
+    # Served UI is the Vite build only. web/index.html is the dev entry
+    # (loads /src/main.tsx) and must not be used as a fallback.
+    return Path(__file__).resolve().parents[3] / "web" / "dist"
 
 
 def attach_spa(app) -> None:
     dist = spa_dir()
     index = dist / "index.html"
+    assets = dist / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    def _index() -> FileResponse:
+        if not index.is_file():
+            raise HTTPException(status_code=404, detail="dashboard not built")
+        return FileResponse(index)
 
     @app.get("/")
     def root() -> FileResponse:
         if index.is_file():
-            return FileResponse(index)
+            return _index()
         return JSONResponse({"service": "creasy", "docs": "/jobs"})
 
     @app.get("/jobs")
     def jobs_page() -> FileResponse:
-        if not index.is_file():
-            raise HTTPException(status_code=404, detail="dashboard not built")
-        return FileResponse(index)
+        return _index()
+
+    @app.get("/jobs/{job_id}")
+    def job_page(job_id: str) -> FileResponse:
+        return _index()
+
+    favicon = dist / "favicon.svg"
+    if favicon.is_file():
+
+        @app.get("/favicon.svg")
+        def favicon_svg() -> FileResponse:
+            return FileResponse(favicon)

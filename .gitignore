@@ -6,7 +6,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
-dist/
+/dist/
+web/node_modules/
+*.tsbuildinfo
 build/
 *.egg-info/
 logs/

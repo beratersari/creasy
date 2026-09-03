@@ -1,0 +1,39 @@
+"""Dashboard uses the OSM jobs workbench frontend."""
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_osm_shell_branded_creasy() -> None:
+    shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
+    assert "Creasy" in shell
+    assert 'vd-mark">CR' in shell
+    assert "Jobs" in shell
+
+
+def test_jobs_page_keeps_osm_workbench() -> None:
+    page = (ROOT / "web" / "src" / "pages" / "jobs" / "JobsPage.tsx").read_text(encoding="utf-8")
+    assert "Workbench" in page
+    assert "vd-job" in page
+    assert "Find merge request" in page
+
+
+def test_dashboard_does_not_start_reviews() -> None:
+    client = (ROOT / "web" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    assert "POST /jobs" not in client
+    assert "/webhook" not in client
+
+
+def test_vite_source_html_is_not_the_served_dashboard() -> None:
+    src = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    assert "/src/main.tsx" in src
+    from creasy.api.dashboard import spa_dir
+
+    assert spa_dir() == ROOT / "web" / "dist"
+    dist = spa_dir() / "index.html"
+    if dist.is_file():
+        built = dist.read_text(encoding="utf-8")
+        assert "Creasy" in built
+        assert "/assets/" in built
+        assert "/src/main.tsx" not in built
