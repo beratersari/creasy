@@ -19,21 +19,7 @@ jobs:
       - name: Install (online, tests)
         run: python -m pip install -e ".[dev]"
       - name: Pytest
-        run: |
-          set +e
-          python -m pytest --tb=line -q | tee pytest.out
-          ec=${PIPESTATUS[0]}
-          {
-            echo '```'
-            cat pytest.out
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          while IFS= read -r line; do
-            case "$line" in
-              FAILED*|E\ *|ERROR*) echo "::error::$line" ;;
-            esac
-          done < pytest.out
-          exit "$ec"
+        run: python -m pytest -q --tb=short
 
   scripts-linux:
     name: vendor + install + start (Linux)

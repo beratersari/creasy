@@ -321,6 +321,17 @@ def test_delete_skips_rm_when_folder_already_gone(tmp_path: Path, monkeypatch) -
     dest = tmp_path / "gone"
     dest.mkdir()
     monkeypatch.setattr(endmod.os, "name", "nt")
+
+    def fake_delete(path):
+        import shutil
+
+        if Path(path).exists():
+            shutil.rmtree(path)
+        return True
+
+    # Do not run Windows ``rd`` via the real hard_delete: patching os.name
+    # to nt on Linux makes pathlib raise WindowsPath during pytest reports.
+    monkeypatch.setattr(endmod, "hard_delete", fake_delete)
     queries: list[object] = []
     monkeypatch.setattr(
         endmod,
