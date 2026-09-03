@@ -7,8 +7,8 @@ from typing import Callable, Optional, Protocol
 from creasy.config import Config
 from creasy.gitlab.client import GitLabClient, MergeRequest
 from creasy.jobs.models import JobRecord
+from creasy.cleanup.end import stop_job_holders
 from creasy.logging import get_logger
-from creasy.opencode.kill import kill_job_tree
 from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop_serve
 from creasy.opencode.session import OpenCodeClient, OpenCodeError, last_assistant_text, snapshot_chat
 from creasy.review.format import format_cancelled, format_failure, format_success
@@ -171,9 +171,18 @@ class OpenCodeRunner:
                 except Exception:
                     pass
                 client.close()
-            stop_serve(handle)
             if handle is not None:
-                kill_job_tree([handle.pid])
+                job.serve_pid = handle.pid
+                job.serve_port = handle.port
+                result.serve_pid = handle.pid
+                result.serve_port = handle.port
+            clone = Path(result.clone_path) if result.clone_path else None
+            try:
+                stop_job_holders(job, clone)
+            except Exception:  # noqa: BLE001
+                logger.exception("job-end stop_job_holders failed job=%s", job.job_id)
+            stop_serve(handle)
+            # Keep the clone. OSM deletes here; Creasy waits for MR close/merge.
 
     def _prompt(
         self,

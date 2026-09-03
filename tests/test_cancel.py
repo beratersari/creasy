@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import time
 
-from creasy.gitlab.events import ReviewTrigger
+from creasy.gitlab.events import CleanupTrigger, ReviewTrigger
 from creasy.jobs.manager import Manager
+from creasy.workspace.store import WorkspaceRecord
 from conftest import FakeRunner
 
 
@@ -72,3 +73,47 @@ def test_cancel_all_keeps_clone_dir(tmp_config):
     assert dest.exists()
     runner.release.set()
     manager.shutdown()
+
+
+def test_merge_runs_osm_delete_cascade(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    dest = tmp_config.work_dir / "9-5"
+    dest.mkdir(parents=True)
+    (dest / "tree.txt").write_text("clone", encoding="utf-8")
+    manager.workspaces.save(
+        WorkspaceRecord(mr_key="9-5", project_id=9, mr_iid=5, clone_path=str(dest))
+    )
+    manager.cleanup_mr(CleanupTrigger(project_id=9, mr_iid=5, action="merge"))
+    assert not dest.exists()
+    assert manager.workspaces.get("9-5") is None
+    manager.shutdown()
+
+
+def test_close_also_deletes_clone(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    dest = tmp_config.work_dir / "9-6"
+    dest.mkdir(parents=True)
+    (dest / "tree.txt").write_text("clone", encoding="utf-8")
+    manager.workspaces.save(
+        WorkspaceRecord(mr_key="9-6", project_id=9, mr_iid=6, clone_path=str(dest))
+    )
+    manager.cleanup_mr(CleanupTrigger(project_id=9, mr_iid=6, action="close"))
+    assert not dest.exists()
+    manager.shutdown()
+
+
+def test_shutdown_does_not_delete_clone(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    dest = tmp_config.work_dir / "9-7"
+    dest.mkdir(parents=True)
+    (dest / "keep.txt").write_text("x", encoding="utf-8")
+    manager.submit(_trig("review", iid=7))
+    assert runner.started.wait(2)
+    manager.shutdown()
+    assert dest.exists()

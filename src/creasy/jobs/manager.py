@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import threading
+from pathlib import Path
 from typing import Callable, Optional
 
 from creasy.config import Config
@@ -9,9 +11,9 @@ from creasy.jobs.models import JobRecord, mint_job_id, utc_now
 from creasy.jobs.queue import JobQueue
 from creasy.jobs.store import JobStore
 from creasy.jobs.worker import JobRunner, RunResult
+from creasy.cleanup.end import delete_clone_path, protect_pids, stop_job_holders
+from creasy.cleanup.kill import kill_job_tree, reap_work_dir
 from creasy.logging import get_logger
-from creasy.opencode.kill import kill_job_tree
-from creasy.workspace.gitops import delete_clone
 from creasy.workspace.identity import clone_path_for, mr_key
 from creasy.workspace.store import WorkspaceStore
 
@@ -47,6 +49,10 @@ class Manager:
             pids.extend([job.serve_pid, *list(job.extra_pids or [])])
         if pids:
             kill_job_tree(pids)
+        try:
+            reap_work_dir(self.config.work_dir, protect={os.getpid()})
+        except Exception:  # noqa: BLE001
+            logger.exception("boot reap_work_dir failed")
         for job in leftover:
             if job.status == "running":
                 self._finish(
@@ -69,9 +75,14 @@ class Manager:
         for event in events:
             event.set()
         live = [j for j in self.store.list_all() if j.status in {"queued", "running"}]
+        guarded = protect_pids()
         for job in live:
             if job.status == "running":
-                kill_job_tree([job.serve_pid, *list(job.extra_pids or [])])
+                clone = Path(job.clone_path) if job.clone_path else None
+                try:
+                    stop_job_holders(job, clone, protect=guarded)
+                except Exception:  # noqa: BLE001
+                    logger.exception("shutdown stop_job_holders failed job=%s", job.job_id)
             elif job.status == "queued":
                 self.queue.remove(job.mr_key, job.job_id)
                 self._finish(job, RunResult(error="manager shutting down", cancelled=True), status="cancelled")
@@ -123,7 +134,13 @@ class Manager:
     def cleanup_mr(self, trigger: CleanupTrigger) -> None:
         key = mr_key(trigger.project_id, trigger.mr_iid)
         logger.info("cleanup %s action=%s", key, trigger.action)
-        self.cancel_mr(trigger.project_id, trigger.mr_iid, delete_clone_dir=True)
+        # OSM cascade. Trigger is MR close/merge, not job end.
+        self.cancel_mr(
+            trigger.project_id,
+            trigger.mr_iid,
+            delete_clone_dir=True,
+            delete_reason=f"mr-{trigger.action}",
+        )
 
     def cancel_job(self, job_id: str) -> tuple[bool, str]:
         job = self.store.get(job_id)
@@ -138,10 +155,22 @@ class Manager:
         event = self._cancel.get(job.job_id)
         if event:
             event.set()
-        kill_job_tree([job.serve_pid, *list(job.extra_pids or [])])
+        clone = Path(job.clone_path) if job.clone_path else None
+        try:
+            stop_job_holders(job, clone, protect=protect_pids())
+        except Exception:  # noqa: BLE001
+            logger.exception("cancel stop_job_holders failed job=%s", job.job_id)
+            kill_job_tree([job.serve_pid, *list(job.extra_pids or [])])
         return True, "cancel requested"
 
-    def cancel_mr(self, project_id: int, mr_iid: int, *, delete_clone_dir: bool = False) -> tuple[int, str]:
+    def cancel_mr(
+        self,
+        project_id: int,
+        mr_iid: int,
+        *,
+        delete_clone_dir: bool = False,
+        delete_reason: str = "mr-merge",
+    ) -> tuple[int, str]:
         key = mr_key(project_id, mr_iid)
         cancelled = 0
         running = self.store.running_for_mr(key)
@@ -161,11 +190,22 @@ class Manager:
                         thread.join(timeout=15)
                         break
             record = self.workspaces.get(key)
-            from pathlib import Path
-
             path = Path(record.clone_path) if record and record.clone_path else clone_path_for(self.config.work_dir, key)
+            holders = running
+            if holders is None:
+                holders = JobRecord(
+                    job_id="cleanup",
+                    mr_key=key,
+                    project_id=project_id,
+                    mr_iid=mr_iid,
+                    trigger="review",
+                )
             try:
-                delete_clone(path)
+                stop_job_holders(holders, path, protect=protect_pids())
+            except Exception:  # noqa: BLE001
+                logger.exception("stop_job_holders failed %s", key)
+            try:
+                delete_clone_path(path, reason=delete_reason)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("delete clone failed %s: %s", key, exc)
             self.workspaces.delete(key)
