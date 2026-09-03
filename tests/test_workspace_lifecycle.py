@@ -23,7 +23,7 @@ def _init_repo(root: Path) -> Path:
     repo = root / "origin.git"
     repo.mkdir(parents=True)
     _git(repo, "init")
-    _git(repo, "checkout", "-b", "main")
+    _git(repo, "checkout", "-B", "main")
     _git(repo, "config", "user.email", "t@example.com")
     _git(repo, "config", "user.name", "t")
     (repo / "app.py").write_text("print(1)\n", encoding="utf-8")
