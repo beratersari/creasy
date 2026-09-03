@@ -16,7 +16,7 @@ python packaging/build_dist.py --in-place    # or scripts/vendor.bat
 
 # On the air-gapped host (or after unzipping the CI artifact)
 install.bat                 # .venv from vendor/python/windows/python.exe
-install-opencode.bat        # wipes ~/.opencode, copies vendor/bin
+install-opencode.bat        # keeps ~/.opencode; adds review agent; copies vendor/bin if missing
 # edit .env (GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL)
 start.bat                   # new window + wait for /health
 ```

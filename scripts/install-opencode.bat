@@ -1,7 +1,7 @@
 @echo off
 REM =============================================================================
 REM Creasy - install OpenCode CLI (offline)
-REM Detects a previous user install, deletes it, copies vendor\bin from scratch.
+REM Keeps an existing user install. Adds the review agent. Copies vendor\bin only if missing.
 REM Does not install Python / the dashboard. Use install.bat for that.
 REM IMPORTANT: never use unescaped "->" in echo lines (cmd redirect).
 REM =============================================================================
@@ -23,7 +23,7 @@ cd /d "%ROOT%"
 
 echo ========================================
 echo   Creasy
-echo   OpenCode CLI install ^(offline, from scratch^)
+echo   OpenCode CLI install ^(offline, keeps existing home^)
 echo ========================================
 echo.
 echo Project : %ROOT%

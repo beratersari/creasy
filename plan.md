@@ -358,7 +358,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `OPENCODE_MODEL` | `opencode/big-pickle` | `provider/id` |
 | `OPENCODE_TIMEOUT` | `1800` | One attempt, seconds |
 | `OPENCODE_RETRY_COUNT` | `2` | Attempts, first included |
-| `OPENCODE_AGENT` | `orchestrator` | OSM-style agent id we keep (`planner` or `orchestrator`) |
+| `OPENCODE_AGENT` | `review` | OpenCode agent id. Installer writes the read-only `review` agent |
 | `MAX_CONCURRENT_JOBS` | `2` | Live serves |
 | `DATA_DIR` | `./data` | clones, logs, job/workspace JSON |
 | `SKIP_DRAFT_MRS` | `true` | |

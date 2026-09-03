@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""Wipe any previous OpenCode user install and copy the vendored CLI (offline, stdlib)."""
+"""Install or extend the user OpenCode home (offline, stdlib).
+
+Never deletes an existing OpenCode install. A first run copies the vendored
+CLI and a stock config. A later run only adds the Creasy review agent,
+C++ review skills, and a missing binary or config.
+"""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import shutil
-import stat
 import sys
-import time
 from pathlib import Path
 
 STOCK_CONFIG = """{
@@ -18,6 +22,10 @@ STOCK_CONFIG = """{
   "plugin": []
 }
 """
+
+REVIEW_AGENT_REL = Path("scripts") / "opencode" / "review.md"
+REVIEW_SKILLS_REL = Path("scripts") / "opencode" / "skills"
+REVIEW_SKILL_NAMES = ("cpp98", "modern-cpp")
 
 
 def home() -> Path:
@@ -29,16 +37,41 @@ def home() -> Path:
     return Path.home()
 
 
-def opencode_home() -> Path:
-    return home() / ".opencode"
+def opencode_home(user_home: Path | None = None) -> Path:
+    return (user_home or home()) / ".opencode"
 
 
-def dest_dir() -> Path:
-    return opencode_home() / "bin"
+def config_home(user_home: Path | None = None) -> Path:
+    return (user_home or home()) / ".config" / "opencode"
+
+
+def dest_dir(user_home: Path | None = None) -> Path:
+    return opencode_home(user_home) / "bin"
+
+
+def dest_binary(user_home: Path | None = None) -> Path:
+    name = "opencode.exe" if os.name == "nt" else "opencode"
+    return dest_dir(user_home) / name
+
+
+def review_agent_source(root: Path) -> Path:
+    return Path(root) / REVIEW_AGENT_REL
+
+
+def review_skills_source(root: Path) -> Path:
+    return Path(root) / REVIEW_SKILLS_REL
+
+
+def review_agent_dests(user_home: Path | None = None, *, include_opencode_home: bool = True) -> list[Path]:
+    base = user_home or home()
+    dests = [config_home(base) / "agents" / "review.md"]
+    if include_opencode_home:
+        dests.append(opencode_home(base) / "agents" / "review.md")
+    return dests
 
 
 def vendor_binary(root: Path) -> Path | None:
-    vendor_bin = root / "vendor" / "bin"
+    vendor_bin = Path(root) / "vendor" / "bin"
     if os.name == "nt":
         candidates = (vendor_bin / "windows" / "opencode.exe", vendor_bin / "opencode.exe")
     elif sys.platform == "darwin":
@@ -53,14 +86,9 @@ def vendor_binary(root: Path) -> Path | None:
     return None
 
 
-def candidate_old_paths() -> list[Path]:
-    # Install and wipe only <user>/.opencode (Windows: %USERPROFILE%\.opencode).
-    return [opencode_home()]
-
-
-def existing_locations() -> list[Path]:
+def existing_install(user_home: Path | None = None) -> list[Path]:
     found: list[Path] = []
-    for path in candidate_old_paths():
+    for path in (opencode_home(user_home), config_home(user_home)):
         try:
             if path.exists():
                 found.append(path)
@@ -69,56 +97,96 @@ def existing_locations() -> list[Path]:
     return found
 
 
-def remove_tree(path: Path) -> None:
-    if not path.exists() and not path.is_symlink():
+def ensure_binary(src: Path | None, dest: Path) -> str:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.is_file():
+        print(f"[OK] Binary kept: {dest}")
+        return "kept"
+    if src is None:
+        raise FileNotFoundError(f"No OpenCode binary to install at {dest}")
+    shutil.copy2(src, dest)
+    if os.name != "nt":
+        dest.chmod(dest.stat().st_mode | 0o111)
+    print(f"[OK] Binary installed: {dest}")
+    return "installed"
+
+
+def ensure_config(path: Path) -> str:
+    if path.is_file():
+        _keep_existing_config(path)
+        print(f"[OK] Config kept: {path}")
+        return "kept"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(STOCK_CONFIG, encoding="utf-8")
+    print(f"[OK] Config created: {path}")
+    return "created"
+
+
+def _keep_existing_config(path: Path) -> None:
+    """Leave user plugins and keys in place. Invalid JSON is not rewritten."""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
         return
-    last_err: OSError | None = None
-    for _ in range(8):
-        try:
-            if path.is_symlink() or path.is_file():
-                path.unlink()
-            else:
-
-                def _onexc(func, p, _exc):  # type: ignore[no-untyped-def]
-                    try:
-                        os.chmod(p, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
-                    except OSError:
-                        pass
-                    func(p)
-
-                if sys.version_info >= (3, 12):
-                    shutil.rmtree(path, onexc=_onexc)
-                else:
-                    shutil.rmtree(path, onerror=lambda func, p, _i: _onexc(func, p, None))
-            return
-        except OSError as e:
-            last_err = e
-            time.sleep(0.4)
-    raise OSError(f"Could not remove {path}: {last_err}")
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        print(f"[OK] Config left untouched (not plain JSON): {path}")
 
 
-def wipe_old() -> list[Path]:
-    found = existing_locations()
-    if not found:
-        print("[OK] No previous OpenCode install found")
-        return []
-    print("Previous OpenCode install detected:")
-    for path in found:
-        print(f"  {path}")
-    print("Removing it so this install is from scratch...")
-    for path in found:
-        print(f"  Removing {path}")
-        remove_tree(path)
-        if path.exists():
-            raise OSError(f"Still present after delete: {path}")
-        print(f"  [OK] gone: {path}")
-    return found
+def install_review_agent(
+    root: Path,
+    user_home: Path | None = None,
+    *,
+    include_opencode_home: bool = True,
+) -> list[Path]:
+    src = review_agent_source(root)
+    if not src.is_file():
+        raise FileNotFoundError(f"Review agent missing: {src}")
+    text = src.read_text(encoding="utf-8")
+    written: list[Path] = []
+    for dest in review_agent_dests(user_home, include_opencode_home=include_opencode_home):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        written.append(dest)
+        print(f"[OK] Review agent written: {dest}")
+    return written
 
 
-def write_stock_config(oc_home: Path) -> Path:
-    cfg = oc_home / "opencode.json"
-    cfg.write_text(STOCK_CONFIG, encoding="utf-8")
-    return cfg
+def review_skill_dests(
+    name: str,
+    user_home: Path | None = None,
+    *,
+    include_opencode_home: bool = True,
+) -> list[Path]:
+    base = user_home or home()
+    dests = [config_home(base) / "skills" / name / "SKILL.md"]
+    if include_opencode_home:
+        dests.append(opencode_home(base) / "skills" / name / "SKILL.md")
+    return dests
+
+
+def install_review_skills(
+    root: Path,
+    user_home: Path | None = None,
+    *,
+    include_opencode_home: bool = True,
+) -> list[Path]:
+    src_root = review_skills_source(root)
+    written: list[Path] = []
+    for name in REVIEW_SKILL_NAMES:
+        src = src_root / name / "SKILL.md"
+        if not src.is_file():
+            raise FileNotFoundError(f"Review skill missing: {src}")
+        text = src.read_text(encoding="utf-8")
+        for dest in review_skill_dests(
+            name, user_home, include_opencode_home=include_opencode_home
+        ):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
+            written.append(dest)
+            print(f"[OK] Review skill written: {dest}")
+    return written
 
 
 def prepend_user_path(directory: Path) -> None:
@@ -144,26 +212,46 @@ def prepend_user_path(directory: Path) -> None:
         key.Close()
 
 
-def install(root: Path) -> Path:
+def install(root: Path, *, user_home: Path | None = None) -> Path:
+    root = Path(root).expanduser().resolve()
+    base = user_home or home()
+    oc_home = opencode_home(base)
+    cfg_home = config_home(base)
+    dest = dest_binary(base)
     src = vendor_binary(root)
-    if src is None:
+    found = existing_install(base)
+
+    if found:
+        print("Existing OpenCode install kept:")
+        for path in found:
+            print(f"  {path}")
+    else:
+        print("No previous OpenCode home found; installing a new one.")
+
+    oc_exists = oc_home.exists()
+    own_home = dest.is_file() or (src is not None and (oc_exists or not found))
+    if own_home:
+        ensure_binary(src, dest)
+        if user_home is None:
+            prepend_user_path(dest.parent)
+        ensure_config(oc_home / "opencode.json")
+    elif not found:
         raise FileNotFoundError(f"No OpenCode binary under {root / 'vendor' / 'bin'}")
-    wipe_old()
-    dest = dest_dir()
-    dest.mkdir(parents=True, exist_ok=True)
-    target = dest / src.name
-    shutil.copy2(src, target)
-    if os.name != "nt":
-        target.chmod(target.stat().st_mode | 0o111)
-    write_stock_config(opencode_home())
-    prepend_user_path(dest)
-    print(f"Install root: {opencode_home()}")
-    return target
+    else:
+        print("[OK] Existing OpenCode config kept; adding the review agent and skills only")
+
+    if (cfg_home / "opencode.json").is_file():
+        ensure_config(cfg_home / "opencode.json")
+    include_home = own_home or oc_exists
+    install_review_agent(root, base, include_opencode_home=include_home)
+    install_review_skills(root, base, include_opencode_home=include_home)
+    print(f"Install root: {oc_home if own_home or oc_exists else cfg_home}")
+    return dest if dest.is_file() else review_agent_dests(base, include_opencode_home=False)[0]
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
-        description="Wipe previous OpenCode and install the vendored CLI (offline)"
+        description="Install the vendored OpenCode CLI if needed; always add the Creasy review agent and C++ skills. Never deletes an existing install."
     )
     p.add_argument("--root", required=True, help="Repo / zip root that contains vendor/bin")
     args = p.parse_args(argv)
@@ -172,12 +260,13 @@ def main(argv: list[str] | None = None) -> int:
         target = install(root)
     except FileNotFoundError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
-        print("Use a CI zip from packaging/build_dist.py.", file=sys.stderr)
+        print("Use a CI zip from packaging/build_dist.py, or keep an existing OpenCode home.", file=sys.stderr)
         return 1
     except OSError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
-    print(f"[OK] OpenCode installed from scratch: {target}")
+    print(f"[OK] OpenCode ready: {target}")
+    print("Jobs use OPENCODE_AGENT=review (see .env.example).")
     return 0
 
 

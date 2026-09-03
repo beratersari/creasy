@@ -22,5 +22,6 @@ def test_start_scripts_match_osm_backend_pattern() -> None:
     assert "install-opencode" in win
     assert "install-opencode" in sh
     oc = (ROOT / "scripts" / "install_opencode.py").read_text(encoding="utf-8")
-    assert "wipe_old" in oc
+    assert "wipe_old" not in oc
+    assert "install_review_agent" in oc
     assert "vendor" in oc and "bin" in oc
