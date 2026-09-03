@@ -10,5 +10,5 @@ dist/
 build/
 *.egg-info/
 logs/
-vendor/python-wheels/
+vendor/
 .tmp-refs/

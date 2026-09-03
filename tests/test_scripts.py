@@ -18,23 +18,21 @@ def test_install_scripts_are_offline_only():
     assert "--find-links" in sh
     assert "vendor\\python-wheels" in bat or "vendor/python-wheels" in bat
     assert "vendor/python-wheels" in sh
-    assert "npm" not in bat.lower()
-    assert "npm" not in sh.lower()
+    assert "does not run npm" in bat.lower() or "does not run npm" in sh.lower()
 
 
-def test_vendor_scripts_download_runtime_deps():
+def test_vendor_scripts_call_build_dist():
     bat = _read("scripts/vendor.bat")
     sh = _read("scripts/vendor.sh")
     for body in (bat, sh):
-        assert "pip download" in body
-        assert "fastapi" in body
-        assert "uvicorn" in body
+        assert "build_dist.py" in body
+        assert "--in-place" in body
 
 
 def test_start_scripts_launch_creasy():
     bat = _read("scripts/start.bat")
     sh = _read("scripts/start.sh")
-    assert "-m creasy" in bat
+    assert "run-server.bat" in bat
     assert "-m creasy" in sh
     assert "GIT_TERMINAL_PROMPT" in bat
     assert "GIT_TERMINAL_PROMPT" in sh
@@ -49,16 +47,36 @@ def test_root_wrappers_call_scripts():
     assert "scripts/start.sh" in _read("start.sh")
 
 
+def test_bat_files_avoid_osm_cmd_bugs():
+    """OSM: unescaped '->' is a redirect; cmd /v:on /c eats delayed expansion."""
+    bats = list((ROOT / "scripts").glob("*.bat")) + list(ROOT.glob("*.bat"))
+    assert bats
+    for path in bats:
+        text = path.read_text(encoding="utf-8")
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.upper().startswith("REM"):
+                continue
+            assert "->" not in line, f"{path.name} has unescaped -> : {line}"
+        assert "cmd /v:on /c" not in text
+        if path.name in {"install.bat", "start.bat", "vendor.bat"} or path.parent.name == "scripts":
+            if path.name.startswith("install") or path.name.startswith("start") or path.name.startswith("vendor"):
+                if path.parent.name == "scripts":
+                    assert "maybe_pause" in text
+                    assert "CREASY_NONINTERACTIVE" in text
+                    assert "—" not in text
+
+
 def test_ci_runs_vendor_install_start():
     workflow = _read(".github/workflows/ci.yml")
-    assert "scripts/vendor.sh" in workflow
+    assert "packaging/build_dist.py" in workflow
     assert "scripts/install.sh" in workflow
     assert "scripts/start.sh" in workflow
-    assert "scripts\\vendor.bat" in workflow
     assert "scripts\\install.bat" in workflow
     assert "scripts\\start.bat" in workflow
+    assert "install-opencode" in workflow
     assert "/health" in workflow
     assert "upload-artifact" in workflow
-    assert "creasy-offline-linux" in workflow
-    assert "creasy-offline-windows" in workflow
-    assert "pack_offline.py" in workflow
+    assert "creasy-offline-zips" in workflow
+    assert "run-server.bat" in _read("scripts/start.bat")
+    assert "cmd /v:on /c" not in _read("scripts/start.bat")

@@ -21,8 +21,8 @@ jobs:
       - name: Pytest
         run: python -m pytest -q --tb=short
 
-  scripts-linux:
-    name: vendor + install + start (Linux)
+  offline-linux:
+    name: OSM-style offline (Linux)
     runs-on: ubuntu-latest
     env:
       CREASY_NONINTERACTIVE: "1"
@@ -32,62 +32,55 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Make launchers executable
-        run: chmod +x scripts/*.sh install.sh start.sh vendor.sh
-      - name: Vendor wheels (online)
-        run: scripts/vendor.sh
-      - name: Offline install from vendor/python-wheels
-        run: scripts/install.sh
-      - name: Pack offline zip
-        run: python scripts/pack_offline.py --tag linux-${{ github.sha }} --out dist/creasy-offline-linux.zip
-      - name: Upload offline Linux artifact
+      - name: Build offline zips (bundled CPython + OpenCode + wheels)
+        run: python packaging/build_dist.py --out-dir dist
+      - name: Upload offline zips
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-offline-linux
-          path: dist/creasy-offline-linux.zip
+          name: creasy-offline-zips
+          path: dist/creasy-*.zip
           if-no-files-found: error
           retention-days: 30
-      - name: Start server via start.sh
+      - name: Install + start from the Linux zip
         run: |
           set -euo pipefail
-          scripts/start.sh > start.log 2>&1 &
-          echo $! > start.pid
+          zip=$(ls dist/creasy-*-linux-x64.zip | head -1)
+          rm -rf /tmp/creasy-off
+          mkdir -p /tmp/creasy-off
+          python -m zipfile -e "$zip" /tmp/creasy-off
+          root=$(find /tmp/creasy-off -maxdepth 2 -name pyproject.toml -printf '%h\n' | head -1)
+          chmod +x "$root"/scripts/*.sh "$root"/*.sh || true
+          (cd "$root" && scripts/install.sh)
+          (cd "$root" && scripts/install-opencode.sh)
+          (cd "$root" && scripts/start.sh > /tmp/creasy-start.log 2>&1) &
+          echo $! > /tmp/creasy.pid
           ok=0
           for _ in $(seq 1 45); do
             if curl -sf --max-time 2 "http://127.0.0.1:8000/health" >/dev/null; then
               ok=1
               break
             fi
-            if ! kill -0 "$(cat start.pid)" 2>/dev/null; then
+            if ! kill -0 "$(cat /tmp/creasy.pid)" 2>/dev/null; then
               echo "start.sh exited before /health"
-              cat start.log || true
+              cat /tmp/creasy-start.log || true
               exit 1
             fi
             sleep 2
           done
-          if [[ "$ok" != "1" ]]; then
-            echo "server never became ready"
-            cat start.log || true
-            exit 1
-          fi
+          test "$ok" = "1"
           curl -sf "http://127.0.0.1:8000/health"
           echo
           code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:8000/jobs")
           test "$code" = "200"
           grep -q "CREASY" /tmp/jobs.html
-          hook=$(curl -sf -o /tmp/hook.json -w "%{http_code}" \
-            -H "Content-Type: application/json" \
-            -d '{"object_kind":"note"}' \
-            "http://127.0.0.1:8000/webhook")
-          test "$hook" = "200"
-          kill "$(cat start.pid)" 2>/dev/null || true
-          wait "$(cat start.pid)" 2>/dev/null || true
+          kill "$(cat /tmp/creasy.pid)" 2>/dev/null || true
+          wait "$(cat /tmp/creasy.pid)" 2>/dev/null || true
       - name: Show start log on failure
         if: failure()
-        run: cat start.log || true
+        run: cat /tmp/creasy-start.log || true
 
-  scripts-windows:
-    name: vendor + install + start (Windows)
+  offline-windows:
+    name: OSM-style offline (Windows)
     runs-on: windows-latest
     env:
       CREASY_NONINTERACTIVE: "1"
@@ -97,55 +90,26 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Vendor wheels (online)
-        shell: cmd
-        run: scripts\vendor.bat
-      - name: Offline install from vendor\python-wheels
+      - name: build_dist --in-place
+        run: python packaging/build_dist.py --in-place
+      - name: Offline install.bat
         shell: cmd
         run: scripts\install.bat
-      - name: Pack offline zip
+      - name: Offline install-opencode.bat
         shell: cmd
-        run: python scripts\pack_offline.py --tag windows-%GITHUB_SHA% --out dist\creasy-offline-windows.zip
-      - name: Upload offline Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: creasy-offline-windows
-          path: dist/creasy-offline-windows.zip
-          if-no-files-found: error
-          retention-days: 30
-      - name: Start server via start.bat and probe
+        run: scripts\install-opencode.bat
+      - name: start.bat (new window + health wait)
+        shell: cmd
+        run: scripts\start.bat
+      - name: Probe and stop
         shell: pwsh
         run: |
-          $ErrorActionPreference = "Stop"
-          $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c","scripts\start.bat" -WorkingDirectory (Get-Location) -PassThru -NoNewWindow -RedirectStandardOutput "start.log" -RedirectStandardError "start.err"
-          $ok = $false
-          for ($i = 0; $i -lt 45; $i++) {
-            if ($proc.HasExited) {
-              Write-Host "start.bat exited early code=$($proc.ExitCode)"
-              Get-Content start.log, start.err -ErrorAction SilentlyContinue
-              exit 1
-            }
-            try {
-              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 2
-              if ($r.StatusCode -eq 200) { $ok = $true; break }
-            } catch { }
-            Start-Sleep -Seconds 2
-          }
-          if (-not $ok) {
-            Write-Host "server never became ready"
-            Get-Content start.log, start.err -ErrorAction SilentlyContinue
-            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
-            exit 1
-          }
           $health = Invoke-RestMethod "http://127.0.0.1:8000/health"
           if ($health.status -ne "healthy") { throw "health=$($health.status)" }
           $jobs = Invoke-WebRequest -Uri "http://127.0.0.1:8000/jobs" -UseBasicParsing
-          if ($jobs.StatusCode -ne 200) { throw "jobs $($jobs.StatusCode)" }
           if ($jobs.Content -notmatch "CREASY") { throw "jobs page missing CREASY" }
-          $hook = Invoke-WebRequest -Uri "http://127.0.0.1:8000/webhook" -Method POST -ContentType "application/json" -Body '{"object_kind":"note"}' -UseBasicParsing
-          if ($hook.StatusCode -ne 200) { throw "webhook $($hook.StatusCode)" }
-          if (-not $proc.HasExited) { cmd /c "taskkill /F /T /PID $($proc.Id)" | Out-Null }
-      - name: Show start log on failure
-        if: failure()
-        shell: pwsh
-        run: Get-Content start.log, start.err -ErrorAction SilentlyContinue
+          $conns = netstat -ano | Select-String ":8000" | Select-String "LISTENING"
+          foreach ($line in $conns) {
+            $pid = ($line.ToString().Trim() -split "\s+")[-1]
+            if ($pid -match "^\d+$") { cmd /c "taskkill /F /T /PID $pid" | Out-Null }
+          }

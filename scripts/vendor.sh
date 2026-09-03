@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Download Python wheels into vendor/python-wheels (needs network).
-# Copy vendor/ + the repo to an air-gapped machine, then run install.sh.
+# Online machine: fetch bundled CPython, OpenCode CLI, and wheels.
+# Same as: python3 packaging/build_dist.py --in-place
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,46 +13,24 @@ else
   exit 1
 fi
 cd "$ROOT"
-WHEELS="$ROOT/vendor/python-wheels"
 
-PY=""
-if [[ -x "$ROOT/vendor/python/linux/bin/python3" ]]; then
-  PY="$ROOT/vendor/python/linux/bin/python3"
-elif [[ -x "$ROOT/vendor/python/macos/bin/python3" ]]; then
-  PY="$ROOT/vendor/python/macos/bin/python3"
-elif command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then
   PY="$(command -v python3)"
 elif command -v python >/dev/null 2>&1; then
   PY="$(command -v python)"
 else
-  echo "[ERROR] No Python on PATH. Install Python 3.10+ or place it under vendor/python/."
+  echo "[ERROR] Need a network Python to run packaging/build_dist.py --in-place."
   exit 1
 fi
 
 echo "========================================"
-echo "  Creasy - vendor wheels (online)"
+echo "  Creasy - build_dist --in-place"
 echo "========================================"
-echo "Project : $ROOT"
-echo "Python  : $PY"
-echo "Wheels  : $WHEELS"
-echo
-
-mkdir -p "$WHEELS"
-
-echo "Downloading pip / setuptools / wheel..."
-"$PY" -m pip download -d "$WHEELS" pip setuptools wheel
-
-echo "Downloading Creasy runtime dependencies..."
-"$PY" -m pip download -d "$WHEELS" \
-  "fastapi>=0.115" \
-  "uvicorn[standard]>=0.32" \
-  "httpx>=0.27" \
-  "pydantic>=2.0" \
-  "python-dotenv>=1.0"
+"$PY" "$ROOT/packaging/build_dist.py" --in-place
 
 echo
-echo "[OK] Wheels are in vendor/python-wheels"
-echo "Copy this repo (including vendor/) to the offline host, then:"
+echo "Then on this machine or after copying vendor/:"
 echo "  scripts/install.sh"
+echo "  scripts/install-opencode.sh"
 echo "  scripts/start.sh"
 echo

@@ -8,17 +8,17 @@ Clones live with the MR. They are deleted only when the MR is closed or merged. 
 
 ## Run
 
-Offline (recommended on a locked-down host):
+Offline (OSM-style zip: bundled CPython + wheels + OpenCode CLI):
 
 ```bash
-# On a machine with network — download wheels
-scripts\vendor.bat          # Windows
-scripts/vendor.sh           # Linux / macOS
+# On a machine with network
+python packaging/build_dist.py --in-place    # or scripts/vendor.bat
 
-# Copy the repo including vendor/python-wheels to the target host, then:
-install.bat                 # or scripts/install.bat
+# On the air-gapped host (or after unzipping the CI artifact)
+install.bat                 # .venv from vendor/python/windows/python.exe
+install-opencode.bat        # wipes ~/.opencode, copies vendor/bin
 # edit .env (GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL)
-start.bat                   # or scripts/start.bat
+start.bat                   # new window + wait for /health
 ```
 
 Online / from a checkout:
@@ -36,7 +36,7 @@ Dashboard: http://127.0.0.1:8000/jobs
 Webhook: `POST /webhook`  
 Health: `GET /health`
 
-CI uploads platform zips (`creasy-offline-linux`, `creasy-offline-windows`) on each `main` run. Download the matching artifact, unzip, then `install` + `start`. OpenCode is not in the zip.
+CI uploads `creasy-offline-zips` (`creasy-0.1.0-windows-x64.zip`, `linux-x64`, `darwin`, `windows-linux`). Each zip includes bundled CPython, matching wheels, and the OpenCode CLI. Unzip, `install`, `install-opencode`, `start`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 

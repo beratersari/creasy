@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creasy — start the webhook + dashboard server.
+# Creasy — start the webhook + dashboard server (OSM start-backend.sh pattern).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,6 +15,10 @@ cd "$ROOT"
 
 DASH_PORT="${PORT:-8000}"
 VENV_PY="$ROOT/.venv/bin/python"
+CREASY_PY=""
+if [[ -x "$VENV_PY" ]]; then
+  CREASY_PY="$VENV_PY"
+fi
 
 export GIT_TERMINAL_PROMPT=0
 export PYTHONUNBUFFERED=1
@@ -28,18 +32,16 @@ fi
 echo "========================================"
 echo "  Creasy"
 echo "========================================"
-echo "Project  : $ROOT"
-echo "Server   : http://127.0.0.1:${DASH_PORT}/"
-echo "Dashboard: http://127.0.0.1:${DASH_PORT}/jobs"
-echo "Webhook  : POST http://127.0.0.1:${DASH_PORT}/webhook"
+echo "Project : $ROOT"
+echo "Server  : http://0.0.0.0:${DASH_PORT}/  (open http://127.0.0.1:${DASH_PORT}/jobs )"
 echo
 
-if [[ ! -x "$VENV_PY" ]]; then
+if [[ -z "$CREASY_PY" ]]; then
   echo "[ERROR] .venv is missing."
-  echo "Run scripts/install.sh first (offline wheels in vendor/python-wheels)."
+  echo "Run scripts/install.sh first. It creates .venv from the bundled Python for this OS."
   exit 1
 fi
-echo "Python   : $VENV_PY"
+echo "Python  : $CREASY_PY"
 
 if command -v git >/dev/null 2>&1; then
   echo "[OK] git found"
@@ -51,18 +53,29 @@ if command -v opencode >/dev/null 2>&1; then
   echo "[OK] opencode on PATH"
 else
   echo "[WARNING] opencode is not on PATH. Jobs will fail until OpenCode is installed."
-  echo "          Put the CLI on PATH or in vendor/bin."
+  echo "          Run scripts/install-opencode.sh (wipes old CLI, copies vendor/bin)."
+fi
+
+if [[ -f "$ROOT/scripts/creasy-lib.sh" ]]; then
+  # shellcheck disable=SC1091
+  . "$ROOT/scripts/creasy-lib.sh"
+  creasy_chmod_launchers "$ROOT"
+fi
+
+if [[ ! -f "$ROOT/web/index.html" ]]; then
+  echo "[WARNING] web/index.html missing. /jobs will 404."
+  echo "          Use the CI zip or run python3 packaging/build_dist.py --in-place."
 fi
 
 if [[ -f "$ROOT/.env.example" && ! -f "$ROOT/.env" ]]; then
   cp "$ROOT/.env.example" "$ROOT/.env"
-  echo "[WARNING] Wrote .env from .env.example — set GITLAB_TOKEN and WEBHOOK_SECRET"
+  echo "[WARNING] Wrote .env from .env.example. Set GITLAB_TOKEN and WEBHOOK_SECRET."
 fi
 
-mkdir -p "$ROOT/logs"
 echo "Starting Creasy (Ctrl+C to stop)..."
+mkdir -p "$ROOT/logs"
 set +e
-"$VENV_PY" -m creasy
+"$CREASY_PY" -m creasy
 ec=$?
 set -e
 echo "Creasy exited. code=${ec}"

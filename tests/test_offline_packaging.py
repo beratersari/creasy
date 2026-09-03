@@ -1,0 +1,78 @@
+"""Offline packager helpers (no network)."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+
+def _load():
+    path = Path(__file__).resolve().parents[1] / "packaging" / "build_dist.py"
+    spec = importlib.util.spec_from_file_location("creasy_build_dist", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_read_versions(tmp_path: Path) -> None:
+    p = tmp_path / "versions.env"
+    p.write_text(
+        "# comment\nOPENCODE_VERSION=1.18.10\nPYTHON_MIN_VERSION=3.11\n",
+        encoding="utf-8",
+    )
+    data = _load().read_versions(p)
+    assert data["OPENCODE_VERSION"] == "1.18.10"
+    assert data.get("PYTHON_MIN_VERSION") == "3.11"
+
+
+def test_runtime_requirements_from_pyproject() -> None:
+    root = Path(__file__).resolve().parents[1]
+    deps = _load().runtime_requirements(root)
+    joined = " ".join(deps).lower()
+    assert "fastapi" in joined
+    assert "uvicorn" in joined
+    assert "httpx" in joined
+
+
+def test_standalone_python_asset_names() -> None:
+    ver = {
+        "PYTHON_FULL_VERSION": "3.12.14",
+        "PYTHON_STANDALONE_TAG": "20260825",
+    }
+    mod = _load()
+    win = mod.standalone_python_asset(ver, "windows")
+    linux = mod.standalone_python_asset(ver, "linux")
+    dar = mod.standalone_python_asset(ver, "darwin-arm64")
+    assert win.endswith("x86_64-pc-windows-msvc-install_only.tar.gz")
+    assert linux.endswith("x86_64-unknown-linux-gnu-install_only.tar.gz")
+    assert dar.endswith("aarch64-apple-darwin-install_only.tar.gz")
+    assert "3.12.14" in win and "3.12.14" in linux
+
+
+def test_opencode_asset_names() -> None:
+    ver = {
+        "OPENCODE_WINDOWS_ASSET": "opencode-windows-x64.zip",
+        "OPENCODE_LINUX_ASSET": "opencode-linux-x64.tar.gz",
+        "OPENCODE_DARWIN_ARM64_ASSET": "opencode-darwin-arm64.zip",
+    }
+    mod = _load()
+    assert mod.opencode_asset(ver, "windows", "x64").endswith(".zip")
+    assert mod.opencode_asset(ver, "linux", "x64").endswith(".tar.gz")
+    assert "arm64" in mod.opencode_asset(ver, "darwin", "arm64")
+
+
+def test_four_platform_packs() -> None:
+    mod = _load()
+    assert set(mod.PACKS) == {"windows", "linux", "darwin", "winlinux"}
+    assert mod.PACKS["windows"]["suffix"] == "windows-x64"
+    assert mod.PACKS["linux"]["suffix"] == "linux-x64"
+    assert mod.PACKS["darwin"]["suffix"] == "darwin"
+
+
+def test_install_requires_bundled_python() -> None:
+    bat = Path(__file__).resolve().parents[1] / "scripts" / "install.bat"
+    sh = Path(__file__).resolve().parents[1] / "scripts" / "install.sh"
+    assert "vendor\\python\\windows\\python.exe" in bat.read_text(encoding="utf-8")
+    assert "creasy_require_bundled_python" in sh.read_text(encoding="utf-8")
+    assert "build_dist.py" in bat.read_text(encoding="utf-8")
