@@ -36,6 +36,8 @@ Dashboard: http://127.0.0.1:8000/jobs
 Webhook: `POST /webhook`  
 Health: `GET /health`
 
+CI uploads platform zips (`creasy-offline-linux`, `creasy-offline-windows`) on each `main` run. Download the matching artifact, unzip, then `install` + `start`. OpenCode is not in the zip.
+
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 
 ## Triggers

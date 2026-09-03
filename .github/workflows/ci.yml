@@ -38,6 +38,15 @@ jobs:
         run: scripts/vendor.sh
       - name: Offline install from vendor/python-wheels
         run: scripts/install.sh
+      - name: Pack offline zip
+        run: python scripts/pack_offline.py --tag linux-${{ github.sha }} --out dist/creasy-offline-linux.zip
+      - name: Upload offline Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-offline-linux
+          path: dist/creasy-offline-linux.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Start server via start.sh
         run: |
           set -euo pipefail
@@ -94,6 +103,16 @@ jobs:
       - name: Offline install from vendor\python-wheels
         shell: cmd
         run: scripts\install.bat
+      - name: Pack offline zip
+        shell: cmd
+        run: python scripts\pack_offline.py --tag windows-%GITHUB_SHA% --out dist\creasy-offline-windows.zip
+      - name: Upload offline Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-offline-windows
+          path: dist/creasy-offline-windows.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Start server via start.bat and probe
         shell: pwsh
         run: |

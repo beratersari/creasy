@@ -58,3 +58,7 @@ def test_ci_runs_vendor_install_start():
     assert "scripts\\install.bat" in workflow
     assert "scripts\\start.bat" in workflow
     assert "/health" in workflow
+    assert "upload-artifact" in workflow
+    assert "creasy-offline-linux" in workflow
+    assert "creasy-offline-windows" in workflow
+    assert "pack_offline.py" in workflow
