@@ -1,0 +1,132 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install (online, tests)
+        run: pip install -e ".[dev]"
+      - name: Pytest
+        run: pytest -q --tb=short
+
+  scripts-linux:
+    name: vendor + install + start (Linux)
+    runs-on: ubuntu-latest
+    env:
+      CREASY_NONINTERACTIVE: "1"
+      PORT: "8000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Make launchers executable
+        run: chmod +x scripts/*.sh install.sh start.sh vendor.sh
+      - name: Vendor wheels (online)
+        run: scripts/vendor.sh
+      - name: Offline install from vendor/python-wheels
+        run: scripts/install.sh
+      - name: Start server via start.sh
+        run: |
+          set -euo pipefail
+          scripts/start.sh > start.log 2>&1 &
+          echo $! > start.pid
+          ok=0
+          for _ in $(seq 1 45); do
+            if curl -sf --max-time 2 "http://127.0.0.1:8000/health" >/dev/null; then
+              ok=1
+              break
+            fi
+            if ! kill -0 "$(cat start.pid)" 2>/dev/null; then
+              echo "start.sh exited before /health"
+              cat start.log || true
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$ok" != "1" ]]; then
+            echo "server never became ready"
+            cat start.log || true
+            exit 1
+          fi
+          curl -sf "http://127.0.0.1:8000/health"
+          echo
+          code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:8000/jobs")
+          test "$code" = "200"
+          grep -q "CREASY" /tmp/jobs.html
+          hook=$(curl -sf -o /tmp/hook.json -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -d '{"object_kind":"note"}' \
+            "http://127.0.0.1:8000/webhook")
+          test "$hook" = "200"
+          kill "$(cat start.pid)" 2>/dev/null || true
+          wait "$(cat start.pid)" 2>/dev/null || true
+      - name: Show start log on failure
+        if: failure()
+        run: cat start.log || true
+
+  scripts-windows:
+    name: vendor + install + start (Windows)
+    runs-on: windows-latest
+    env:
+      CREASY_NONINTERACTIVE: "1"
+      PORT: "8000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Vendor wheels (online)
+        shell: cmd
+        run: scripts\vendor.bat
+      - name: Offline install from vendor\python-wheels
+        shell: cmd
+        run: scripts\install.bat
+      - name: Start server via start.bat and probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c","scripts\start.bat" -WorkingDirectory (Get-Location) -PassThru -NoNewWindow -RedirectStandardOutput "start.log" -RedirectStandardError "start.err"
+          $ok = $false
+          for ($i = 0; $i -lt 45; $i++) {
+            if ($proc.HasExited) {
+              Write-Host "start.bat exited early code=$($proc.ExitCode)"
+              Get-Content start.log, start.err -ErrorAction SilentlyContinue
+              exit 1
+            }
+            try {
+              $r = Invoke-WebRequest -Uri "http://127.0.0.1:8000/health" -UseBasicParsing -TimeoutSec 2
+              if ($r.StatusCode -eq 200) { $ok = $true; break }
+            } catch { }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) {
+            Write-Host "server never became ready"
+            Get-Content start.log, start.err -ErrorAction SilentlyContinue
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+            exit 1
+          }
+          $health = Invoke-RestMethod "http://127.0.0.1:8000/health"
+          if ($health.status -ne "healthy") { throw "health=$($health.status)" }
+          $jobs = Invoke-WebRequest -Uri "http://127.0.0.1:8000/jobs" -UseBasicParsing
+          if ($jobs.StatusCode -ne 200) { throw "jobs $($jobs.StatusCode)" }
+          if ($jobs.Content -notmatch "CREASY") { throw "jobs page missing CREASY" }
+          $hook = Invoke-WebRequest -Uri "http://127.0.0.1:8000/webhook" -Method POST -ContentType "application/json" -Body '{"object_kind":"note"}' -UseBasicParsing
+          if ($hook.StatusCode -ne 200) { throw "webhook $($hook.StatusCode)" }
+          if (-not $proc.HasExited) { cmd /c "taskkill /F /T /PID $($proc.Id)" | Out-Null }
+      - name: Show start log on failure
+        if: failure()
+        shell: pwsh
+        run: Get-Content start.log, start.err -ErrorAction SilentlyContinue
