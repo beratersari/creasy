@@ -47,3 +47,22 @@ def test_ask_prompt_is_question():
     with_ctx = build_ask_prompt("why?", mr=_mr(), index=DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}), include_context=True)
     assert "why?" in with_ctx
     assert "Add login" in with_ctx
+    moved = build_ask_prompt(
+        "why?",
+        mr=_mr(),
+        index=DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}),
+        sha_changed=True,
+        previous_sha="oldsha",
+    )
+    assert "oldsha" in moved
+    assert "aaa" in moved
+    assert "why?" in moved
+
+
+def test_hang_resume_is_not_the_review_prompt():
+    from creasy.review.prompt import hang_resume_prompt
+
+    text = hang_resume_prompt()
+    assert "already posted" in text.lower()
+    assert "@@ " not in text
+    assert "Do not assume this prompt contains hunks" not in text
