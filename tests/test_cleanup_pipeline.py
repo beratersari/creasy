@@ -30,6 +30,23 @@ from creasy.cleanup.rmtree import hard_delete, win_extended_path, win_reserved_s
 from creasy.jobs.models import JobRecord
 
 
+def _fake_windows_os(monkeypatch, module) -> None:
+    """Pretend the module is on Windows without flipping global os.name.
+
+    Setting os.name to nt on Linux makes pathlib.Path construct WindowsPath
+    and pytest dies while formatting a failure.
+    """
+    real = module.os
+
+    class _Os:
+        name = "nt"
+
+        def __getattr__(self, item):
+            return getattr(real, item)
+
+    monkeypatch.setattr(module, "os", _Os())
+
+
 def _job(**kwargs) -> JobRecord:
     data = {
         "job_id": "job_x",
@@ -175,7 +192,7 @@ def test_iter_windows_processes_does_not_snapshot(monkeypatch, tmp_path: Path) -
         return SimpleNamespace(returncode=0, stdout=b"[]", stderr=b"")
 
     monkeypatch.setattr(killmod.subprocess, "run", capture)
-    monkeypatch.setattr(killmod.os, "name", "nt")
+    _fake_windows_os(monkeypatch, killmod)
     monkeypatch.setattr(killmod, "file_holder_pids", lambda *_a, **_k: [])
     clone = tmp_path / "work" / "9-17"
     clone.mkdir(parents=True)
@@ -214,7 +231,7 @@ def test_windows_restart_manager_session_key_does_not_av(tmp_path: Path) -> None
 def test_restart_manager_helper_failure_does_not_raise(tmp_path: Path, monkeypatch) -> None:
     from creasy.cleanup import kill as killmod
 
-    monkeypatch.setattr(killmod.os, "name", "nt")
+    _fake_windows_os(monkeypatch, killmod)
     monkeypatch.delenv("OSM_RM_INPROCESS", raising=False)
     monkeypatch.setattr(
         killmod.subprocess,
@@ -228,7 +245,7 @@ def test_stop_job_holders_windows_skips_rm_until_delete(tmp_path: Path, monkeypa
     from creasy.cleanup import end as endmod
 
     called: list[str] = []
-    monkeypatch.setattr(endmod.os, "name", "nt")
+    _fake_windows_os(monkeypatch, endmod)
     monkeypatch.setattr(endmod, "kill_job_tree", lambda *_a, **_k: None)
     monkeypatch.setattr(endmod, "reap_path", lambda *_a, **_k: 0)
     monkeypatch.setattr(
@@ -320,18 +337,7 @@ def test_delete_skips_rm_when_folder_already_gone(tmp_path: Path, monkeypatch) -
 
     dest = tmp_path / "gone"
     dest.mkdir()
-    monkeypatch.setattr(endmod.os, "name", "nt")
-
-    def fake_delete(path):
-        import shutil
-
-        if Path(path).exists():
-            shutil.rmtree(path)
-        return True
-
-    # Do not run Windows ``rd`` via the real hard_delete: patching os.name
-    # to nt on Linux makes pathlib raise WindowsPath during pytest reports.
-    monkeypatch.setattr(endmod, "hard_delete", fake_delete)
+    _fake_windows_os(monkeypatch, endmod)
     queries: list[object] = []
     monkeypatch.setattr(
         endmod,
@@ -350,7 +356,7 @@ def test_rm_retry_only_when_helper_died_and_folder_remains(
 
     dest = tmp_path / "stuck"
     dest.mkdir()
-    monkeypatch.setattr(endmod.os, "name", "nt")
+    _fake_windows_os(monkeypatch, endmod)
     deletes = {"n": 0}
     queries: list[RmHelperResult] = []
 
@@ -389,7 +395,7 @@ def test_rm_no_second_child_when_helper_survives_empty(
 
     dest = tmp_path / "stuck2"
     dest.mkdir()
-    monkeypatch.setattr(endmod.os, "name", "nt")
+    _fake_windows_os(monkeypatch, endmod)
     monkeypatch.setattr(endmod, "hard_delete", lambda *_a, **_k: False)
     queries = {"n": 0}
 
