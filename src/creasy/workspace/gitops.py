@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import os
-import shutil
-import stat
 import subprocess
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -236,26 +233,15 @@ def diff_stat(dest: Path, merge_base: str, *, timeout: float = 60) -> DiffIndex:
 
 
 def delete_clone(path: Optional[Path], retries: int = 8) -> None:
-    if path is None:
-        return
-    dest = Path(path)
-    if not dest.exists():
-        return
-    last_err: Optional[Exception] = None
-    for attempt in range(retries):
+    """OSM hard-delete cascade. ``retries`` is ignored; OSM uses its own attempt budget."""
+    from creasy.cleanup.end import delete_clone_path
+
+    dest = None if path is None else Path(path)
+    ok = delete_clone_path(dest, reason="delete_clone")
+    if dest is not None:
         try:
-            shutil.rmtree(dest, onerror=_on_rm_error)
-            if not dest.exists():
-                return
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-            time.sleep(0.25 * (attempt + 1))
-    raise GitError(f"could not remove clone at {dest}: {last_err}")
-
-
-def _on_rm_error(func, path, _exc_info) -> None:  # type: ignore[no-untyped-def]
-    try:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    except Exception:
-        pass
+            still = dest.exists()
+        except OSError:
+            still = True
+        if still and not ok:
+            raise GitError(f"could not remove clone at {dest}")
