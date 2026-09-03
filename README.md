@@ -29,6 +29,8 @@ python -m venv .venv
 pip install -e ".[dev]"
 copy .env.example .env
 # set GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL
+npm --prefix web install
+npm --prefix web run build
 python -m creasy
 ```
 
@@ -36,7 +38,7 @@ Dashboard: http://127.0.0.1:8000/jobs
 Webhook: `POST /webhook`  
 Health: `GET /health`
 
-CI uploads `creasy-offline-zips` (`creasy-0.1.0-windows-x64.zip`, `linux-x64`, `darwin`, `windows-linux`). Each zip includes bundled CPython, matching wheels, and the OpenCode CLI. Unzip, `install`, `install-opencode`, `start`.
+CI uploads `creasy-offline-zips` (`creasy-0.1.0-windows-x64.zip`, `linux-x64`, `darwin`, `windows-linux`). Each zip includes bundled CPython, matching wheels, the OpenCode CLI, and the built dashboard (`web/dist`). No Node on the target. Unzip, `install`, `install-opencode`, `start`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 

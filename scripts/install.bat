@@ -40,10 +40,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "%ROOT%\web\index.html" (
-    echo [ERROR] Missing %ROOT%\web\index.html
-    echo This installer is offline-only and does not run npm.
-    echo Use the CI zip, or: python packaging\build_dist.py --in-place
+if not exist "%ROOT%\web\dist\index.html" (
+    echo [ERROR] Missing %ROOT%\web\dist\index.html
+    echo The dashboard is the built OSM SPA. This installer is offline-only and does not run npm.
+    echo Use the CI zip, or on a machine with network:
+    echo   python packaging\build_dist.py --in-place
     call :maybe_pause
     exit /b 1
 )
@@ -116,10 +117,10 @@ if exist "%ROOT%\.env.example" if not exist "%ROOT%\.env" (
 
 echo.
 echo Step 3: Dashboard...
-if exist "%ROOT%\web\index.html" (
-    echo [OK] Dashboard present: web\index.html
+if exist "%ROOT%\web\dist\index.html" (
+    echo [OK] Dashboard present: web\dist
 ) else (
-    echo [WARNING] web\index.html missing. /jobs will 404.
+    echo [WARNING] web\dist\index.html missing. /jobs will 404.
 )
 
 echo.

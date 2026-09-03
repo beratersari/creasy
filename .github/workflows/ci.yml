@@ -32,7 +32,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - name: Build offline zips (bundled CPython + OpenCode + wheels)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build offline zips (bundled CPython + OpenCode + wheels + SPA)
         run: python packaging/build_dist.py --out-dir dist
       - name: Upload offline zips
         uses: actions/upload-artifact@v4
@@ -72,7 +75,8 @@ jobs:
           echo
           code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:8000/jobs")
           test "$code" = "200"
-          grep -q "CREASY" /tmp/jobs.html
+          grep -q "Creasy" /tmp/jobs.html
+          grep -q "/assets/" /tmp/jobs.html
           kill "$(cat /tmp/creasy.pid)" 2>/dev/null || true
           wait "$(cat /tmp/creasy.pid)" 2>/dev/null || true
       - name: Show start log on failure
@@ -90,6 +94,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - name: build_dist --in-place
         run: python packaging/build_dist.py --in-place
       - name: Offline install.bat
@@ -103,4 +110,5 @@ jobs:
         run: |
           call scripts\start.bat
           curl -sf http://127.0.0.1:8000/health
-          curl -sf http://127.0.0.1:8000/jobs | findstr CREASY
+          curl -sf http://127.0.0.1:8000/jobs | findstr /C:"Creasy"
+          curl -sf http://127.0.0.1:8000/jobs | findstr /C:"/assets/"

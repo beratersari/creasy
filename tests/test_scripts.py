@@ -18,7 +18,12 @@ def test_install_scripts_are_offline_only():
     assert "--find-links" in sh
     assert "vendor\\python-wheels" in bat or "vendor/python-wheels" in bat
     assert "vendor/python-wheels" in sh
-    assert "does not run npm" in bat.lower() or "does not run npm" in sh.lower()
+    assert "does not run npm" in bat.lower()
+    assert "does not run npm" in sh.lower()
+    assert r"web\dist\index.html" in bat
+    assert "web/dist/index.html" in sh
+    assert r"web\index.html" not in bat
+    assert "web/index.html" not in sh
 
 
 def test_vendor_scripts_call_build_dist():

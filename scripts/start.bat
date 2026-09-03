@@ -65,8 +65,8 @@ if exist "%ROOT%\.env.example" if not exist "%ROOT%\.env" (
     echo [WARNING] Wrote .env from .env.example. Set GITLAB_TOKEN and WEBHOOK_SECRET.
 )
 
-if not exist "%ROOT%\web\index.html" (
-    echo [WARNING] web\index.html missing. /jobs will 404.
+if not exist "%ROOT%\web\dist\index.html" (
+    echo [WARNING] web\dist\index.html missing. /jobs will 404.
     echo           Use the CI zip or run python packaging\build_dist.py --in-place.
 )
 

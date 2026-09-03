@@ -31,10 +31,11 @@ if ! compgen -G "$WHEELS"/*.whl > /dev/null; then
   echo "  python3 packaging/build_dist.py --in-place"
   exit 1
 fi
-if [[ ! -f "$ROOT/web/index.html" ]]; then
-  echo "[ERROR] Missing $ROOT/web/index.html"
-  echo "This installer is offline-only and does not run npm."
-  echo "Use the CI zip, or: python3 packaging/build_dist.py --in-place"
+if [[ ! -f "$ROOT/web/dist/index.html" ]]; then
+  echo "[ERROR] Missing $ROOT/web/dist/index.html"
+  echo "The dashboard is the built OSM SPA. This installer is offline-only and does not run npm."
+  echo "Use the CI zip, or on a machine with network:"
+  echo "  python3 packaging/build_dist.py --in-place"
   exit 1
 fi
 
@@ -81,10 +82,10 @@ fi
 
 echo
 echo "Step 3: Dashboard..."
-if [[ -f "$ROOT/web/index.html" ]]; then
-  echo "[OK] Dashboard present: web/index.html"
+if [[ -f "$ROOT/web/dist/index.html" ]]; then
+  echo "[OK] Dashboard present: web/dist"
 else
-  echo "[WARNING] web/index.html missing. /jobs will 404."
+  echo "[WARNING] web/dist/index.html missing. /jobs will 404."
 fi
 
 echo

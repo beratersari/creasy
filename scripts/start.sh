@@ -62,8 +62,8 @@ if [[ -f "$ROOT/scripts/creasy-lib.sh" ]]; then
   creasy_chmod_launchers "$ROOT"
 fi
 
-if [[ ! -f "$ROOT/web/index.html" ]]; then
-  echo "[WARNING] web/index.html missing. /jobs will 404."
+if [[ ! -f "$ROOT/web/dist/index.html" ]]; then
+  echo "[WARNING] web/dist/index.html missing. /jobs will 404."
   echo "          Use the CI zip or run python3 packaging/build_dist.py --in-place."
 fi
 

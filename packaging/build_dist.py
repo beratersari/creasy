@@ -54,7 +54,7 @@ COPY_DIRS = (
     "scripts",
     "tests",
     "packaging",
-    "web",
+    # web/ source stays out of the zip. copy_web ships only the built SPA.
 )
 
 
@@ -439,14 +439,45 @@ def supported_python_versions(wheels: Path, candidates: list[str]) -> list[str]:
     return supported
 
 
+def find_npm() -> str | None:
+    if sys.platform.startswith("win"):
+        return shutil.which("npm.cmd") or shutil.which("npm")
+    return shutil.which("npm")
+
+
+def ensure_web_dist(root: Path, *, use_npm: bool = True) -> None:
+    """Build the OSM dashboard into web/dist. Target install never runs npm."""
+    web = root / "web"
+    index = web / "dist" / "index.html"
+    npm = find_npm() if use_npm else None
+    if npm:
+        if not (web / "package.json").is_file():
+            raise SystemExit("web/package.json missing — cannot build dashboard")
+        print("  Building OSM dashboard (web/dist)...")
+        if (web / "package-lock.json").is_file():
+            run([npm, "ci"], cwd=web)
+        else:
+            run([npm, "install"], cwd=web)
+        run([npm, "run", "build"], cwd=web)
+    if not index.is_file():
+        if npm:
+            raise SystemExit("web/dist/index.html missing after npm run build")
+        raise SystemExit(
+            "web/dist/index.html missing and npm is not on PATH — "
+            "run npm --prefix web run build"
+        )
+    print("  + web/dist")
+
+
 def copy_web(root: Path, payload: Path) -> None:
-    src = root / "web" / "index.html"
-    if not src.is_file():
-        raise SystemExit("web/index.html missing")
-    dest_dir = payload / "web"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dest_dir / "index.html")
-    print("  + web/index.html")
+    src = root / "web" / "dist"
+    if not (src / "index.html").is_file():
+        raise SystemExit("web/dist/index.html missing — run npm --prefix web run build")
+    dest_dir = payload / "web" / "dist"
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
+    shutil.copytree(src, dest_dir)
+    print("  + web/dist")
 
 
 def standalone_python_asset(ver: dict[str, str], os_name: str) -> str:
@@ -645,7 +676,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wheels   : {', '.join(wheel_versions)}")
     print()
 
-    print("Step 1: Dashboard is static web/index.html (no npm).")
+    print("Step 1: Building dashboard (web/dist)...")
+    ensure_web_dist(root)
 
     if args.in_place:
         pack_ids = (host_pack,)
@@ -713,7 +745,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {wheel_src}")
         print(f"  {py_root}")
         print(f"  {oc_root}")
-        print("  web/index.html")
+        print("  web/dist")
         print("Run scripts/install.sh (or scripts\\install.bat).")
         return 0
 

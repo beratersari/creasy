@@ -76,3 +76,41 @@ def test_install_requires_bundled_python() -> None:
     assert "vendor\\python\\windows\\python.exe" in bat.read_text(encoding="utf-8")
     assert "creasy_require_bundled_python" in sh.read_text(encoding="utf-8")
     assert "build_dist.py" in bat.read_text(encoding="utf-8")
+
+
+def test_copy_web_requires_built_spa(tmp_path: Path) -> None:
+    mod = _load()
+    root = tmp_path / "repo"
+    (root / "web" / "dist").mkdir(parents=True)
+    payload = tmp_path / "payload"
+    try:
+        mod.copy_web(root, payload)
+    except SystemExit as exc:
+        assert "web/dist/index.html" in str(exc)
+    else:
+        raise AssertionError("copy_web must fail without a built SPA")
+    (root / "web" / "dist" / "index.html").write_text(
+        '<title>Creasy</title><script src="/assets/app.js"></script>',
+        encoding="utf-8",
+    )
+    (root / "web" / "dist" / "assets").mkdir()
+    (root / "web" / "dist" / "assets" / "app.js").write_text("1", encoding="utf-8")
+    mod.copy_web(root, payload)
+    shipped = payload / "web" / "dist" / "index.html"
+    assert shipped.is_file()
+    assert "Creasy" in shipped.read_text(encoding="utf-8")
+    assert (payload / "web" / "src").exists() is False
+
+
+def test_ensure_web_dist_requires_index_without_npm(tmp_path: Path) -> None:
+    mod = _load()
+    root = tmp_path / "repo"
+    (root / "web" / "dist").mkdir(parents=True)
+    try:
+        mod.ensure_web_dist(root, use_npm=False)
+    except SystemExit as exc:
+        assert "web/dist/index.html" in str(exc)
+    else:
+        raise AssertionError("ensure_web_dist must fail without a built SPA")
+    (root / "web" / "dist" / "index.html").write_text("<title>Creasy</title>", encoding="utf-8")
+    mod.ensure_web_dist(root, use_npm=False)
