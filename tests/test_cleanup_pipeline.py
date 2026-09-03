@@ -249,7 +249,8 @@ def test_reap_path_kills_argv_match(tmp_path: Path) -> None:
     clone = tmp_path / "TICKET"
     clone.mkdir()
     proc = subprocess.Popen(
-        [sys.executable, "-c", "import time,sys; time.sleep(30)", str(clone)]
+        [sys.executable, "-c", "import time,sys; time.sleep(30)", str(clone)],
+        start_new_session=True,
     )
     try:
         time.sleep(0.1)
