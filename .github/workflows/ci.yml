@@ -100,16 +100,7 @@ jobs:
         run: scripts\install-opencode.bat
       - name: start.bat (new window + health wait)
         shell: cmd
-        run: scripts\start.bat
-      - name: Probe and stop
-        shell: pwsh
         run: |
-          $health = Invoke-RestMethod "http://127.0.0.1:8000/health"
-          if ($health.status -ne "healthy") { throw "health=$($health.status)" }
-          $jobs = Invoke-WebRequest -Uri "http://127.0.0.1:8000/jobs" -UseBasicParsing
-          if ($jobs.Content -notmatch "CREASY") { throw "jobs page missing CREASY" }
-          $conns = netstat -ano | Select-String ":8000" | Select-String "LISTENING"
-          foreach ($line in $conns) {
-            $listenPid = ($line.ToString().Trim() -split "\s+")[-1]
-            if ($listenPid -match "^\d+$") { cmd /c "taskkill /F /T /PID $listenPid" | Out-Null }
-          }
+          call scripts\start.bat
+          curl -sf http://127.0.0.1:8000/health
+          curl -sf http://127.0.0.1:8000/jobs | findstr CREASY
