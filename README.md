@@ -8,6 +8,21 @@ Clones live with the MR. They are deleted only when the MR is closed or merged. 
 
 ## Run
 
+Offline (recommended on a locked-down host):
+
+```bash
+# On a machine with network — download wheels
+scripts\vendor.bat          # Windows
+scripts/vendor.sh           # Linux / macOS
+
+# Copy the repo including vendor/python-wheels to the target host, then:
+install.bat                 # or scripts/install.bat
+# edit .env (GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL)
+start.bat                   # or scripts/start.bat
+```
+
+Online / from a checkout:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
