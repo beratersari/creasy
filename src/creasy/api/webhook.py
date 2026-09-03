@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -39,7 +41,12 @@ async def webhook(request: Request) -> JSONResponse:
         return JSONResponse({"status": "ignored", "reason": classified.reason})
 
     if isinstance(classified, CleanupTrigger):
-        manager.cleanup_mr(classified)
+        threading.Thread(
+            target=manager.cleanup_mr,
+            args=(classified,),
+            name=f"cleanup-{classified.project_id}-{classified.mr_iid}",
+            daemon=True,
+        ).start()
         return JSONResponse(
             {
                 "status": "accepted",
