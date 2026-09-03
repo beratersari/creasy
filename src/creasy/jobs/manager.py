@@ -34,6 +34,8 @@ class Manager:
         self.store = store or JobStore(config.job_dir)
         self.queue = queue or JobQueue(config.data_dir / "queue.json")
         self.workspaces = workspaces or WorkspaceStore(config.data_dir / "workspace_meta")
+        if hasattr(self.runner, "store"):
+            self.runner.store = self.store
         self.ready = False
         self.stopping = False
         self._lock = threading.RLock()

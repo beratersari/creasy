@@ -87,3 +87,13 @@ def build_ask_prompt(
             parts.append(f"Separation point: `{index.merge_base}`. Use `git diff {index.merge_base}...HEAD` if needed.")
     parts.append(question.strip())
     return "\n\n".join(p for p in parts if p)
+
+
+HANG_RESUME = (
+    "Continue the previous turn. The last user message was already posted. "
+    "Do not restart the review or repeat the full analysis. Finish your answer."
+)
+
+
+def hang_resume_prompt() -> str:
+    return HANG_RESUME

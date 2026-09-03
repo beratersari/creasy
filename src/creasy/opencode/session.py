@@ -196,11 +196,13 @@ class OpenCodeClient:
         timeout: float,
         hang_timeout: float,
         should_stop: Optional[Callable[[], bool]] = None,
+        idle_settle: float = 8.0,
     ) -> str:
         deadline = time.time() + timeout
         last_change = time.time()
         last_len = 0
         saw_busy = False
+        settle = max(0.0, float(idle_settle))
         while time.time() < deadline:
             if should_stop and should_stop():
                 raise OpenCodeError("cancelled")
@@ -217,11 +219,12 @@ class OpenCodeClient:
             busy = self.session_busy(session_id)
             if busy:
                 saw_busy = True
-            if saw_busy and not busy and text:
-                return text
-            if not busy and text and time.time() - last_change > 8 and saw_busy:
-                return text
+            if not busy and text:
+                if saw_busy:
+                    return text
+                if time.time() - last_change > settle:
+                    return text
             if time.time() - last_change > hang_timeout:
                 raise OpenCodeError("hang")
-            time.sleep(1.0)
+            time.sleep(min(1.0, max(0.05, settle if settle else 0.2)))
         raise OpenCodeError("timeout", timeout=True)

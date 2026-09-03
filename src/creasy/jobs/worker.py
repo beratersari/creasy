@@ -11,8 +11,9 @@ from creasy.cleanup.end import stop_job_holders
 from creasy.logging import get_logger
 from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop_serve
 from creasy.opencode.session import OpenCodeClient, OpenCodeError, last_assistant_text, snapshot_chat
+from creasy.jobs.store import JobStore
 from creasy.review.format import format_cancelled, format_failure, format_success
-from creasy.review.prompt import build_ask_prompt, build_review_prompt, load_review_rules
+from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt, load_review_rules
 from creasy.workspace.gitops import (
     GitError,
     clone_repo,
@@ -55,10 +56,34 @@ class OpenCodeRunner:
         config: Config,
         workspaces: WorkspaceStore,
         gitlab: Optional[GitLabClient] = None,
+        store: Optional[JobStore] = None,
     ) -> None:
         self.config = config
         self.workspaces = workspaces
         self.gitlab = gitlab or GitLabClient(config.gitlab_url, config.gitlab_token)
+        self.store = store
+
+    def _append_job_log(self, job: JobRecord, line: str) -> None:
+        if not job.log_file:
+            return
+        path = self.config.log_dir / job.log_file
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(line.rstrip() + "\n")
+        except OSError as exc:
+            logger.warning("job log write failed job=%s err=%s", job.job_id, exc)
+
+    def _record_spawn(self, job: JobRecord, handle: ServeHandle) -> None:
+        job.serve_pid = handle.pid
+        job.serve_port = handle.port
+        job.serve_base_url = handle.base_url
+        if self.store is not None:
+            try:
+                self.store.save(job)
+            except Exception:  # noqa: BLE001
+                logger.warning("could not persist serve pid job=%s", job.job_id)
+        self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
         result = RunResult()
@@ -68,6 +93,8 @@ class OpenCodeRunner:
             if should_stop():
                 result.cancelled = True
                 return result
+            prior = self.workspaces.get(job.mr_key)
+            previous_sha = prior.last_sha if prior else ""
             mr = self.gitlab.get_merge_request(job.project_id, job.mr_iid)
             workspace = self._ensure_workspace(job, mr, should_stop)
             result.clone_path = workspace.clone_path
@@ -86,13 +113,16 @@ class OpenCodeRunner:
             logger.info("diff stat for %s:\n%s", job.mr_key, index.stat)
 
             created_new = False
-            prompt = self._prompt(job, mr, index, workspace, created_new=False)
+            prompt = self._prompt(
+                job, mr, index, workspace, created_new=False, previous_sha=previous_sha
+            )
             handle = start_serve(
                 bin_name=self.config.opencode_bin,
                 cwd=clone,
                 log_path=serve_log_path(self.config.serve_dir, job.job_id),
                 timeout=self.config.serve_health_timeout,
                 should_stop=should_stop,
+                on_spawn=lambda spawned: self._record_spawn(job, spawned),
             )
             result.serve_pid = handle.pid
             result.serve_port = handle.port
@@ -103,9 +133,12 @@ class OpenCodeRunner:
             )
             result.session_id = session_id
             if created_new and job.trigger == "ask":
-                prompt = self._prompt(job, mr, index, workspace, created_new=True)
+                prompt = self._prompt(
+                    job, mr, index, workspace, created_new=True, previous_sha=previous_sha
+                )
             last_error = ""
             text = ""
+            original_posted = False
             for attempt in range(1, self.config.opencode_retry_count + 1):
                 if should_stop():
                     result.cancelled = True
@@ -117,12 +150,14 @@ class OpenCodeRunner:
                         got = client.get_session(session_id)
                         if got.status_code != 200:
                             raise OpenCodeError(f"resume rejected: HTTP {got.status_code}")
+                    turn = prompt if not original_posted else hang_resume_prompt()
                     client.post_message(
                         session_id,
-                        prompt,
+                        turn,
                         model=self.config.opencode_model,
                         agent=self.config.opencode_agent,
                     )
+                    original_posted = True
                     text = client.wait_idle(
                         session_id,
                         timeout=self.config.opencode_timeout,
@@ -135,6 +170,7 @@ class OpenCodeRunner:
                     last_error = str(exc)
                     result.timeout = exc.timeout
                     logger.warning("attempt %s ended: %s", attempt, exc)
+                    self._append_job_log(job, f"attempt {attempt} ended: {exc}")
                     if should_stop() or attempt >= self.config.opencode_retry_count:
                         break
             if should_stop():
@@ -156,15 +192,23 @@ class OpenCodeRunner:
             self._post_note(job, result)
             return result
         except GitError as exc:
-            result.error = f"git failed: {exc}"
-            self._post_note(job, result)
+            if should_stop() or str(exc) == "cancelled":
+                result.cancelled = True
+            else:
+                result.error = f"git failed: {exc}"
+                self._post_note(job, result)
             return result
         except Exception as exc:  # noqa: BLE001
+            if should_stop():
+                result.cancelled = True
+                return result
             logger.exception("worker failed job=%s", job.job_id)
             result.error = f"pipeline failed: {exc}"
             self._post_note(job, result)
             return result
         finally:
+            if result.cancelled:
+                self._post_note(job, result)
             if client is not None and result.session_id:
                 try:
                     client.abort(result.session_id)
@@ -192,15 +236,17 @@ class OpenCodeRunner:
         workspace: WorkspaceRecord,
         *,
         created_new: bool,
+        previous_sha: str = "",
     ) -> str:
         if job.trigger == "ask":
-            sha_changed = bool(workspace.last_sha and mr.sha and workspace.last_sha != mr.sha)
+            current = workspace.last_sha or mr.sha
+            sha_changed = bool(previous_sha and current and previous_sha != current)
             return build_ask_prompt(
                 job.comment_text,
                 mr=mr,
                 index=index,
                 sha_changed=sha_changed,
-                previous_sha=workspace.last_sha,
+                previous_sha=previous_sha,
                 include_context=created_new or not workspace.session_id,
             )
         rules = load_review_rules(Path(workspace.clone_path))
