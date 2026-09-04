@@ -51,6 +51,20 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "do not assume modern C++" in text
     assert 'skill({ name: "cpp98" })' in text
     assert 'skill({ name: "modern-cpp" })' in text
+    assert "GitLab MR comment" in text
+    assert "Never start a line with `#`" in text
+    assert "### Summary" in text
+    assert "### Critical" in text
+    assert "### Major" in text
+    assert "### Minor" in text
+    assert "### Improvement" in text
+    assert "#### 1." in text
+    assert "**Code**" in text
+    assert "**Why it is an issue and where**" in text
+    assert "**Suggested fix**" in text
+    assert "Do **not** use these labels: Blocking" in text
+    assert "only definition of review style" in text
+    assert "Write each group header **once**" in text
 
 
 def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
