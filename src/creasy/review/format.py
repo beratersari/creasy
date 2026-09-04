@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from creasy.jobs.models import JobRecord
+from creasy.logging import redact_userinfo
 from creasy.review.findings import split_findings
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
@@ -113,7 +114,7 @@ def format_success(job: JobRecord) -> str:
 
 
 def format_failure(job: JobRecord) -> str:
-    err = (job.error_message or job.text or "unknown error").strip()
+    err = redact_userinfo((job.error_message or job.text or "unknown error").strip()) or "unknown error"
     return f"**Creasy — Review failed** · `{job.job_id}`\n\n```\n{err}\n```\n"
 
 

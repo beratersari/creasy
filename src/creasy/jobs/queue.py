@@ -57,6 +57,20 @@ class JobQueue:
             self._persist()
             return job_id
 
+    def pop_if(self, mr_key: str, job_id: str) -> str | None:
+        """Pop the head only if it is still ``job_id``. Else leave the FIFO alone."""
+        with self._lock:
+            bucket = self._rows.get(mr_key) or []
+            if not bucket or bucket[0] != job_id:
+                return None
+            bucket.pop(0)
+            if bucket:
+                self._rows[mr_key] = bucket
+            else:
+                self._rows.pop(mr_key, None)
+            self._persist()
+            return job_id
+
     def remove(self, mr_key: str, job_id: str) -> bool:
         with self._lock:
             bucket = self._rows.get(mr_key) or []

@@ -78,6 +78,9 @@ def test_close_cancels_running_and_queued(tmp_config):
     time.sleep(0.3)
     statuses = {j.comment_text: j.status for j in manager.store.list_all()}
     assert "queued" not in statuses.values()
+    assert statuses.get("b") == "cancelled"
+    assert "running" not in statuses.values()
     assert manager.queue.queued_ids("1-1") == []
+    assert not any(r.startswith("ask:") for r in runner.runs)
     runner.release.set()
     manager.shutdown()

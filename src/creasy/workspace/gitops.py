@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse, urlunparse
 
-from creasy.logging import get_logger
+from creasy.logging import get_logger, redact_userinfo
 
 logger = get_logger("gitops")
 
@@ -66,7 +66,7 @@ def _run_git(
     timeout: float = 120,
 ) -> subprocess.CompletedProcess[str]:
     cmd = ["git", "-c", "credential.helper=", *args]
-    logger.info("git %s cwd=%s", " ".join(args), cwd or ".")
+    logger.info("git %s cwd=%s", redact_userinfo(" ".join(str(a) for a in args)), cwd or ".")
     try:
         result = subprocess.run(
             cmd,
@@ -80,9 +80,9 @@ def _run_git(
     except subprocess.TimeoutExpired as exc:
         raise GitError(f"git timed out after {timeout}s") from exc
     except OSError as exc:
-        raise GitError(f"git failed to start: {exc}") from exc
+        raise GitError(f"git failed to start: {redact_userinfo(str(exc))}") from exc
     if result.returncode != 0:
-        err = (result.stderr or result.stdout or "").strip()
+        err = redact_userinfo((result.stderr or result.stdout or "").strip())
         raise GitError(f"git failed ({result.returncode}): {err[-800:]}")
     return result
 

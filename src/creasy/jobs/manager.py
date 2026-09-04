@@ -13,6 +13,7 @@ from creasy.jobs.store import JobStore
 from creasy.jobs.worker import JobRunner, RunResult
 from creasy.cleanup.end import delete_clone_path, protect_pids, stop_job_holders
 from creasy.cleanup.kill import kill_job_tree, reap_work_dir
+from creasy.log_context import bound
 from creasy.logging import get_logger
 from creasy.workspace.identity import clone_path_for, mr_key
 from creasy.workspace.store import WorkspaceStore
@@ -57,11 +58,12 @@ class Manager:
             logger.exception("boot reap_work_dir failed")
         for job in leftover:
             if job.status == "running":
-                self._finish(
-                    job,
-                    RunResult(error="process restarted; leftover job was not resumed"),
-                    status="error",
-                )
+                with bound(job.job_id, job.mr_key, job.log_file):
+                    self._finish(
+                        job,
+                        RunResult(error="process restarted; leftover job was not resumed"),
+                        status="error",
+                    )
             elif job.status == "queued":
                 self.queue.enqueue(job.mr_key, job.job_id)
         # queued leftovers stay in the persisted queue and will dispatch
@@ -119,6 +121,7 @@ class Manager:
                 target_branch=trigger.target_branch,
                 sha=trigger.sha,
                 web_url=trigger.web_url,
+                mr_title=(trigger.title or "").strip(),
                 model=self.config.opencode_model,
                 agent=self.config.opencode_agent,
                 accepted_at=utc_now(),
@@ -130,7 +133,8 @@ class Manager:
             self.queue.enqueue(key, job.job_id)
             started = self._try_start_locked(key)
         ack = "accepted" if started else "queued"
-        logger.info("%s %s job=%s trigger=%s", ack, key, job.job_id, trigger.kind)
+        with bound(job.job_id, job.mr_key, job.log_file):
+            logger.info("%s %s job=%s trigger=%s", ack, key, job.job_id, trigger.kind)
         return ack, job, f"{ack} {job.job_id}"
 
     def cleanup_mr(self, trigger: CleanupTrigger) -> None:
@@ -145,24 +149,29 @@ class Manager:
         )
 
     def cancel_job(self, job_id: str) -> tuple[bool, str]:
-        job = self.store.get(job_id)
-        if not job:
-            return False, "not found"
-        if job.status not in {"queued", "running"}:
-            return False, f"job is {job.status}"
-        if job.status == "queued":
-            self.queue.remove(job.mr_key, job.job_id)
-            self._finish(job, RunResult(cancelled=True, error="cancelled"), status="cancelled")
-            return True, "cancelled queued job"
-        event = self._cancel.get(job.job_id)
-        if event:
-            event.set()
-        clone = Path(job.clone_path) if job.clone_path else None
-        try:
-            stop_job_holders(job, clone, protect=protect_pids())
-        except Exception:  # noqa: BLE001
-            logger.exception("cancel stop_job_holders failed job=%s", job.job_id)
-            kill_job_tree([job.serve_pid, *list(job.extra_pids or [])])
+        to_stop: JobRecord | None = None
+        with self._lock:
+            job = self.store.get(job_id)
+            if not job:
+                return False, "not found"
+            if job.status not in {"queued", "running"}:
+                return False, f"job is {job.status}"
+            if job.status == "queued":
+                self.queue.remove(job.mr_key, job.job_id)
+                with bound(job.job_id, job.mr_key, job.log_file):
+                    self._finish(job, RunResult(cancelled=True, error="cancelled"), status="cancelled")
+                return True, "cancelled queued job"
+            event = self._cancel.get(job.job_id)
+            if event:
+                event.set()
+            to_stop = job
+        clone = Path(to_stop.clone_path) if to_stop.clone_path else None
+        with bound(to_stop.job_id, to_stop.mr_key, to_stop.log_file):
+            try:
+                stop_job_holders(to_stop, clone, protect=protect_pids())
+            except Exception:  # noqa: BLE001
+                logger.exception("cancel stop_job_holders failed job=%s", job_id)
+                kill_job_tree([to_stop.serve_pid, *list(to_stop.extra_pids or [])])
         return True, "cancel requested"
 
     def cancel_mr(
@@ -174,16 +183,14 @@ class Manager:
         delete_reason: str = "mr-merge",
     ) -> tuple[int, str]:
         key = mr_key(project_id, mr_iid)
-        cancelled = 0
-        running = self.store.running_for_mr(key)
+        # Drain the FIFO first (under the start lock) so _after_job cannot
+        # pop the next comment and start it while we cancel the runner.
+        with self._lock:
+            cancelled = self._cancel_queued_locked(key)
+            running = self.store.running_for_mr(key)
         if running:
             ok, _ = self.cancel_job(running.job_id)
             if ok:
-                cancelled += 1
-        for job_id in self.queue.drain(key):
-            job = self.store.get(job_id)
-            if job and job.status == "queued":
-                self._finish(job, RunResult(cancelled=True, error="cancelled"), status="cancelled")
                 cancelled += 1
         if delete_clone_dir:
             if running:
@@ -191,6 +198,8 @@ class Manager:
                     if thread.name == running.job_id:
                         thread.join(timeout=15)
                         break
+            with self._lock:
+                cancelled += self._cancel_queued_locked(key)
             record = self.workspaces.get(key)
             path = Path(record.clone_path) if record and record.clone_path else clone_path_for(self.config.work_dir, key)
             holders = running
@@ -213,6 +222,15 @@ class Manager:
             self.workspaces.delete(key)
         return cancelled, key
 
+    def _cancel_queued_locked(self, key: str) -> int:
+        cancelled = 0
+        for job_id in self.queue.drain(key):
+            job = self.store.get(job_id)
+            if job and job.status == "queued":
+                self._finish(job, RunResult(cancelled=True, error="cancelled"), status="cancelled")
+                cancelled += 1
+        return cancelled
+
     def _try_start_locked(self, mr_key_value: str) -> bool:
         if self.stopping or not self.ready:
             return False
@@ -220,26 +238,30 @@ class Manager:
             return False
         if self._running >= self.config.max_concurrent_jobs:
             return False
-        job_id = self.queue.peek(mr_key_value)
-        if not job_id:
-            return False
-        job = self.store.get(job_id)
-        if not job or job.status != "queued":
-            self.queue.pop(mr_key_value)
-            return False
-        self.queue.pop(mr_key_value)
-        self._running += 1
-        self._running_mr.add(mr_key_value)
-        event = threading.Event()
-        self._cancel[job.job_id] = event
-        job.status = "running"
-        job.live = True
-        job.started_at = utc_now()
-        self.store.save(job)
-        thread = threading.Thread(target=self._run_job, args=(job.job_id, event), name=job.job_id, daemon=True)
-        self._threads.append(thread)
-        thread.start()
-        return True
+        while True:
+            job_id = self.queue.peek(mr_key_value)
+            if not job_id:
+                return False
+            job = self.store.get(job_id)
+            if not job or job.status != "queued":
+                # Drop this id only. Never pop whoever is at the front now —
+                # a concurrent cancel of this head would otherwise steal the next job.
+                self.queue.remove(mr_key_value, job_id)
+                continue
+            if self.queue.pop_if(mr_key_value, job_id) is None:
+                continue
+            self._running += 1
+            self._running_mr.add(mr_key_value)
+            event = threading.Event()
+            self._cancel[job.job_id] = event
+            job.status = "running"
+            job.live = True
+            job.started_at = utc_now()
+            self.store.save(job)
+            thread = threading.Thread(target=self._run_job, args=(job.job_id, event), name=job.job_id, daemon=True)
+            self._threads.append(thread)
+            thread.start()
+            return True
 
     def _dispatch(self) -> None:
         with self._lock:
@@ -255,21 +277,23 @@ class Manager:
         if not job:
             self._after_job(None)
             return
-        try:
-            result = self.runner.run(job, event.is_set)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("runner crashed job=%s", job_id)
-            result = RunResult(error=f"worker crashed: {exc}")
-        job = self.store.get(job_id) or job
-        if event.is_set() or result.cancelled:
-            status = "cancelled"
-        elif result.timeout:
-            status = "timeout"
-        elif result.error and not result.text:
-            status = "error"
-        else:
-            status = "success"
-        self._finish(job, result, status=status)
+        with bound(job.job_id, job.mr_key, job.log_file):
+            logger.info("pipeline start log_file=%s", job.log_file)
+            try:
+                result = self.runner.run(job, event.is_set)
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("runner crashed job=%s", job_id)
+                result = RunResult(error=f"worker crashed: {exc}")
+            job = self.store.get(job_id) or job
+            if event.is_set() or result.cancelled:
+                status = "cancelled"
+            elif result.timeout:
+                status = "timeout"
+            elif result.error and not result.text:
+                status = "error"
+            else:
+                status = "success"
+            self._finish(job, result, status=status)
         self._after_job(job.mr_key)
 
     def _after_job(self, mr_key_value: Optional[str]) -> None:

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
-from creasy.logging import get_logger
+from creasy.logging import get_logger, read_job_log_lines
 from creasy.opencode.serve import read_serve_log, serve_log_path
 from creasy.workspace.identity import mr_key
 
@@ -36,20 +36,6 @@ def _mgr(request: Request):
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
-
-
-def _log_lines(raw: list[str], job: object) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
-    for line in raw:
-        out.append(
-            {
-                "timestamp": "",
-                "message": line,
-                "job_id": getattr(job, "job_id", ""),
-                "jira_id": getattr(job, "mr_key", ""),
-            }
-        )
-    return out
 
 
 def _chat_payload(job) -> dict:
@@ -117,11 +103,14 @@ def api_job(job_id: str, request: Request) -> dict:
     job = _mgr(request).store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
-    log_path = request.app.state.config.log_dir / job.log_file
-    lines: list[str] = []
-    if log_path.is_file():
-        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]
-    return {"job": job.public_dict(), "system_logs": _log_lines(lines, job)}
+    logs = read_job_log_lines(
+        request.app.state.config.log_dir,
+        job.job_id,
+        mr_key=job.mr_key,
+        log_file=job.log_file,
+        limit=2000,
+    )
+    return {"job": job.public_dict(), "system_logs": logs}
 
 
 @router.get("/api/jobs/{job_id}/chat")
@@ -158,13 +147,14 @@ def api_logs(job_id: str, request: Request, limit: int = Query(default=2000, ge=
     job = manager.store.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
-    path = manager.config.log_dir / job.log_file
-    lines: list[str] = []
-    if path.is_file():
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-        if limit:
-            lines = lines[-limit:]
-    return {"job_id": job.job_id, "lines": _log_lines(lines, job)}
+    lines = read_job_log_lines(
+        manager.config.log_dir,
+        job.job_id,
+        mr_key=job.mr_key,
+        log_file=job.log_file,
+        limit=limit,
+    )
+    return {"job_id": job.job_id, "lines": lines}
 
 
 @router.get("/api/jobs/{job_id}/serve-log")

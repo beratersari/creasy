@@ -149,3 +149,14 @@ def test_failure_and_cancel_notes_are_not_commands() -> None:
         assert body.startswith("**Creasy —")
         assert first_command(body) is None
         assert "## " not in body
+
+
+def test_failure_note_redacts_oauth_token() -> None:
+    token = "super-secret-gitlab-token-TESTONLY"
+    job = _job(
+        error_message=f"git failed (128): fatal: Authentication failed for 'https://oauth2:{token}@gitlab.example/group/repo.git/'"
+    )
+    body = format_failure(job)
+    assert token not in body
+    assert "oauth2:" not in body
+    assert "https://gitlab.example/group/repo.git/" in body

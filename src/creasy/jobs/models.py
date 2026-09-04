@@ -44,6 +44,7 @@ class JobRecord(BaseModel):
     base_sha: str = ""
     merge_base: str = ""
     web_url: str = ""
+    mr_title: str = ""
     clone_path: str = ""
     session_id: str = ""
     model: str = ""

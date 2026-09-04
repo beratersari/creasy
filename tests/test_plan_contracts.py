@@ -7,6 +7,7 @@ oldrev is ignored on purpose).
 from __future__ import annotations
 
 import json
+import logging
 import socket
 import subprocess
 import threading
@@ -25,8 +26,11 @@ from creasy.jobs.worker import OpenCodeRunner
 from creasy.opencode.serve import ServeHandle
 from creasy.opencode.session import OpenCodeClient, OpenCodeError
 from creasy.review.format import format_cancelled, format_failure, format_success
+from creasy.logging import redact_userinfo
 from creasy.workspace.gitops import (
     DiffIndex,
+    GitError,
+    _run_git,
     _scrub_origin,
     inject_token,
     isolated_git_env,
@@ -512,6 +516,40 @@ def test_inject_token_then_public_url_has_no_userinfo():
     clean = public_git_url(authed)
     assert "super-secret-token" not in clean
     assert clean == raw
+
+
+def test_redact_userinfo_strips_oauth_token():
+    token = "super-secret-gitlab-token-TESTONLY"
+    raw = f"fatal: Authentication failed for 'https://oauth2:{token}@gitlab.example/repo.git/'"
+    got = redact_userinfo(raw)
+    assert token not in got
+    assert "oauth2:" not in got
+    assert "https://gitlab.example/repo.git/" in got
+
+
+def test_run_git_does_not_log_or_raise_oauth_token():
+    import io
+
+    token = "super-secret-gitlab-token-TESTONLY"
+    url = f"https://oauth2:{token}@127.0.0.1:1/group/repo.git"
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setLevel(logging.DEBUG)
+    log = logging.getLogger("creasy.gitops")
+    log.addHandler(handler)
+    log.setLevel(logging.DEBUG)
+    try:
+        try:
+            _run_git(["clone", "--no-single-branch", url, "dest"], timeout=5)
+        except GitError as exc:
+            assert token not in str(exc)
+            assert "oauth2:" not in str(exc)
+    finally:
+        log.removeHandler(handler)
+    text = buf.getvalue()
+    assert token not in text
+    assert "oauth2:" not in text
+    assert "https://127.0.0.1:1/group/repo.git" in text
 
 
 def test_scrub_origin_removes_userinfo(tmp_path):

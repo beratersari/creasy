@@ -77,20 +77,27 @@ class SpyGitlab:
 
 
 def test_record_spawn_persists_pid_and_job_log(tmp_config):
+    from creasy.log_context import bound
+    from creasy.logging import setup_logging
+
+    setup_logging("INFO", tmp_config.log_dir)
     store = JobStore(tmp_config.job_dir)
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, SpyGitlab(), store=store)
     job = _job()
     store.save(job)
     handle = ServeHandle(pid=4242, port=9, base_url="http://127.0.0.1:9", proc=None, log_path=tmp_config.serve_dir / "x.log")  # type: ignore[arg-type]
-    runner._record_spawn(job, handle)
+    with bound(job.job_id, job.mr_key, job.log_file):
+        runner._record_spawn(job, handle)
     saved = store.get(job.job_id)
     assert saved is not None
     assert saved.serve_pid == 4242
     assert saved.serve_port == 9
     log_path = tmp_config.log_dir / job.log_file
     assert log_path.is_file()
-    assert "4242" in log_path.read_text(encoding="utf-8")
+    text = log_path.read_text(encoding="utf-8")
+    assert "4242" in text
+    assert f"job_id={job.job_id}" in text
 
 
 def test_ask_prompt_uses_previous_sha_not_overwritten_last_sha(tmp_config):
