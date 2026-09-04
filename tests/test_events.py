@@ -42,6 +42,20 @@ def test_open_enqueues_review():
     assert got.explicit is False
 
 
+def test_mr_title_comes_from_webhook():
+    got = classify_webhook(mr_payload("open", title="Fix login timeout"))
+    assert isinstance(got, ReviewTrigger)
+    assert got.title == "Fix login timeout"
+    note = classify_webhook(note_payload("/review"))
+    assert isinstance(note, ReviewTrigger)
+    assert note.title == ""
+    titled = note_payload("/ask why")
+    titled["merge_request"]["title"] = "Fix login timeout"
+    ask = classify_webhook(titled)
+    assert isinstance(ask, ReviewTrigger)
+    assert ask.title == "Fix login timeout"
+
+
 def test_update_with_oldrev():
     got = classify_webhook(mr_payload("update", oldrev="abc123"))
     assert isinstance(got, ReviewTrigger)

@@ -43,6 +43,7 @@ def test_open_accepted(tmp_config):
             "source_branch": "f",
             "target_branch": "main",
             "draft": False,
+            "title": "Fix login timeout",
         },
     }
     res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
@@ -50,6 +51,10 @@ def test_open_accepted(tmp_config):
     body = res.json()
     assert body["status"] == "accepted"
     assert "job_id" in body
+    job = manager.store.get(body["job_id"])
+    assert job is not None
+    assert job.mr_title == "Fix login timeout"
+    assert job.public_dict()["mr_title"] == "Fix login timeout"
     runner.release.set()
     manager.shutdown()
 

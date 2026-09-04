@@ -70,6 +70,18 @@ class OpenCodeRunner:
         self.gitlab = gitlab or GitLabClient(config.gitlab_url, config.gitlab_token)
         self.store = store
 
+    def _remember_title(self, job: JobRecord, title: str) -> None:
+        text = (title or "").strip()
+        if not text or job.mr_title == text:
+            return
+        job.mr_title = text
+        if self.store is None:
+            return
+        try:
+            self.store.save(job)
+        except Exception:  # noqa: BLE001
+            logger.warning("could not persist mr_title job=%s", job.job_id)
+
     def _append_job_log(self, job: JobRecord, line: str) -> None:
         if not job.log_file:
             return
@@ -90,6 +102,7 @@ class OpenCodeRunner:
                 self.store.save(job)
             except Exception:  # noqa: BLE001
                 logger.warning("could not persist serve pid job=%s", job.job_id)
+        logger.info("serve started pid=%s port=%s", handle.pid, handle.port)
         self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
@@ -103,6 +116,7 @@ class OpenCodeRunner:
             prior = self.workspaces.get(job.mr_key)
             previous_sha = prior.last_sha if prior else ""
             mr = self.gitlab.get_merge_request(job.project_id, job.mr_iid)
+            self._remember_title(job, mr.title)
             workspace = self._ensure_workspace(job, mr, should_stop)
             result.clone_path = workspace.clone_path
             result.sha = workspace.last_sha or mr.sha
@@ -402,4 +416,5 @@ class OpenCodeRunner:
                 )
         result.findings_posted = posted
         if posted:
+            logger.info("posted %s diff thread(s)", posted)
             self._append_job_log(job, f"posted {posted} diff thread(s)")

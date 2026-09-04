@@ -17,6 +17,7 @@ export type JobItem = {
   job_id: string
   jira_id: string
   mr_key?: string
+  mr_title?: string
   project_id?: number
   mr_iid?: number
   status: string

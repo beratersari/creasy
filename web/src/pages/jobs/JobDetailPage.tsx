@@ -117,8 +117,11 @@ export function JobDetailPage() {
           {job && <StatusBadge status={job.status} />}
           {job?.live && <LiveDot />}
         </div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{job?.job_id || 'Job'}</h1>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+          {(job?.mr_title || '').trim() || job?.job_id || 'Job'}
+        </h1>
         <p className="mt-1 font-mono text-xs text-text-muted">
+          {job?.job_id ? `${job.job_id} · ` : ''}
           {job?.agent_mode} · {job?.model} · attempt {job?.attempt}/{job?.retry_count}
           {elapsed !== '—' ? ` · ${elapsed}` : ''}
         </p>
@@ -222,6 +225,7 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
         <MetaCard label="Status" valueNode={<StatusBadge status={job.status} />} />
         <MetaCard label="Elapsed" mono value={elapsed} />
         <MetaCard label="Merge request" mono value={job.jira_id} />
+        <MetaCard label="Title" className="sm:col-span-2" value={(job.mr_title || '').trim() || '—'} />
         <MetaCard label="Agent" value={job.agent_mode || '—'} />
         <MetaCard label="Model" mono value={job.model || '—'} />
         <MetaCard label="Session" mono value={job.session_id || '—'} />

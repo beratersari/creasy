@@ -19,6 +19,7 @@ class ReviewTrigger:
     sha: str = ""
     comment_text: str = ""
     web_url: str = ""
+    title: str = ""
     draft: bool = False
     explicit: bool = False
 
@@ -124,6 +125,7 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
         if isinstance(attrs.get("last_commit"), dict)
         else "",
         web_url=str(attrs.get("url") or ""),
+        title=str(attrs.get("title") or ""),
         draft=draft,
         explicit=False,
     )
@@ -162,6 +164,7 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
         else "",
         comment_text=remainder,
         web_url=str(mr.get("url") or ""),
+        title=str(mr.get("title") or ""),
         draft=_is_draft(payload, attrs),
         explicit=True,
     )
