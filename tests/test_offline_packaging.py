@@ -73,7 +73,7 @@ def test_stage_app_copies_opencode_configs(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     payload = tmp_path / "payload"
     mod.stage_app(root, payload)
-    packed = payload / "opencode-configs" / "agents" / "review.md"
+    packed = payload / "opencode-configs" / "agents" / "gitlab-reviewer.md"
     assert packed.is_file()
     assert "mode: primary" in packed.read_text(encoding="utf-8")
     assert not (payload / "opencode-configs" / ".git").exists()
@@ -88,7 +88,7 @@ def test_stage_app_requires_review_agent(tmp_path: Path) -> None:
     try:
         mod.stage_app(root, payload)
     except SystemExit as exc:
-        assert "opencode-configs/agents/review.md" in str(exc)
+        assert "opencode-configs/agents/gitlab-reviewer.md" in str(exc)
     else:
         raise AssertionError("expected SystemExit")
 

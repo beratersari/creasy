@@ -26,7 +26,7 @@ STOCK_CONFIG = """{
 """
 
 CONFIGS_REL = Path("opencode-configs")
-REVIEW_AGENT_REL = CONFIGS_REL / "agents" / "review.md"
+REVIEW_AGENT_REL = CONFIGS_REL / "agents" / "gitlab-reviewer.md"
 REVIEW_SKILLS_REL = CONFIGS_REL / "skills"
 
 
@@ -108,7 +108,7 @@ def agent_dests(
 
 
 def review_agent_dests(user_home: Path | None = None, *, include_opencode_home: bool = True) -> list[Path]:
-    return agent_dests("review", user_home, include_opencode_home=include_opencode_home)
+    return agent_dests("gitlab-reviewer", user_home, include_opencode_home=include_opencode_home)
 
 
 def vendor_binary(root: Path) -> Path | None:
@@ -309,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
     print(f"[OK] OpenCode ready: {target}")
-    print("Jobs use OPENCODE_AGENT=review (see .env.example).")
+    print("Jobs use OPENCODE_AGENT=gitlab-reviewer (see .env.example).")
     return 0
 
 

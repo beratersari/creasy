@@ -30,7 +30,7 @@ class Config:
     opencode_model: str = "opencode/big-pickle"
     opencode_timeout: int = 1800
     opencode_retry_count: int = 2
-    opencode_agent: str = "review"
+    opencode_agent: str = "gitlab-reviewer"
     opencode_bin: str = "opencode"
     max_concurrent_jobs: int = 2
     data_dir: Path = field(default_factory=lambda: Path("./data"))
@@ -75,7 +75,7 @@ def load_config(env_file: str | None = ".env") -> Config:
         opencode_model=os.getenv("OPENCODE_MODEL", "opencode/big-pickle").strip(),
         opencode_timeout=max(1, _int("OPENCODE_TIMEOUT", 1800)),
         opencode_retry_count=max(1, _int("OPENCODE_RETRY_COUNT", 2)),
-        opencode_agent=os.getenv("OPENCODE_AGENT", "review").strip() or "review",
+        opencode_agent=os.getenv("OPENCODE_AGENT", "gitlab-reviewer").strip() or "gitlab-reviewer",
         opencode_bin=os.getenv("OPENCODE_BIN", "opencode").strip() or "opencode",
         max_concurrent_jobs=max(1, _int("MAX_CONCURRENT_JOBS", 2)),
         data_dir=data_dir,

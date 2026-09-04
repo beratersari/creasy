@@ -37,7 +37,7 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
 
 
 def test_review_agent_source_is_primary_readonly() -> None:
-    text = (REPO / "opencode-configs" / "agents" / "review.md").read_text(encoding="utf-8")
+    text = (REPO / "opencode-configs" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
     assert text.startswith("---")
     assert "mode: primary" in text
     assert "edit: deny" in text
@@ -57,6 +57,8 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "implementer-only" in text
     assert "GitLab MR comment" in text
     assert "Never start a line with `#`" in text
+    assert "creasy-findings" in text
+    assert '"findings"' in text
     assert "### Summary" in text
     assert "### Critical" in text
     assert "### Major" in text
@@ -84,9 +86,9 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
     assert dest.is_file()
     cfg = json.loads((home / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
     assert cfg.get("plugin") == []
-    agent = (home / ".config" / "opencode" / "agents" / "review.md").read_text(encoding="utf-8")
+    agent = (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
     assert "mode: primary" in agent
-    copy = (home / ".opencode" / "agents" / "review.md").read_text(encoding="utf-8")
+    copy = (home / ".opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
     assert copy == agent
     for name in (
         "cpp98",
@@ -131,7 +133,7 @@ def test_existing_install_is_backed_up_and_replaced(tmp_path: Path) -> None:
     ]
     fresh = json.loads((oc / "opencode.json").read_text(encoding="utf-8"))
     assert fresh.get("plugin") == []
-    assert (home / ".config" / "opencode" / "agents" / "review.md").is_file()
+    assert (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").is_file()
     assert (home / ".config" / "opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
 
 
@@ -147,7 +149,7 @@ def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) 
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
     assert dest.read_bytes() == b"OLD-BINARY"
-    assert (home / ".config" / "opencode" / "agents" / "review.md").is_file()
+    assert (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").is_file()
     assert json.loads((oc / "opencode.json").read_text(encoding="utf-8")).get("plugin") == []
 
 
@@ -175,7 +177,7 @@ def test_config_only_home_is_backed_up_and_new_home_created(tmp_path: Path) -> N
     assert dest.is_file()
     assert dest.name.startswith("opencode")
     assert dest.read_bytes() == b"NEW"
-    assert (home / ".opencode" / "agents" / "review.md").is_file()
+    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
     backups = list((home / ".config").glob("opencode_backup_*"))
     assert len(backups) == 1
     assert json.loads((backups[0] / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
@@ -218,10 +220,10 @@ def test_extra_skills_state_when_to_load() -> None:
         assert "Load when" in body or "Load only" in body, name
 
 
-def test_default_agent_is_review() -> None:
+def test_default_agent_is_gitlab_reviewer() -> None:
     from creasy.config import Config
 
-    assert Config().opencode_agent == "review"
+    assert Config().opencode_agent == "gitlab-reviewer"
 
 
 def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:

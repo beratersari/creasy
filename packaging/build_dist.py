@@ -582,10 +582,10 @@ def stage_app(root: Path, payload: Path) -> None:
             continue
         copy_tree(src, payload / name)
         print(f"  + {name}/")
-    review_agent = payload / "opencode-configs" / "agents" / "review.md"
+    review_agent = payload / "opencode-configs" / "agents" / "gitlab-reviewer.md"
     if not review_agent.is_file():
         raise SystemExit(
-            "opencode-configs/agents/review.md missing in the pack. "
+            "opencode-configs/agents/gitlab-reviewer.md missing in the pack. "
             "git submodule update --init --recursive"
         )
     # Launchers at zip root so Windows users can double-click.

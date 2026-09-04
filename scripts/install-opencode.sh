@@ -27,8 +27,8 @@ echo "Project : $ROOT"
 echo "Target  : $HOME/.opencode"
 echo
 
-if [[ ! -f "$ROOT/opencode-configs/agents/review.md" ]]; then
-  echo "[ERROR] opencode-configs/agents/review.md is missing."
+if [[ ! -f "$ROOT/opencode-configs/agents/gitlab-reviewer.md" ]]; then
+  echo "[ERROR] opencode-configs/agents/gitlab-reviewer.md is missing."
   echo "Clone with: git clone --recurse-submodules"
   echo "Or run: git submodule update --init --recursive"
   exit 1
