@@ -1,4 +1,4 @@
-"""OpenCode installer keeps an existing home and adds the review agent."""
+"""OpenCode installer backs up ~/.opencode and installs a clean home."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
     root = tmp_path / "pkg"
     shutil.copytree(REPO / "opencode-configs" / "agents", root / "opencode-configs" / "agents")
     shutil.copytree(REPO / "opencode-configs" / "skills", root / "opencode-configs" / "skills")
+    shutil.copy2(REPO / "opencode-configs" / "install.py", root / "opencode-configs" / "install.py")
     if vendor:
         bin_name = "opencode.exe" if os.name == "nt" else "opencode"
         if os.name == "nt":
@@ -74,7 +75,7 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
         ) == body
 
 
-def test_existing_install_keeps_binary_and_plugins(tmp_path: Path) -> None:
+def test_existing_install_is_backed_up_and_replaced(tmp_path: Path) -> None:
     mod = _load()
     root = _plant_root(tmp_path, vendor=True)
     home = tmp_path / "home"
@@ -88,26 +89,35 @@ def test_existing_install_keeps_binary_and_plugins(tmp_path: Path) -> None:
     extra.write_text("stay", encoding="utf-8")
 
     dest = mod.install(root, user_home=home)
-    assert dest.read_bytes() == b"OLD-BINARY"
-    assert extra.read_text(encoding="utf-8") == "stay"
-    kept = json.loads((oc / "opencode.json").read_text(encoding="utf-8"))
-    assert kept["plugin"] == ["opencode-supermemory", "mine"]
-    assert kept["autoupdate"] is True
+    assert dest.read_bytes() == b"NEW"
+    assert not extra.exists()
+    backups = list(home.glob(".opencode_backup_*"))
+    assert len(backups) == 1
+    assert (backups[0] / "keep-me.txt").read_text(encoding="utf-8") == "stay"
+    assert json.loads((backups[0] / "opencode.json").read_text(encoding="utf-8"))["plugin"] == [
+        "opencode-supermemory",
+        "mine",
+    ]
+    fresh = json.loads((oc / "opencode.json").read_text(encoding="utf-8"))
+    assert fresh.get("plugin") == []
     assert (home / ".config" / "opencode" / "agents" / "review.md").is_file()
     assert (home / ".config" / "opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
-    assert (home / ".config" / "opencode" / "skills" / "modern-cpp" / "SKILL.md").is_file()
 
 
-def test_existing_home_without_vendor_still_adds_agent(tmp_path: Path) -> None:
+def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) -> None:
     mod = _load()
     root = _plant_root(tmp_path, vendor=False)
     home = tmp_path / "home"
-    (home / ".opencode").mkdir(parents=True)
-    (home / ".opencode" / "opencode.json").write_text('{"plugin":["keep"]}', encoding="utf-8")
+    oc = home / ".opencode"
+    (oc / "bin").mkdir(parents=True)
+    old = oc / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
+    old.write_bytes(b"OLD-BINARY")
+    (oc / "opencode.json").write_text('{"plugin":["keep"]}', encoding="utf-8")
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
-    assert "mode: primary" in dest.read_text(encoding="utf-8")
-    assert json.loads((home / ".opencode" / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
+    assert dest.read_bytes() == b"OLD-BINARY"
+    assert (home / ".config" / "opencode" / "agents" / "review.md").is_file()
+    assert json.loads((oc / "opencode.json").read_text(encoding="utf-8")).get("plugin") == []
 
 
 def test_missing_vendor_and_missing_home_fails(tmp_path: Path) -> None:
@@ -122,7 +132,7 @@ def test_missing_vendor_and_missing_home_fails(tmp_path: Path) -> None:
         raise AssertionError("expected FileNotFoundError")
 
 
-def test_config_only_home_does_not_shadow_binary(tmp_path: Path) -> None:
+def test_config_only_home_is_backed_up_and_new_home_created(tmp_path: Path) -> None:
     mod = _load()
     root = _plant_root(tmp_path, vendor=True)
     home = tmp_path / "home"
@@ -132,12 +142,14 @@ def test_config_only_home_does_not_shadow_binary(tmp_path: Path) -> None:
     )
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
-    assert dest.name == "review.md"
-    assert not (home / ".opencode").exists()
-    assert (home / ".config" / "opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
-    assert not (home / ".opencode" / "skills").exists()
-    kept = json.loads((home / ".config" / "opencode" / "opencode.json").read_text(encoding="utf-8"))
-    assert kept["plugin"] == ["keep"]
+    assert dest.name.startswith("opencode")
+    assert dest.read_bytes() == b"NEW"
+    assert (home / ".opencode" / "agents" / "review.md").is_file()
+    backups = list((home / ".config").glob("opencode_backup_*"))
+    assert len(backups) == 1
+    assert json.loads((backups[0] / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
+    fresh = json.loads((home / ".config" / "opencode" / "opencode.json").read_text(encoding="utf-8"))
+    assert fresh.get("plugin") == []
 
 
 def test_cpp_skills_state_when_to_load() -> None:
@@ -183,6 +195,26 @@ def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:
     mod.install(root, user_home=home)
     assert (home / ".config" / "opencode" / "agents" / "planner.md").is_file()
     assert (home / ".config" / "opencode" / "skills" / "extra" / "SKILL.md").is_file()
+
+
+def test_install_unhooks_other_bin_and_prepends_new(tmp_path: Path) -> None:
+    mod = _load()
+    root = _plant_root(tmp_path, vendor=True)
+    home = tmp_path / "home"
+    custom = tmp_path / "apps" / "opencode" / "bin"
+    custom.mkdir(parents=True)
+    (custom / ("opencode.exe" if os.name == "nt" else "opencode")).write_text("old", encoding="utf-8")
+    home.mkdir(parents=True)
+    (home / ".opencode-path").write_text(
+        str(custom) + (";" if os.name == "nt" else ":") + str(tmp_path / "keep"),
+        encoding="utf-8",
+    )
+    dest = mod.install(root, user_home=home)
+    assert dest.read_bytes() == b"NEW"
+    assert (custom / ("opencode.exe" if os.name == "nt" else "opencode")).is_file()
+    raw = (home / ".opencode-path").read_text(encoding="utf-8")
+    assert str(home / ".opencode" / "bin") in raw
+    assert str(custom) not in raw.split(";" if os.name == "nt" else ":")
 
 
 def test_missing_configs_submodule_fails(tmp_path: Path) -> None:

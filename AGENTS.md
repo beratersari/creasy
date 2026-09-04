@@ -98,10 +98,11 @@ These look like bugs. They are not.
 - OpenCode only. No Codex.
 - Jobs use the `review` agent (`OPENCODE_AGENT`, default `review`).
   Agent and skill files live in the `opencode-configs` submodule
-  (`agents/*.md`, `skills/*/SKILL.md`). The installer copies every
-  file it finds into `~/.config/opencode/` (and `~/.opencode/` when
-  that home already exists). It must not delete an existing OpenCode
-  home; it only adds those files and a missing binary or stock config.
+  (`agents/*.md`, `skills/*/SKILL.md`). `install-opencode` uses the
+  same replace rules as that pack: rename `~/.opencode` to
+  `~/.opencode_backup_YYYYMMDD_HHMMSS`, drop other OpenCode dirs from
+  PATH, write a clean home, install the vendored CLI (or the binary
+  from the backup if vendor is missing), and prepend `~/.opencode/bin`.
   Add a new agent in that submodule, not under `scripts/`.
 
 ### Dashboard

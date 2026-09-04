@@ -27,5 +27,7 @@ def test_start_scripts_match_osm_backend_pattern() -> None:
     assert "web/index.html" not in sh
     oc = (ROOT / "scripts" / "install_opencode.py").read_text(encoding="utf-8")
     assert "wipe_old" not in oc
+    assert "load_pack_installer" in oc
+    assert "latest_backup_binary" in oc
     assert "install_review_agent" in oc
     assert "vendor" in oc and "bin" in oc

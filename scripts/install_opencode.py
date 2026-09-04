@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Install or extend the user OpenCode home (offline, stdlib).
+"""Install the OpenCode CLI and this repo's agents/skills (offline, stdlib).
 
-Never deletes an existing OpenCode install. A first run copies the vendored
-CLI and a stock config. A later run only adds agents and skills from the
-opencode-configs submodule, plus a missing binary or config.
+Uses the same replace rules as opencode-configs/install.py: backup
+~/.opencode, unhook other installs from PATH, write a clean home, then
+copy the vendored binary (or the binary from the backup if vendor is
+missing) and prepend ~/.opencode/bin.
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import platform
@@ -223,7 +225,33 @@ def install_review_skills(
     return written
 
 
+def load_pack_installer(root: Path):
+    path = configs_root(root) / "install.py"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"OpenCode configs installer missing: {path} (git submodule update --init)"
+        )
+    spec = importlib.util.spec_from_file_location("opencode_configs_install", path)
+    if spec is None or spec.loader is None:
+        raise FileNotFoundError(f"cannot load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def latest_backup_binary(user_home: Path | None = None) -> Path | None:
+    base = user_home or home()
+    name = "opencode.exe" if os.name == "nt" else "opencode"
+    backups = sorted(base.glob(".opencode_backup_*"), reverse=True)
+    for backup in backups:
+        candidate = backup / "bin" / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def prepend_user_path(directory: Path) -> None:
+    """Windows-only leftover helper. New installs use opencode-configs PATH logic."""
     if os.name != "nt":
         return
     import winreg
@@ -249,43 +277,24 @@ def prepend_user_path(directory: Path) -> None:
 def install(root: Path, *, user_home: Path | None = None) -> Path:
     root = Path(root).expanduser().resolve()
     base = user_home or home()
-    oc_home = opencode_home(base)
-    cfg_home = config_home(base)
+    pack = load_pack_installer(root)
+    pack.install(configs_root(root), user_home=base)
     dest = dest_binary(base)
-    src = vendor_binary(root)
-    found = existing_install(base)
-
-    if found:
-        print("Existing OpenCode install kept:")
-        for path in found:
-            print(f"  {path}")
-    else:
-        print("No previous OpenCode home found; installing a new one.")
-
-    oc_exists = oc_home.exists()
-    own_home = dest.is_file() or (src is not None and (oc_exists or not found))
-    if own_home:
-        ensure_binary(src, dest)
-        if user_home is None:
-            prepend_user_path(dest.parent)
-        ensure_config(oc_home / "opencode.json")
-    elif not found:
+    src = vendor_binary(root) or latest_backup_binary(base)
+    if src is None:
         raise FileNotFoundError(f"No OpenCode binary under {root / 'vendor' / 'bin'}")
-    else:
-        print("[OK] Existing OpenCode config kept; adding the review agent and skills only")
-
-    if (cfg_home / "opencode.json").is_file():
-        ensure_config(cfg_home / "opencode.json")
-    include_home = own_home or oc_exists
-    install_review_agent(root, base, include_opencode_home=include_home)
-    install_review_skills(root, base, include_opencode_home=include_home)
-    print(f"Install root: {oc_home if own_home or oc_exists else cfg_home}")
-    return dest if dest.is_file() else review_agent_dests(base, include_opencode_home=False)[0]
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+    if os.name != "nt":
+        dest.chmod(dest.stat().st_mode | 0o111)
+    print(f"[OK] Binary installed: {dest}")
+    print(f"Install root: {opencode_home(base)}")
+    return dest
 
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
-        description="Install the vendored OpenCode CLI if needed; always add the Creasy review agent and C++ skills. Never deletes an existing install."
+        description="Backup ~/.opencode, unhook other installs from PATH, then install the vendored CLI and agents/skills."
     )
     p.add_argument("--root", required=True, help="Repo / zip root that contains vendor/bin")
     args = p.parse_args(argv)
@@ -294,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         target = install(root)
     except FileNotFoundError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
-        print("Use a CI zip from packaging/build_dist.py, or keep an existing OpenCode home.", file=sys.stderr)
+        print("Use a CI zip from packaging/build_dist.py, or git submodule update --init.", file=sys.stderr)
         return 1
     except OSError as e:
         print(f"[ERROR] {e}", file=sys.stderr)

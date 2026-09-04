@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Creasy — install OpenCode CLI (offline).
-# Keeps an existing user install. Adds the review agent. Copies vendor/bin only if missing.
+# Backs up ~/.opencode, unhooks other installs from PATH, installs this pack.
 # Does not install Python / the dashboard. Use install.sh for that.
 set -euo pipefail
 
@@ -20,7 +20,7 @@ creasy_chmod_launchers "$ROOT"
 
 echo "========================================"
 echo "  Creasy"
-echo "  OpenCode CLI install (offline, keeps existing home)"
+echo "  OpenCode CLI install (offline, backup then replace)"
 echo "========================================"
 echo
 echo "Project : $ROOT"
