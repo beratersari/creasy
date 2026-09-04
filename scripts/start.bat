@@ -55,7 +55,7 @@ if errorlevel 1 (
 where opencode >nul 2>&1
 if errorlevel 1 (
     echo [WARNING] opencode is not on PATH. Jobs will fail until OpenCode is installed.
-    echo           Run scripts\install-opencode.bat ^(keeps existing home, adds review agent^).
+    echo           Run scripts\install-opencode.bat ^(keeps existing home, copies opencode-configs^).
 ) else (
     echo [OK] opencode on PATH
 )

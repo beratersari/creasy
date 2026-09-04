@@ -30,6 +30,14 @@ echo Project : %ROOT%
 echo Target  : %USERPROFILE%\.opencode
 echo.
 
+if not exist "%ROOT%\opencode-configs\agents\review.md" (
+    echo [ERROR] opencode-configs\agents\review.md is missing.
+    echo Clone with: git clone --recurse-submodules
+    echo Or run: git submodule update --init --recursive
+    call :maybe_pause
+    exit /b 1
+)
+
 if not exist "%ROOT%\vendor\bin\windows\opencode.exe" (
     if not exist "%ROOT%\vendor\bin\opencode.exe" (
         echo [ERROR] vendor\bin\windows\opencode.exe is missing.

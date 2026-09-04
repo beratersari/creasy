@@ -72,6 +72,15 @@ def test_bat_files_avoid_osm_cmd_bugs():
                     assert "—" not in text
 
 
+def test_install_opencode_scripts_require_configs():
+    bat = _read("scripts/install-opencode.bat")
+    sh = _read("scripts/install-opencode.sh")
+    assert r"opencode-configs\agents\review.md" in bat
+    assert "opencode-configs/agents/review.md" in sh
+    assert "submodule update --init" in bat
+    assert "submodule update --init" in sh
+
+
 def test_ci_runs_vendor_install_start():
     workflow = _read(".github/workflows/ci.yml")
     assert "packaging/build_dist.py" in workflow
@@ -80,6 +89,8 @@ def test_ci_runs_vendor_install_start():
     assert "scripts\\install.bat" in workflow
     assert "scripts\\start.bat" in workflow
     assert "install-opencode" in workflow
+    assert "submodules: true" in workflow
+    assert workflow.count("submodules: true") >= 3
     assert "/health" in workflow
     assert "upload-artifact" in workflow
     assert "creasy-offline-zips" in workflow

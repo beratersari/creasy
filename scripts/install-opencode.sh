@@ -27,6 +27,13 @@ echo "Project : $ROOT"
 echo "Target  : $HOME/.opencode"
 echo
 
+if [[ ! -f "$ROOT/opencode-configs/agents/review.md" ]]; then
+  echo "[ERROR] opencode-configs/agents/review.md is missing."
+  echo "Clone with: git clone --recurse-submodules"
+  echo "Or run: git submodule update --init --recursive"
+  exit 1
+fi
+
 if [[ ! -f "$ROOT/vendor/bin/$(creasy_os_tag)/opencode" && ! -f "$ROOT/vendor/bin/opencode" ]]; then
   echo "[ERROR] vendor/bin/$(creasy_os_tag)/opencode is missing."
   echo "Use a current CI zip (macOS needs darwin-arm64 or darwin-x64), or:"

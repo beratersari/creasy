@@ -68,6 +68,31 @@ def test_copy_dirs_include_opencode_configs() -> None:
     assert "agents" not in mod.SKIP_DIR_NAMES
 
 
+def test_stage_app_copies_opencode_configs(tmp_path: Path) -> None:
+    mod = _load()
+    root = Path(__file__).resolve().parents[1]
+    payload = tmp_path / "payload"
+    mod.stage_app(root, payload)
+    packed = payload / "opencode-configs" / "agents" / "review.md"
+    assert packed.is_file()
+    assert "mode: primary" in packed.read_text(encoding="utf-8")
+    assert not (payload / "opencode-configs" / ".git").exists()
+
+
+def test_stage_app_requires_review_agent(tmp_path: Path) -> None:
+    mod = _load()
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("x", encoding="utf-8")
+    payload = tmp_path / "payload"
+    try:
+        mod.stage_app(root, payload)
+    except SystemExit as exc:
+        assert "opencode-configs/agents/review.md" in str(exc)
+    else:
+        raise AssertionError("expected SystemExit")
+
+
 def test_four_platform_packs() -> None:
     mod = _load()
     assert set(mod.PACKS) == {"windows", "linux", "darwin", "winlinux"}
