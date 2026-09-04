@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 from creasy.jobs.models import JobRecord
+from creasy.review.findings import split_findings
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _BOLD = re.compile(r"^\*\*(.+?)\*\*\s*$")
@@ -106,7 +107,8 @@ def soften_markdown(text: str) -> str:
 def format_success(job: JobRecord) -> str:
     kind = "Answer" if job.trigger == "ask" else "Review"
     model = job.model or "unknown"
-    body = soften_markdown((job.text or "").strip()) or "_(empty OpenCode response)_"
+    markdown, _findings = split_findings(job.text or "")
+    body = soften_markdown(markdown.strip()) or "_(empty OpenCode response)_"
     return f"**Creasy — {kind}** · `{model}` · `{job.job_id}`\n\n{body}\n"
 
 

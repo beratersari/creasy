@@ -6,7 +6,8 @@ plan disagree, **fix the plan** — do not invent a third design.
 
 Creasy is a GitLab-triggered code review service. A webhook starts a
 job. The job clones the MR branch, runs one `opencode serve`, and posts
-the last assistant message as an MR note.
+the last assistant message as an MR note plus one GitLab diff thread
+per structured finding.
 
 It is not OpenCode Session Manager. Do not add `POST /jobs`, n8n
 callbacks, or Jira ids. Do not call a remote OSM instance.
@@ -15,8 +16,11 @@ callbacks, or Jira ids. Do not call a remote OSM instance.
 
 These look like bugs. They are not.
 
-1. **The product of a job is one MR note.** Last assistant text, or a
-   short error / cancelled note. No git push. No line comments.
+1. **The product of a job is one MR note plus optional diff threads.**
+   Last assistant markdown (findings JSON stripped) as the Overview
+   note, then one Discussions-API thread per structured finding
+   (`path` + line range). Short error / cancelled notes have no
+   threads. A failed thread does not fail the job. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/review` or `/ask` can resume `ses_*` on the same path.
@@ -92,11 +96,15 @@ These look like bugs. They are not.
   same `ses_*` only — do not invent a blank session.
 - `/review` (and auto MR events): full map prompt (title, branches,
   merge-base, stat, paths, rules file if present, `/review` remainder).
+  One OpenCode turn. Parse findings from an optional `creasy-findings`
+  fence or from `#### N. \`path:lines\`` titles. If GET `/message`
+  is unreadable (400), create a new `ses_*` and continue.
 - `/ask`: question only. If SHA moved, prepend a one-line note +
   updated `--stat`. If the session is new/rejected, prepend short MR
   context.
 - OpenCode only. No Codex.
-- Jobs use the `review` agent (`OPENCODE_AGENT`, default `review`).
+- Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
+  `gitlab-reviewer`).
   Agent and skill files live in the `opencode-configs` submodule
   (`agents/*.md`, `skills/*/SKILL.md`). `install-opencode` uses the
   same replace rules as that pack: rename `~/.opencode` to
@@ -127,11 +135,11 @@ Keep packages honest:
 | `creasy.workspace` | `mr_key`, clone path, fetch/checkout, merge-base, delete |
 | `creasy.jobs` | Store, FIFO, dispatch, worker |
 | `creasy.opencode` | Serve + session drive |
-| `creasy.review` | Prompt text and MR note markdown |
+| `creasy.review` | Prompt text, MR note markdown, findings JSON |
 | `creasy.api` | HTTP only — no review logic |
 
 Do not put OpenCode calls in the webhook handler. Do not put GitLab
-note posting in `opencode/`.
+note or discussion posting in `opencode/`.
 
 ### Tests
 
@@ -143,8 +151,13 @@ note posting in `opencode/`.
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are
   not in the path list.
+- Findings JSON is stripped from the MR note. Each valid finding is
+  posted as a discussion. A failed thread does not fail the job.
 - Do not add tests that require network unless they are clearly marked
   and skipped by default.
+- Live OpenCode review coverage is `tests/test_opencode_review.py`.
+  Skip unless `CREASY_LIVE_OPENCODE=1` and an `opencode` binary is
+  present. Fake GitLab. Default `pytest` must not start a serve.
 
 ## Commit conventions
 

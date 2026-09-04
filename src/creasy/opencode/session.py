@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Callable, Optional
 
@@ -11,9 +12,10 @@ logger = get_logger("session")
 
 
 class OpenCodeError(RuntimeError):
-    def __init__(self, message: str, *, timeout: bool = False) -> None:
+    def __init__(self, message: str, *, timeout: bool = False, status_code: int = 0) -> None:
         super().__init__(message)
         self.timeout = timeout
+        self.status_code = status_code
 
 
 def parse_model(model: str) -> tuple[str, str]:
@@ -45,6 +47,29 @@ def last_assistant_text(messages: list[dict[str, Any]]) -> str:
     return "\n".join(texts).strip()
 
 
+def session_activity(messages: list[dict[str, Any]]) -> tuple[int, int, bool]:
+    """Message count, part count, and whether structured output is present."""
+    parts_n = 0
+    has_structured = False
+    for message in messages or []:
+        if not isinstance(message, dict):
+            continue
+        info = message.get("info") if isinstance(message.get("info"), dict) else message
+        if isinstance(info, dict) and (info.get("structured_output") or info.get("structuredOutput")):
+            has_structured = True
+        parts = message.get("parts") or (info.get("parts") if isinstance(info, dict) else None) or []
+        if not isinstance(parts, list):
+            continue
+        parts_n += len(parts)
+        for part in parts:
+            if not isinstance(part, dict):
+                continue
+            tool = str(part.get("tool") or part.get("name") or part.get("type") or "").lower()
+            if "structured" in tool:
+                has_structured = True
+    return (len(messages or []), parts_n, has_structured)
+
+
 def snapshot_chat(messages: list[dict[str, Any]], session_id: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for index, message in enumerate(messages):
@@ -64,6 +89,14 @@ def snapshot_chat(messages: list[dict[str, Any]], session_id: str) -> list[dict[
                             "tool": str(part.get("tool") or ""),
                         }
                     )
+        structured = None
+        if isinstance(info, dict):
+            structured = info.get("structured_output") or info.get("structuredOutput")
+        if structured is None:
+            structured = message.get("structured_output") or message.get("structuredOutput")
+        if structured is not None:
+            blob = structured if isinstance(structured, str) else json.dumps(structured)
+            parts.append({"type": "structured_output", "text": blob, "tool": "StructuredOutput"})
         out.append({"id": mid, "session_id": session_id, "role": role, "parts": parts})
     return out
 
@@ -118,6 +151,17 @@ class OpenCodeClient:
             headers=self.headers,
             timeout=30.0,
         )
+        if response.status_code == 400:
+            response = self.http.get(
+                f"/session/{session_id}/message",
+                headers=self.headers,
+                timeout=30.0,
+            )
+        if response.status_code == 400:
+            raise OpenCodeError(
+                "messages unreadable",
+                status_code=400,
+            )
         response.raise_for_status()
         data = response.json()
         if isinstance(data, list):
@@ -155,7 +199,7 @@ class OpenCodeClient:
 
     def post_message(self, session_id: str, text: str, *, model: str, agent: str) -> None:
         provider, model_id = parse_model(model)
-        body = {
+        body: dict[str, Any] = {
             "agent": agent,
             "parts": [{"type": "text", "text": text}],
             "model": {"providerID": provider, "modelID": model_id},
@@ -179,7 +223,10 @@ class OpenCodeClient:
             timeout=httpx.Timeout(connect=15.0, read=600.0, write=30.0, pool=15.0),
         )
         if response.status_code >= 400:
-            raise OpenCodeError(f"user message POST failed: HTTP {response.status_code} {response.text[:200]}")
+            raise OpenCodeError(
+                f"user message POST failed: HTTP {response.status_code} {response.text[:200]}",
+                status_code=response.status_code,
+            )
 
     def abort(self, session_id: str) -> None:
         if not session_id.startswith("ses_"):
@@ -200,7 +247,7 @@ class OpenCodeClient:
     ) -> str:
         deadline = time.time() + timeout
         last_change = time.time()
-        last_len = 0
+        last_token: tuple[int, int, int, bool] | None = None
         saw_busy = False
         settle = max(0.0, float(idle_settle))
         while time.time() < deadline:
@@ -213,14 +260,17 @@ class OpenCodeClient:
             except Exception:
                 messages = []
             text = last_assistant_text(messages)
-            if len(text) != last_len:
-                last_len = len(text)
+            msg_n, parts_n, has_structured = session_activity(messages)
+            token = (msg_n, parts_n, len(text), has_structured)
+            if token != last_token:
+                last_token = token
                 last_change = time.time()
             busy = self.session_busy(session_id)
             if busy:
                 saw_busy = True
-            if not busy and text:
-                if saw_busy:
+                last_change = time.time()
+            if not busy and (text or has_structured):
+                if saw_busy or has_structured:
                     return text
                 if time.time() - last_change > settle:
                     return text

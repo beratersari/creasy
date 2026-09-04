@@ -1,6 +1,6 @@
 # Creasy — Code Review Easy
 
-A new GitLab-triggered code review service. It receives merge-request webhooks, runs a deep OpenCode analysis of the MR against the full cloned codebase, and posts the result as an MR comment. Concurrency and OpenCode process handling follow [opencode_manager](https://github.com/beratersari/opencode_manager). Webhook classification follows [gitlab_code_reviewer](https://github.com/beratersari/gitlab_code_reviewer). The clone is **not** deleted when a review job ends; it is deleted only when the MR is closed or merged.
+A new GitLab-triggered code review service. It receives merge-request webhooks, runs a deep OpenCode analysis of the MR against the full cloned codebase, and posts the result as an MR comment plus optional inline diff threads. Concurrency and OpenCode process handling follow [opencode_manager](https://github.com/beratersari/opencode_manager). Webhook classification follows [gitlab_code_reviewer](https://github.com/beratersari/gitlab_code_reviewer). The clone is **not** deleted when a review job ends; it is deleted only when the MR is closed or merged.
 
 Workspace is empty. This is a greenfield Python service.
 
@@ -35,7 +35,8 @@ Per-job `opencode serve` on 127.0.0.1:<ephemeral>
     prompt = MR metadata + merge-base + diff stat + “analyze from the separation point”
     │
     ▼
-Post last assistant message as a GitLab MR note
+Post last assistant markdown as a GitLab MR note
+Post one Discussions-API thread per structured finding
 Kill this serve. Keep the clone until close/merge.
 ```
 
@@ -90,7 +91,8 @@ Shared resume flow for both commands after a finished job:
 3. Start a **new** `opencode serve` on that same absolute path.
 4. Resume the stored `session_id` (`GET /session/{id}` then continue).
 5. POST a new user message (shape depends on the command — see below).
-6. Post the new assistant reply as an MR note.
+6. Post the new assistant reply as an MR note, then post any
+   structured findings as GitLab diff threads.
 7. Persist the same (or replacement) `session_id` on the workspace.
 
 | Command | Prompt on resume | If no prior session |
@@ -245,7 +247,23 @@ We do **not** walk each file through a separate OpenCode call (old reviewer). We
 2. Prompt is the question only. If the SHA changed since the last job, prepend a one-line note + updated `--stat` so the agent is not answering about stale files.
 3. If this is a new/rejected session, prepend short MR context (title, branches, changed-file list) — still not a full review prompt.
 
-Line-level GitLab discussions and `/review-in-detail` stay out of v1. Product is still **one** MR note per job.
+`/review-in-detail` stays out of v1. The product is **one** Overview
+MR note per job, plus one GitLab diff thread per structured finding
+the agent emits. The note is still the full review. Threads are
+anchors on `path` + line range (`x.cpp` 30–40), posted via
+`POST /projects/:id/merge_requests/:iid/discussions`. A failed
+thread is logged and skipped; it does not fail the job.
+
+The agent reply is the markdown review, plus an optional
+`creasy-findings` fence. Creasy strips that fence before posting
+the note. Threads come from the fence when present, else from
+`#### N. \`path:lines\`` titles. Map each finding onto the
+three-dot diff and send GitLab `position` (`base_sha` /
+`start_sha` / `head_sha` from the MR `diff_refs`). Line mapping
+uses the local `git diff <merge-base>...HEAD`, not a cached
+GitLab `/changes` payload. Positions use GitLab’s version SHAs
+so the Discussions API will accept them. A failed thread is
+logged and skipped; it does not fail the job.
 
 ### 6. Git auth is non-interactive
 
@@ -311,7 +329,7 @@ creasy/
       dashboard.py         # GET /api/jobs, cancel
     dashboard/             # SPA adapter (OSM jobs-tab look)
     gitlab/
-      client.py            # MR, changes, notes, current user
+      client.py            # MR, notes, discussions, current user
       events.py            # classify payload → ReviewTrigger | CleanupTrigger | Ignore
     workspace/
       identity.py          # project_id-mr_iid → safe folder
@@ -329,6 +347,8 @@ creasy/
     review/
       prompt.py
       format.py            # wrap assistant text as MR markdown
+      findings.py          # parse/strip creasy-findings JSON
+      position.py          # GitLab discussion position from the diff
     logging.py
   tests/
     test_events.py
@@ -358,7 +378,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `OPENCODE_MODEL` | `opencode/big-pickle` | `provider/id` |
 | `OPENCODE_TIMEOUT` | `1800` | One attempt, seconds |
 | `OPENCODE_RETRY_COUNT` | `2` | Attempts, first included |
-| `OPENCODE_AGENT` | `review` | OpenCode agent id. Installer writes the read-only `review` agent |
+| `OPENCODE_AGENT` | `gitlab-reviewer` | OpenCode agent id. Installer writes the read-only `gitlab-reviewer` agent |
 | `MAX_CONCURRENT_JOBS` | `2` | Live serves |
 | `DATA_DIR` | `./data` | clones, logs, job/workspace JSON |
 | `SKIP_DRAFT_MRS` | `true` | |
@@ -405,7 +425,11 @@ OSM-like: `job_id`, `mr_key`, status, live, serve pid/port, clone_path, session_
 4. Allocate free port. `opencode serve --hostname 127.0.0.1 --port <n>` with cwd = clone. Health-wait `GET /global/health`.
 5. Create or resume `ses_*`. Send `x-opencode-directory: <clone>`.
 6. POST the review prompt once. Drive until idle / timeout / hang / serve-dead. Retry per `OPENCODE_RETRY_COUNT` with OSM hang/resume rules (do not invent a blank session mid-job).
-7. Format last assistant text. Post MR note. On hard failure, post a short error note.
+7. Split findings JSON out of the last assistant text, or scrape
+   `####` titles. Format and post the markdown as an MR note.
+   Then post each finding as a GitLab diff discussion (best
+   effort). On hard failure, post a short error note and skip
+   threads.
 8. Abort session (best effort). Force-kill this serve tree. **Do not delete the clone.**
 9. Dispatch the next queued job for this `mr_key`, if any.
 
@@ -426,6 +450,9 @@ On `close`/`merge`:
 - Diff: prompt contains merge-base + `--stat` + paths, never the full unified diff; GitLab `/changes` is not required.
 - Webhook handler: secret 401, immediate 200, background enqueue.
 - Worker with a fake OpenCode client: success posts a note; failure posts an error note; clone still exists after finish.
+- Findings: `creasy-findings` JSON is stripped from the note when present; otherwise `####` titles supply path/lines. Each valid finding becomes a discussion; a 400 from GitLab does not fail the job. Rebase: merge-base is the **new** target tip for mapping, but discussion SHAs still come from MR `diff_refs`.
+- Large-file discussions: one thread per planted line in a 1000+ line file (no OpenCode).
+- Live OpenCode review (`tests/test_opencode_review.py`) is skipped unless `CREASY_LIVE_OPENCODE=1`.
 - Cancel: running job is killed and next queued job for that MR starts; cancelling a queued job does not touch the runner; cancel-all-for-MR leaves the clone on disk.
 
 A small `tests/mock_gitlab_webhook.py` (menu or `--event`) can replay fixtures against a running server, same idea as the old mock server.
@@ -451,7 +478,6 @@ Each step should leave tests passing before the next starts.
 ## Out of v1
 
 - `/review-in-detail`, per-file parallel reviews (old reviewer TODOs)
-- Inline GitLab discussions (line comments)
 - Calling a remote OSM instance
 - Docker / systemd unit (document later)
 - Auto-approve OpenCode permissions

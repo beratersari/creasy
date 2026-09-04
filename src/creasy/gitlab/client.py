@@ -30,7 +30,10 @@ class MergeRequest:
 
 
 class GitLabError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int = 0, body: str = "") -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.body = body
 
 
 class GitLabClient:
@@ -104,6 +107,28 @@ class GitLabClient:
             response.raise_for_status()
         except httpx.HTTPError as exc:
             raise GitLabError(f"post note failed: {exc}") from exc
+        return response.json() if response.content else {}
+
+    def post_discussion(
+        self,
+        project_id: int,
+        mr_iid: int,
+        body: str,
+        position: dict[str, Any],
+    ) -> dict[str, Any]:
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions"
+        try:
+            response = self._http.post(path, json={"body": body, "position": position})
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = (exc.response.text or "")[:400]
+            raise GitLabError(
+                f"post discussion failed: {exc} {detail}",
+                status_code=exc.response.status_code,
+                body=detail,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GitLabError(f"post discussion failed: {exc}") from exc
         return response.json() if response.content else {}
 
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:

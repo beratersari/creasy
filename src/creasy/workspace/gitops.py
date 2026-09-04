@@ -232,6 +232,17 @@ def diff_stat(dest: Path, merge_base: str, *, timeout: float = 60) -> DiffIndex:
     return DiffIndex(merge_base=merge_base, stat=(stat.stdout or "").strip(), paths=paths, statuses=statuses)
 
 
+def unified_diff(dest: Path, merge_base: str, *, timeout: float = 60) -> str:
+    env = isolated_git_env()
+    result = _run_git(
+        ["diff", "--find-renames", f"{merge_base}...HEAD"],
+        cwd=dest,
+        env=env,
+        timeout=timeout,
+    )
+    return result.stdout or ""
+
+
 def delete_clone(path: Optional[Path], retries: int = 8) -> None:
     """OSM hard-delete cascade. ``retries`` is ignored; OSM uses its own attempt budget."""
     from creasy.cleanup.end import delete_clone_path

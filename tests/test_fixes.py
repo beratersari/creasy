@@ -142,6 +142,65 @@ class _IdleHandler(BaseHTTPRequestHandler):
         self._json({"ok": True})
 
 
+class _BusyThenIdleHandler(BaseHTTPRequestHandler):
+    """Same assistant text the whole time; busy then idle (StructuredOutput)."""
+
+    started: float = 0.0
+
+    def log_message(self, fmt: str, *args) -> None:  # noqa: A003
+        return
+
+    def _json(self, payload) -> None:
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self) -> None:  # noqa: N802
+        path = self.path.split("?", 1)[0]
+        if path == "/global/health":
+            self._json({"ok": True})
+            return
+        if path == "/session/status":
+            busy = (time.time() - self.started) < 0.8
+            self._json({"ses_tool": {"type": "busy" if busy else "idle"}})
+            return
+        if path.endswith("/message"):
+            self._json(
+                [
+                    {
+                        "info": {"id": "msg_1", "role": "assistant"},
+                        "parts": [{"type": "text", "text": "review already written"}],
+                    }
+                ]
+            )
+            return
+        self._json({"id": "ses_tool"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._json({"ok": True})
+
+
+def test_wait_idle_does_not_hang_when_busy_without_new_text():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = int(sock.getsockname()[1])
+    sock.close()
+    _BusyThenIdleHandler.started = time.time()
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), _BusyThenIdleHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    client = OpenCodeClient(f"http://127.0.0.1:{port}", "C:/tmp/clone")
+    try:
+        text = client.wait_idle("ses_tool", timeout=4, hang_timeout=0.4, idle_settle=0.1)
+        assert text == "review already written"
+    finally:
+        client.close()
+        httpd.shutdown()
+
+
 def test_wait_idle_accepts_already_finished_text():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
@@ -178,7 +237,7 @@ def test_hang_retry_posts_resume_not_original(tmp_config, monkeypatch):
         def post_message(self, session_id, text, *, model, agent):
             posts.append(text)
 
-        def wait_idle(self, session_id, *, timeout, hang_timeout, should_stop=None):
+        def wait_idle(self, session_id, *, timeout, hang_timeout, should_stop=None, idle_settle=8.0):
             waits["n"] += 1
             if waits["n"] == 1:
                 raise OpenCodeError("hang")
@@ -186,6 +245,9 @@ def test_hang_retry_posts_resume_not_original(tmp_config, monkeypatch):
 
         def get_session(self, session_id):
             return SimpleNamespace(status_code=200)
+
+        def create_session(self, title):
+            return "ses_abc"
 
         def list_messages(self, session_id):
             return []

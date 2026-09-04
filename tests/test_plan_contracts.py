@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from creasy.api.dashboard import router as dashboard_router
-from creasy.gitlab.client import MergeRequest
+from creasy.gitlab.client import GitLabError, MergeRequest
 from creasy.gitlab.events import ReviewTrigger, first_command
 from creasy.jobs.manager import Manager
 from creasy.jobs.models import JobRecord, mint_job_id
@@ -74,6 +74,8 @@ class SpyGitlab:
     def __init__(self) -> None:
         self.mr = _mr()
         self.notes: list[str] = []
+        self.discussions: list[dict] = []
+        self.discussion_error: Exception | None = None
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         return self.mr
@@ -84,6 +86,12 @@ class SpyGitlab:
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict:
         self.notes.append(body)
         return {"ok": True}
+
+    def post_discussion(self, project_id: int, mr_iid: int, body: str, position: dict) -> dict:
+        if self.discussion_error:
+            raise self.discussion_error
+        self.discussions.append({"body": body, "position": position})
+        return {"id": "disc1"}
 
 
 class _FakeServeClient:
@@ -106,13 +114,16 @@ class _FakeServeClient:
     def post_message(self, session_id, text, *, model, agent):
         return None
 
-    def wait_idle(self, session_id, *, timeout, hang_timeout, should_stop=None):
+    def wait_idle(self, session_id, *, timeout, hang_timeout, should_stop=None, idle_settle=8.0):
         if self._error:
             raise OpenCodeError(self._error)
         return self._wait or "review body"
 
     def get_session(self, session_id):
         return SimpleNamespace(status_code=200)
+
+    def create_session(self, title):
+        return "ses_new"
 
     def list_messages(self, session_id):
         return []
@@ -177,6 +188,105 @@ def test_worker_success_posts_note_and_keeps_clone(tmp_config, monkeypatch):
     assert dest.exists()
 
 
+def test_worker_posts_note_and_diff_threads(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    reply = """### Summary
+1 Critical.
+
+```creasy-findings
+{"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
+```
+"""
+    diff = """diff --git a/src/buf.cpp b/src/buf.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/buf.cpp
+@@ -0,0 +1,3 @@
++char dest[8];
++strcpy(dest, src);
++return dest;
+"""
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
+    result = runner.run(_job(), lambda: False)
+    assert result.posted
+    assert result.findings_posted == 1
+    assert spy.notes and "### Summary" in spy.notes[0]
+    assert "creasy-findings" not in spy.notes[0]
+    assert '"path"' not in spy.notes[0]
+    assert len(spy.discussions) == 1
+    disc = spy.discussions[0]
+    assert "overflow" in disc["body"]
+    assert disc["position"]["new_path"] == "src/buf.cpp"
+    assert disc["position"]["new_line"] == 2
+    assert disc["position"]["head_sha"] == "newsha"
+    assert disc["position"]["base_sha"] == "oldsha"
+
+
+def test_worker_discussion_failure_does_not_fail_job(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.discussion_error = GitLabError("line_code can't be blank", status_code=400)
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    reply = """### Summary
+ok
+
+```creasy-findings
+{"findings":[{"path":"src/buf.cpp","start_line":1,"title":"x","body":"y"}]}
+```
+"""
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(
+        w,
+        "unified_diff",
+        lambda *a, **k: (
+            "diff --git a/src/buf.cpp b/src/buf.cpp\n"
+            "--- /dev/null\n+++ b/src/buf.cpp\n"
+            "@@ -0,0 +1,1 @@\n+x\n"
+        ),
+    )
+    result = runner.run(_job(), lambda: False)
+    assert result.posted
+    assert result.error == ""
+    assert result.findings_posted == 0
+    assert spy.notes
+    assert spy.discussions == []
+
+
 def test_worker_failure_posts_error_note_and_keeps_clone(tmp_config, monkeypatch):
     dest = tmp_config.work_dir / "1-1"
     spy = SpyGitlab()
@@ -207,6 +317,49 @@ def test_worker_failure_posts_error_note_and_keeps_clone(tmp_config, monkeypatch
     assert result.posted
     assert spy.notes and "failed" in spy.notes[0].lower()
     assert dest.exists()
+
+
+def test_unreadable_session_creates_new(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    workspaces.save(
+        WorkspaceRecord(
+            mr_key="1-1",
+            project_id=1,
+            mr_iid=1,
+            clone_path=str(dest),
+            session_id="ses_poisoned",
+            last_sha="newsha",
+        )
+    )
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    created: list[str] = []
+
+    class Poisoned(_FakeServeClient):
+        def resume_or_create(self, inbound, title):
+            return inbound, False
+
+        def list_messages(self, session_id):
+            if session_id == "ses_poisoned":
+                raise OpenCodeError("messages unreadable", status_code=400)
+            return []
+
+        def create_session(self, title):
+            created.append(title)
+            return "ses_fresh"
+
+    def _ensure(job, mr, stop):
+        record = workspaces.get(job.mr_key)
+        assert record is not None
+        return record
+
+    _patch_worker(monkeypatch, tmp_config, Poisoned, dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    result = runner.run(_job(), lambda: False)
+    assert created
+    assert result.session_id == "ses_fresh"
+    assert result.posted
 
 
 def test_rejected_session_creates_new_and_continues(tmp_config, monkeypatch):

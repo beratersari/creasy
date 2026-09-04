@@ -1,1 +1,1 @@
-"""Review prompt and GitLab note formatting."""
+"""Review prompt, note formatting, and findings JSON."""
