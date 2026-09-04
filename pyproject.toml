@@ -26,4 +26,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "."]
+pythonpath = ["src", ".", "tests"]
+markers = [
+    "live_opencode: real OpenCode binary and model; skipped unless CREASY_LIVE_OPENCODE=1",
+]
