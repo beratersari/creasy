@@ -48,6 +48,8 @@ class SpyGitlab:
         self.mr = mr
         self.notes: list[str] = []
         self.discussions: list[dict] = []
+        self.replies: list[dict] = []
+        self._threads: list[dict] = []
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         return self.mr
@@ -59,9 +61,44 @@ class SpyGitlab:
         self.notes.append(body)
         return {"ok": True}
 
+    def list_discussions(self, project_id: int, mr_iid: int) -> list:
+        return list(self._threads)
+
+    def reply_to_discussion(self, project_id: int, mr_iid: int, discussion_id: str, body: str) -> dict:
+        self.replies.append({"id": discussion_id, "body": body})
+        for thread in self._threads:
+            if thread["id"] == discussion_id:
+                thread["notes"].append({"body": body, "resolved": False})
+                break
+        return {"id": discussion_id}
+
     def post_discussion(self, project_id: int, mr_iid: int, body: str, position: dict) -> dict:
-        self.discussions.append({"body": body, "position": position})
-        return {"id": "d"}
+        disc_id = f"d{len(self._threads) + 1}"
+        row = {"id": disc_id, "body": body, "position": position}
+        self.discussions.append(row)
+        self._threads.append(
+            {
+                "id": disc_id,
+                "notes": [{"body": body, "resolved": False, "position": position}],
+            }
+        )
+        return {"id": disc_id}
+
+
+def _span(position: dict) -> tuple[str, int, int]:
+    path = str(position.get("new_path") or position.get("old_path") or "")
+    line_range = position.get("line_range") or {}
+    start = line_range.get("start") if isinstance(line_range.get("start"), dict) else {}
+    end = line_range.get("end") if isinstance(line_range.get("end"), dict) else {}
+    lo = int(start.get("new_line") or position.get("new_line") or 0)
+    hi = int(end.get("new_line") or lo)
+    if lo > hi:
+        lo, hi = hi, lo
+    return path, lo, hi
+
+
+def _overlaps(left: tuple[str, int, int], right: tuple[str, int, int]) -> bool:
+    return left[0] == right[0] and left[0] != "" and left[1] <= right[2] and right[1] <= left[2]
 
 
 def test_opencode_review_threads_large_file(tmp_path, tmp_config, monkeypatch):
@@ -128,6 +165,75 @@ def test_opencode_review_threads_large_file(tmp_path, tmp_config, monkeypatch):
     )
     blob = note.lower() + "\n".join(row["body"].lower() for row in planted_threads)
     assert "strcpy" in blob or "overflow" in blob or "dangl" in blob or "uninit" in blob or "leak" in blob
+
+
+def test_opencode_second_review_replies_on_overlap(tmp_path, tmp_config, monkeypatch):
+    origin, sha, base, plants = init_planted_origin(tmp_path / "src")
+    tmp_config.gitlab_token = ""
+    tmp_config.opencode_bin = OPENCODE or "opencode"
+    tmp_config.opencode_model = (os.getenv("OPENCODE_MODEL") or tmp_config.opencode_model).strip()
+    tmp_config.opencode_timeout = 900
+    tmp_config.hang_timeout = 300
+    tmp_config.opencode_retry_count = 1
+    tmp_config.serve_health_timeout = 90
+    bin_dir = str(Path(tmp_config.opencode_bin).parent)
+    monkeypatch.setenv("PATH", bin_dir + os.pathsep + os.environ.get("PATH", ""))
+
+    mr = MergeRequest(
+        project_id=9,
+        iid=9,
+        title="planted large C++ file",
+        description="",
+        author="t",
+        source_branch="feat",
+        target_branch="main",
+        sha=sha,
+        base_sha=base,
+        start_sha=base,
+        web_url="http://gl/mr/9",
+        http_url=origin.as_uri(),
+        draft=False,
+        state="opened",
+    )
+    spy = SpyGitlab(mr)
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+
+    def _job() -> JobRecord:
+        return JobRecord(
+            job_id=mint_job_id(),
+            mr_key="9-9",
+            project_id=9,
+            mr_iid=9,
+            trigger="review",
+            log_file=f"live-{mint_job_id()}.log",
+            source_branch="feat",
+            target_branch="main",
+            sha=sha,
+        )
+
+    first = runner.run(_job(), lambda: False)
+    assert first.error == "", first.error
+    assert first.posted
+    assert spy.discussions, "first review posted no diff threads"
+    first_spans = [_span(row["position"]) for row in spy.discussions]
+    first_count = len(spy.discussions)
+
+    second = runner.run(_job(), lambda: False)
+    assert second.error == "", second.error
+    assert second.posted
+    later = spy.discussions[first_count:]
+    for row in later:
+        later_span = _span(row["position"])
+        assert not any(_overlaps(later_span, old) for old in first_spans), (
+            f"second review opened a new thread on an existing range {later_span} "
+            f"first={first_spans} replies={spy.replies}"
+        )
+    if second.findings_posted:
+        assert spy.replies, (
+            f"second review posted {second.findings_posted} finding(s) but replied to none; "
+            f"new={later} first={first_spans}"
+        )
 
 
 def first_command_safe(body: str):

@@ -15,6 +15,7 @@ from creasy.jobs.store import JobStore
 from creasy.review.findings import Finding, split_findings
 from creasy.review.format import format_cancelled, format_failure, format_success
 from creasy.review.position import build_position_variants, format_discussion
+from creasy.review.threads import match_creasy_thread, parse_creasy_threads
 from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt, load_review_rules
 from creasy.workspace.diffmap import parse_unified_diff
 from creasy.workspace.gitops import (
@@ -375,7 +376,10 @@ class OpenCodeRunner:
         except Exception as exc:  # noqa: BLE001
             logger.warning("skip discussions job=%s: diff failed: %s", job.job_id, exc)
             return
+        existing = self._existing_creasy_threads(job)
+        used: set[str] = set()
         posted = 0
+        replies = 0
         for finding in findings:
             variants = build_position_variants(
                 finding,
@@ -394,6 +398,12 @@ class OpenCodeRunner:
                 )
                 continue
             body = format_discussion(finding)
+            matched = match_creasy_thread(finding, existing, used)
+            if matched and self._reply_finding(job, matched.discussion_id, body):
+                used.add(matched.discussion_id)
+                posted += 1
+                replies += 1
+                continue
             last_error = ""
             for position in variants:
                 try:
@@ -416,5 +426,31 @@ class OpenCodeRunner:
                 )
         result.findings_posted = posted
         if posted:
-            logger.info("posted %s diff thread(s)", posted)
-            self._append_job_log(job, f"posted {posted} diff thread(s)")
+            logger.info("posted %s diff thread(s) replies=%s", posted, replies)
+            self._append_job_log(job, f"posted {posted} diff thread(s) replies={replies}")
+
+    def _existing_creasy_threads(self, job: JobRecord):
+        lister = getattr(self.gitlab, "list_discussions", None)
+        if not callable(lister):
+            return []
+        try:
+            return parse_creasy_threads(lister(job.project_id, job.mr_iid))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("list discussions failed job=%s: %s", job.job_id, exc)
+            return []
+
+    def _reply_finding(self, job: JobRecord, discussion_id: str, body: str) -> bool:
+        replier = getattr(self.gitlab, "reply_to_discussion", None)
+        if not callable(replier):
+            return False
+        try:
+            replier(job.project_id, job.mr_iid, discussion_id, body)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "reply failed job=%s discussion=%s: %s",
+                job.job_id,
+                discussion_id,
+                exc,
+            )
+            return False

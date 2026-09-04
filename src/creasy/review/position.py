@@ -8,6 +8,8 @@ from typing import Any, Optional
 from creasy.review.findings import Finding
 from creasy.workspace.diffmap import DiffMap, FileDiff
 
+CREASY_FINDING_MARK = "<!-- creasy-finding -->"
+
 
 def line_code(path: str, old_line: Optional[int], new_line: Optional[int]) -> str:
     digest = hashlib.sha1(path.encode("utf-8")).hexdigest()
@@ -19,9 +21,8 @@ def format_discussion(finding: Finding) -> str:
     title = finding.title.strip()
     head = f"**{severity}** · {title}" if title else f"**{severity}**"
     body = finding.body.strip()
-    if body:
-        return f"{head}\n\n{body}"
-    return head
+    text = f"{head}\n\n{body}" if body else head
+    return f"{CREASY_FINDING_MARK}\n{text}"
 
 
 def build_position_variants(

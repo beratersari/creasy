@@ -79,7 +79,11 @@ class SpyGitlab:
         self.mr = _mr()
         self.notes: list[str] = []
         self.discussions: list[dict] = []
+        self.replies: list[dict] = []
+        self.existing: list[dict] = []
         self.discussion_error: Exception | None = None
+        self.list_error: Exception | None = None
+        self.reply_error: Exception | None = None
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         return self.mr
@@ -90,6 +94,17 @@ class SpyGitlab:
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict:
         self.notes.append(body)
         return {"ok": True}
+
+    def list_discussions(self, project_id: int, mr_iid: int) -> list:
+        if self.list_error:
+            raise self.list_error
+        return list(self.existing)
+
+    def reply_to_discussion(self, project_id: int, mr_iid: int, discussion_id: str, body: str) -> dict:
+        if self.reply_error:
+            raise self.reply_error
+        self.replies.append({"id": discussion_id, "body": body})
+        return {"id": discussion_id}
 
     def post_discussion(self, project_id: int, mr_iid: int, body: str, position: dict) -> dict:
         if self.discussion_error:
@@ -243,6 +258,123 @@ new file mode 100644
     assert disc["position"]["new_line"] == 2
     assert disc["position"]["head_sha"] == "newsha"
     assert disc["position"]["base_sha"] == "oldsha"
+
+
+def test_worker_replies_to_overlapping_unresolved_thread(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.existing = [
+        {
+            "id": "disc_old",
+            "notes": [
+                {
+                    "body": "<!-- creasy-finding -->\n**Critical** · overflow",
+                    "resolved": False,
+                    "position": {
+                        "new_path": "src/buf.cpp",
+                        "old_path": "src/buf.cpp",
+                        "new_line": 2,
+                    },
+                }
+            ],
+        }
+    ]
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    reply = """### Summary
+1 Critical.
+
+```creasy-findings
+{"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"still overflows"}]}
+```
+"""
+    diff = """diff --git a/src/buf.cpp b/src/buf.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/buf.cpp
+@@ -0,0 +1,3 @@
++char dest[8];
++strcpy(dest, src);
++return dest;
+"""
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
+    result = runner.run(_job(), lambda: False)
+    assert result.posted
+    assert result.findings_posted == 1
+    assert spy.discussions == []
+    assert len(spy.replies) == 1
+    assert spy.replies[0]["id"] == "disc_old"
+    assert "still overflows" in spy.replies[0]["body"]
+
+
+def test_worker_posts_new_thread_when_reply_fails(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.reply_error = GitLabError("gone", status_code=404)
+    spy.existing = [
+        {
+            "id": "disc_old",
+            "notes": [
+                {
+                    "body": "<!-- creasy-finding -->\n**Critical** · overflow",
+                    "resolved": False,
+                    "position": {"new_path": "src/buf.cpp", "new_line": 2},
+                }
+            ],
+        }
+    ]
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    reply = """```creasy-findings
+{"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
+```
+"""
+    diff = """diff --git a/src/buf.cpp b/src/buf.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/buf.cpp
+@@ -0,0 +1,3 @@
++char dest[8];
++strcpy(dest, src);
++return dest;
+"""
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
+    result = runner.run(_job(), lambda: False)
+    assert result.findings_posted == 1
+    assert spy.replies == []
+    assert len(spy.discussions) == 1
 
 
 def test_worker_discussion_failure_does_not_fail_job(tmp_config, monkeypatch):

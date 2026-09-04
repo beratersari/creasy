@@ -131,6 +131,52 @@ class GitLabClient:
             raise GitLabError(f"post discussion failed: {exc}") from exc
         return response.json() if response.content else {}
 
+    def list_discussions(self, project_id: int, mr_iid: int) -> list[dict[str, Any]]:
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions"
+        out: list[dict[str, Any]] = []
+        page = 1
+        while page <= 20:
+            try:
+                response = self._http.get(path, params={"per_page": 100, "page": page})
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                raise GitLabError(f"list discussions failed: {exc}") from exc
+            batch = response.json() if response.content else []
+            if not isinstance(batch, list) or not batch:
+                break
+            out.extend(item for item in batch if isinstance(item, dict))
+            nxt = (response.headers.get("X-Next-Page") or "").strip()
+            if not nxt:
+                break
+            try:
+                page = int(nxt)
+            except ValueError:
+                break
+        return out
+
+    def reply_to_discussion(
+        self,
+        project_id: int,
+        mr_iid: int,
+        discussion_id: str,
+        body: str,
+    ) -> dict[str, Any]:
+        disc = quote(str(discussion_id), safe="")
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions/{disc}/notes"
+        try:
+            response = self._http.post(path, json={"body": body})
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = (exc.response.text or "")[:400]
+            raise GitLabError(
+                f"reply discussion failed: {exc} {detail}",
+                status_code=exc.response.status_code,
+                body=detail,
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise GitLabError(f"reply discussion failed: {exc}") from exc
+        return response.json() if response.content else {}
+
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:
         if fallback:
             return fallback
