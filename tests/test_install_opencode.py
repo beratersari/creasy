@@ -51,6 +51,10 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "do not assume modern C++" in text
     assert 'skill({ name: "cpp98" })' in text
     assert 'skill({ name: "modern-cpp" })' in text
+    assert 'skill({ name: "cpp-memory-safety" })' in text or "cpp-memory-safety" in text
+    assert "typically 0–3" in text or "typically 0-3" in text
+    assert "git-commits" in text
+    assert "implementer-only" in text
     assert "GitLab MR comment" in text
     assert "Never start a line with `#`" in text
     assert "### Summary" in text
@@ -65,6 +69,11 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "Do **not** use these labels: Blocking" in text
     assert "only definition of review style" in text
     assert "Write each group header **once**" in text
+    assert "Impact analysis (mandatory)" in text
+    assert "git grep" in text
+    assert "Negative space" in text
+    assert "new contract" in text
+    assert '"git grep*"' in text
 
 
 def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
@@ -79,7 +88,15 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
     assert "mode: primary" in agent
     copy = (home / ".opencode" / "agents" / "review.md").read_text(encoding="utf-8")
     assert copy == agent
-    for name in ("cpp98", "modern-cpp"):
+    for name in (
+        "cpp98",
+        "modern-cpp",
+        "cpp-memory-safety",
+        "cmake-cpp",
+        "secrets",
+        "python",
+        "web-security",
+    ):
         skill = home / ".config" / "opencode" / "skills" / name / "SKILL.md"
         assert skill.is_file()
         body = skill.read_text(encoding="utf-8")
@@ -188,6 +205,17 @@ def test_cpp_skills_state_when_to_load() -> None:
     assert "string_view" in modern
     assert "std::jthread" in modern
     assert "enable_shared_from_this" in modern
+
+
+def test_extra_skills_state_when_to_load() -> None:
+    root = REPO / "opencode-configs" / "skills"
+    names = sorted(p.name for p in root.iterdir() if (p / "SKILL.md").is_file())
+    assert len(names) >= 40
+    for name in names:
+        body = (root / name / "SKILL.md").read_text(encoding="utf-8")
+        assert body.startswith("---"), name
+        assert f"name: {name}" in body, name
+        assert "Load when" in body or "Load only" in body, name
 
 
 def test_default_agent_is_review() -> None:
