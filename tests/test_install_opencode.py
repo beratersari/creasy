@@ -22,7 +22,8 @@ def _load():
 
 def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
     root = tmp_path / "pkg"
-    shutil.copytree(REPO / "scripts" / "opencode", root / "scripts" / "opencode")
+    shutil.copytree(REPO / "opencode-configs" / "agents", root / "opencode-configs" / "agents")
+    shutil.copytree(REPO / "opencode-configs" / "skills", root / "opencode-configs" / "skills")
     if vendor:
         bin_name = "opencode.exe" if os.name == "nt" else "opencode"
         if os.name == "nt":
@@ -35,7 +36,7 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
 
 
 def test_review_agent_source_is_primary_readonly() -> None:
-    text = (REPO / "scripts" / "opencode" / "review.md").read_text(encoding="utf-8")
+    text = (REPO / "opencode-configs" / "agents" / "review.md").read_text(encoding="utf-8")
     assert text.startswith("---")
     assert "mode: primary" in text
     assert "edit: deny" in text
@@ -140,11 +141,11 @@ def test_config_only_home_does_not_shadow_binary(tmp_path: Path) -> None:
 
 
 def test_cpp_skills_state_when_to_load() -> None:
-    cpp98 = (REPO / "scripts" / "opencode" / "skills" / "cpp98" / "SKILL.md").read_text(
+    cpp98 = (REPO / "opencode-configs" / "skills" / "cpp98" / "SKILL.md").read_text(
         encoding="utf-8"
     )
     modern = (
-        REPO / "scripts" / "opencode" / "skills" / "modern-cpp" / "SKILL.md"
+        REPO / "opencode-configs" / "skills" / "modern-cpp" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert cpp98.startswith("---")
     assert modern.startswith("---")
@@ -167,3 +168,30 @@ def test_default_agent_is_review() -> None:
     from creasy.config import Config
 
     assert Config().opencode_agent == "review"
+
+
+def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:
+    mod = _load()
+    root = _plant_root(tmp_path, vendor=True)
+    extra = root / "opencode-configs" / "agents" / "planner.md"
+    extra.write_text("---\nmode: primary\n---\nplanner\n", encoding="utf-8")
+    (root / "opencode-configs" / "skills" / "extra").mkdir()
+    (root / "opencode-configs" / "skills" / "extra" / "SKILL.md").write_text(
+        "---\nname: extra\n---\n", encoding="utf-8"
+    )
+    home = tmp_path / "home"
+    mod.install(root, user_home=home)
+    assert (home / ".config" / "opencode" / "agents" / "planner.md").is_file()
+    assert (home / ".config" / "opencode" / "skills" / "extra" / "SKILL.md").is_file()
+
+
+def test_missing_configs_submodule_fails(tmp_path: Path) -> None:
+    mod = _load()
+    root = tmp_path / "pkg"
+    root.mkdir()
+    try:
+        mod.list_agent_files(root)
+    except FileNotFoundError as exc:
+        assert "opencode-configs" in str(exc)
+    else:
+        raise AssertionError("expected FileNotFoundError")

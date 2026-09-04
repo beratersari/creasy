@@ -62,6 +62,12 @@ def test_opencode_asset_names() -> None:
     assert "arm64" in mod.opencode_asset(ver, "darwin", "arm64")
 
 
+def test_copy_dirs_include_opencode_configs() -> None:
+    mod = _load()
+    assert "opencode-configs" in mod.COPY_DIRS
+    assert "agents" not in mod.SKIP_DIR_NAMES
+
+
 def test_four_platform_packs() -> None:
     mod = _load()
     assert set(mod.PACKS) == {"windows", "linux", "darwin", "winlinux"}

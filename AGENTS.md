@@ -96,11 +96,13 @@ These look like bugs. They are not.
   updated `--stat`. If the session is new/rejected, prepend short MR
   context.
 - OpenCode only. No Codex.
-- Jobs use the `review` agent (`OPENCODE_AGENT`, default `review`). The
-  installer writes `~/.config/opencode/agents/review.md` and the
-  `cpp98` / `modern-cpp` skills (copies under `~/.opencode/` when that
-  home already exists). It must not delete an existing OpenCode home;
-  it only adds the agent, skills, and a missing binary or stock config.
+- Jobs use the `review` agent (`OPENCODE_AGENT`, default `review`).
+  Agent and skill files live in the `opencode-configs` submodule
+  (`agents/*.md`, `skills/*/SKILL.md`). The installer copies every
+  file it finds into `~/.config/opencode/` (and `~/.opencode/` when
+  that home already exists). It must not delete an existing OpenCode
+  home; it only adds those files and a missing binary or stock config.
+  Add a new agent in that submodule, not under `scripts/`.
 
 ### Dashboard
 

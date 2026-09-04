@@ -2,8 +2,8 @@
 """Install or extend the user OpenCode home (offline, stdlib).
 
 Never deletes an existing OpenCode install. A first run copies the vendored
-CLI and a stock config. A later run only adds the Creasy review agent,
-C++ review skills, and a missing binary or config.
+CLI and a stock config. A later run only adds agents and skills from the
+opencode-configs submodule, plus a missing binary or config.
 """
 
 from __future__ import annotations
@@ -23,9 +23,9 @@ STOCK_CONFIG = """{
 }
 """
 
-REVIEW_AGENT_REL = Path("scripts") / "opencode" / "review.md"
-REVIEW_SKILLS_REL = Path("scripts") / "opencode" / "skills"
-REVIEW_SKILL_NAMES = ("cpp98", "modern-cpp")
+CONFIGS_REL = Path("opencode-configs")
+REVIEW_AGENT_REL = CONFIGS_REL / "agents" / "review.md"
+REVIEW_SKILLS_REL = CONFIGS_REL / "skills"
 
 
 def home() -> Path:
@@ -54,6 +54,10 @@ def dest_binary(user_home: Path | None = None) -> Path:
     return dest_dir(user_home) / name
 
 
+def configs_root(root: Path) -> Path:
+    return Path(root) / CONFIGS_REL
+
+
 def review_agent_source(root: Path) -> Path:
     return Path(root) / REVIEW_AGENT_REL
 
@@ -62,12 +66,47 @@ def review_skills_source(root: Path) -> Path:
     return Path(root) / REVIEW_SKILLS_REL
 
 
-def review_agent_dests(user_home: Path | None = None, *, include_opencode_home: bool = True) -> list[Path]:
+def list_agent_files(root: Path) -> list[Path]:
+    folder = configs_root(root) / "agents"
+    if not folder.is_dir():
+        raise FileNotFoundError(
+            f"OpenCode configs missing: {folder} (git submodule update --init)"
+        )
+    files = sorted(path for path in folder.glob("*.md") if path.is_file())
+    if not files:
+        raise FileNotFoundError(f"No agent markdown under {folder}")
+    return files
+
+
+def list_skill_dirs(root: Path) -> list[Path]:
+    folder = review_skills_source(root)
+    if not folder.is_dir():
+        raise FileNotFoundError(
+            f"OpenCode configs missing: {folder} (git submodule update --init)"
+        )
+    dirs = sorted(
+        path for path in folder.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()
+    )
+    if not dirs:
+        raise FileNotFoundError(f"No skills with SKILL.md under {folder}")
+    return dirs
+
+
+def agent_dests(
+    name: str,
+    user_home: Path | None = None,
+    *,
+    include_opencode_home: bool = True,
+) -> list[Path]:
     base = user_home or home()
-    dests = [config_home(base) / "agents" / "review.md"]
+    dests = [config_home(base) / "agents" / f"{name}.md"]
     if include_opencode_home:
-        dests.append(opencode_home(base) / "agents" / "review.md")
+        dests.append(opencode_home(base) / "agents" / f"{name}.md")
     return dests
+
+
+def review_agent_dests(user_home: Path | None = None, *, include_opencode_home: bool = True) -> list[Path]:
+    return agent_dests("review", user_home, include_opencode_home=include_opencode_home)
 
 
 def vendor_binary(root: Path) -> Path | None:
@@ -140,16 +179,14 @@ def install_review_agent(
     *,
     include_opencode_home: bool = True,
 ) -> list[Path]:
-    src = review_agent_source(root)
-    if not src.is_file():
-        raise FileNotFoundError(f"Review agent missing: {src}")
-    text = src.read_text(encoding="utf-8")
     written: list[Path] = []
-    for dest in review_agent_dests(user_home, include_opencode_home=include_opencode_home):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(text, encoding="utf-8")
-        written.append(dest)
-        print(f"[OK] Review agent written: {dest}")
+    for src in list_agent_files(root):
+        text = src.read_text(encoding="utf-8")
+        for dest in agent_dests(src.stem, user_home, include_opencode_home=include_opencode_home):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
+            written.append(dest)
+            print(f"[OK] Agent {src.stem} written: {dest}")
     return written
 
 
@@ -172,20 +209,17 @@ def install_review_skills(
     *,
     include_opencode_home: bool = True,
 ) -> list[Path]:
-    src_root = review_skills_source(root)
     written: list[Path] = []
-    for name in REVIEW_SKILL_NAMES:
-        src = src_root / name / "SKILL.md"
-        if not src.is_file():
-            raise FileNotFoundError(f"Review skill missing: {src}")
+    for skill_dir in list_skill_dirs(root):
+        src = skill_dir / "SKILL.md"
         text = src.read_text(encoding="utf-8")
         for dest in review_skill_dests(
-            name, user_home, include_opencode_home=include_opencode_home
+            skill_dir.name, user_home, include_opencode_home=include_opencode_home
         ):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
             written.append(dest)
-            print(f"[OK] Review skill written: {dest}")
+            print(f"[OK] Skill {skill_dir.name} written: {dest}")
     return written
 
 

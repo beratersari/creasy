@@ -36,7 +36,6 @@ SKIP_DIR_NAMES = {
     ".git",
     ".egg-info",
     "opencode_manager.egg-info",
-    "agents",
 }
 
 COPY_FILES = (
@@ -54,6 +53,7 @@ COPY_DIRS = (
     "scripts",
     "tests",
     "packaging",
+    "opencode-configs",
     # web/ source stays out of the zip. copy_web ships only the built SPA.
 )
 

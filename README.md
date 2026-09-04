@@ -3,6 +3,17 @@
 Code review easy. GitLab webhooks trigger a deep OpenCode review of a merge request against the cloned codebase.
 
 Agent rules and commit conventions: [AGENTS.md](AGENTS.md).
+OpenCode agents and skills live in the
+[opencode-configs](https://github.com/beratersari/opencode-configs)
+submodule so other projects can reuse them.
+
+Clone with submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/beratersari/creasy.git
+# existing checkout:
+git submodule update --init --recursive
+```
 
 Clones live with the MR. They are deleted only when the MR is closed or merged. Each `/review` or `/ask` is a separate job that can resume the same OpenCode session.
 
@@ -16,7 +27,7 @@ python packaging/build_dist.py --in-place    # or scripts/vendor.bat
 
 # On the air-gapped host (or after unzipping the CI artifact)
 install.bat                 # .venv from vendor/python/windows/python.exe
-install-opencode.bat        # keeps ~/.opencode; adds review agent; copies vendor/bin if missing
+install-opencode.bat        # keeps ~/.opencode; copies opencode-configs agents/skills; copies vendor/bin if missing
 # edit .env (GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL)
 start.bat                   # new window + wait for /health
 ```
@@ -60,8 +71,11 @@ OpenCode is told the merge-base and `git diff --stat`. It is **not** given the f
 pytest
 ```
 
-Replay a fake webhook:
+Replay a fake webhook (defaults to `test_project` MR !30):
 
 ```bash
 python tests/mock_gitlab_webhook.py --event mr-comment --note "/ask why this lock?"
+python tester/tester.py
 ```
+
+Tester UI: http://127.0.0.1:8090/ — pick a repo / MR and fire open, `/review`, `/ask`, close.
