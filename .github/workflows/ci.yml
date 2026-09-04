@@ -39,23 +39,44 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Build offline zips (bundled CPython + OpenCode + wheels + SPA)
+      - name: Build offline packs (folders, not zips)
         run: python packaging/build_dist.py --out-dir dist
-      - name: Upload offline zips
+      - name: Read product version
+        id: ver
+        run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Upload Linux pack
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-offline-zips
-          path: dist/creasy-*.zip
+          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-linux-x64/
           if-no-files-found: error
           retention-days: 30
-      - name: Install + start from the Linux zip
+      - name: Upload Windows pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-windows-x64
+          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-x64/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload Darwin pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-darwin
+          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-darwin/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload Windows+Linux pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-windows-linux
+          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-linux/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Install + start from the Linux pack
         run: |
           set -euo pipefail
-          zip=$(ls dist/creasy-*-linux-x64.zip | head -1)
-          rm -rf /tmp/creasy-off
-          mkdir -p /tmp/creasy-off
-          python -m zipfile -e "$zip" /tmp/creasy-off
-          root=$(find /tmp/creasy-off -maxdepth 2 -name pyproject.toml -printf '%h\n' | head -1)
+          root="dist/stage/creasy-${{ steps.ver.outputs.version }}-linux-x64"
+          test -f "$root/pyproject.toml"
           chmod +x "$root"/scripts/*.sh "$root"/*.sh || true
           (cd "$root" && scripts/install.sh)
           (cd "$root" && scripts/install-opencode.sh)

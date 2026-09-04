@@ -99,6 +99,21 @@ def test_four_platform_packs() -> None:
     assert mod.PACKS["windows"]["suffix"] == "windows-x64"
     assert mod.PACKS["linux"]["suffix"] == "linux-x64"
     assert mod.PACKS["darwin"]["suffix"] == "darwin"
+    assert mod.PACKS["winlinux"]["suffix"] == "windows-linux"
+
+
+def test_build_dist_default_does_not_zip() -> None:
+    """CI uploads folders; Actions wraps them. --zip is opt-in for local copies."""
+    text = Path(__file__).resolve().parents[1].joinpath("packaging", "build_dist.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"--zip"' in text
+    assert "if args.zip:" in text
+    workflow = Path(__file__).resolve().parents[1].joinpath(".github", "workflows", "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "--zip" not in workflow
+    assert "dist/creasy-*.zip" not in workflow
 
 
 def test_install_requires_bundled_python() -> None:

@@ -93,6 +93,8 @@ def test_ci_runs_vendor_install_start():
     assert workflow.count("submodules: true") >= 3
     assert "/health" in workflow
     assert "upload-artifact" in workflow
-    assert "creasy-offline-zips" in workflow
+    assert "dist/stage/creasy-" in workflow
+    assert "dist/creasy-*.zip" not in workflow
+    assert "creasy-offline-zips" not in workflow
     assert "run-server.bat" in _read("scripts/start.bat")
     assert "cmd /v:on /c" not in _read("scripts/start.bat")

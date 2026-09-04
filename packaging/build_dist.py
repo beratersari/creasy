@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Build an offline distribution. This script needs network. Target install does not.
 
-  python packaging/build_dist.py              # zip under dist/
+  python packaging/build_dist.py              # stage packs under dist/stage/
+  python packaging/build_dist.py --zip        # also write .zip next to the folders
   python packaging/build_dist.py --in-place   # write vendor/ + web/dist into the repo
+
+CI uploads the staged folders. GitHub Actions already wraps each upload
+as a zip, so the default path does not write zip files.
 """
 
 from __future__ import annotations
@@ -209,7 +213,7 @@ _UVICORN_STANDARD_COMMON = (
     "websockets>=10.4",
 )
 
-# Per-OS zips plus a combined Windows+Linux zip.
+# Per-OS packs plus a combined Windows+Linux pack.
 PACKS: dict[str, dict[str, object]] = {
     "windows": {
         "suffix": "windows-x64",
@@ -644,12 +648,17 @@ def write_zip(source: Path, zip_path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build Creasy offline distribution")
     parser.add_argument("--root", default="", help="Repo root (default: parent of packaging/)")
-    parser.add_argument("--out-dir", default="", help="Output directory for zip (default: <root>/dist)")
-    parser.add_argument("--dist-name", default="", help="Payload / zip name")
+    parser.add_argument("--out-dir", default="", help="Output directory (default: <root>/dist)")
+    parser.add_argument("--dist-name", default="", help="Payload / artifact name")
+    parser.add_argument(
+        "--zip",
+        action="store_true",
+        help="Also write .zip files. CI should omit this; Actions already zips uploads.",
+    )
     parser.add_argument(
         "--in-place",
         action="store_true",
-        help="Write vendor/ + build web/dist into the repo (no zip)",
+        help="Write vendor/ + build web/dist into the repo (no pack)",
     )
     args = parser.parse_args(argv)
 
@@ -676,7 +685,7 @@ def main(argv: list[str] | None = None) -> int:
     print("========================================")
     print(f"Repo     : {root}")
     print(f"Host     : {os_name}-{arch}")
-    print(f"Zips     : windows-x64, linux-x64, darwin, windows-linux")
+    print(f"Packs    : windows-x64, linux-x64, darwin, windows-linux")
     print(f"Version  : {version}")
     print(f"OpenCode : {ver.get('OPENCODE_VERSION')}")
     print(f"Wheels   : {', '.join(wheel_versions)}")
@@ -801,12 +810,15 @@ def main(argv: list[str] | None = None) -> int:
             encoding="utf-8",
         )
         (payload / "VERSION").write_text(version + "\n", encoding="utf-8")
-        zip_path = out_dir / f"{name}.zip"
-        print(f"  Writing {zip_path.name}...")
-        write_zip(payload, zip_path)
-        written.append(zip_path)
+        written.append(payload)
+        print(f"  Staged {payload}")
+        if args.zip:
+            zip_path = out_dir / f"{name}.zip"
+            print(f"  Writing {zip_path.name}...")
+            write_zip(payload, zip_path)
+            written.append(zip_path)
 
-    print("\n[OK] Offline zips ready.")
+    print("\n[OK] Offline packs ready.")
     for path in written:
         print(f"  {path}")
     return 0

@@ -25,7 +25,7 @@ Offline (OSM-style zip: bundled CPython + wheels + OpenCode CLI):
 # On a machine with network
 python packaging/build_dist.py --in-place    # or scripts/vendor.bat
 
-# On the air-gapped host (or after unzipping the CI artifact)
+# On the air-gapped host (or after unpacking the CI artifact)
 install.bat                 # .venv from vendor/python/windows/python.exe
 install-opencode.bat        # backup ~/.opencode, unhook other PATH entries, install CLI + agents/skills
 # edit .env (GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL)
@@ -49,7 +49,7 @@ Dashboard: http://127.0.0.1:8000/jobs
 Webhook: `POST /webhook`  
 Health: `GET /health`
 
-CI uploads `creasy-offline-zips` (`creasy-0.1.0-windows-x64.zip`, `linux-x64`, `darwin`, `windows-linux`). Each zip includes bundled CPython, matching wheels, the OpenCode CLI, and the built dashboard (`web/dist`). No Node on the target. Unzip, `install`, `install-opencode`, `start`.
+CI uploads one folder per pack (`creasy-0.1.0-windows-x64`, `linux-x64`, `darwin`, `windows-linux`). GitHub wraps each folder as a zip; the download is not a zip of a zip. Each pack includes bundled CPython, matching wheels, the OpenCode CLI, and the built dashboard (`web/dist`). No Node on the target. Unzip, `install`, `install-opencode`, `start`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 
