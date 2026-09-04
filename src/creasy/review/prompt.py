@@ -56,8 +56,7 @@ The working tree is the MR source at HEAD. Analyze **from the separation point**
 
 1. Run `git log {index.merge_base}..HEAD` and `git diff {index.merge_base}...HEAD` (and per-path diffs) yourself. Do not assume this prompt contains hunks.
 2. For each changed path, read the current file and its callers/tests. Review the change in context.
-3. Report concrete issues (severity, path, why it matters, suggested fix). Call out what looks good.
-4. Do not commit, push, or edit files. Reply with a markdown review only.
+3. Do not commit, push, or edit files. Reply with a markdown review only.
 """
 
 

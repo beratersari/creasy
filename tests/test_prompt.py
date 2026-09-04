@@ -39,6 +39,11 @@ def test_review_prompt_has_map_not_full_diff():
     assert "@@ " not in prompt
     assert "No bare except" in prompt
     assert "be strict" in prompt
+    assert "Required reply format" not in prompt
+    assert "**Critical**" not in prompt
+    assert "**Blocking**" not in prompt
+    assert "**Why it is an issue and where**" not in prompt
+    assert "**Suggested fix**" not in prompt
 
 
 def test_ask_prompt_is_question():
