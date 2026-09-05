@@ -159,6 +159,16 @@ body {
     bottom: calc(100% + 0.45rem);
   }
 }
+.vd-report-panel-down {
+  top: calc(100% + 0.4rem);
+  bottom: auto;
+}
+@media (min-width: 900px) {
+  .vd-report-panel-down {
+    top: calc(100% + 0.4rem);
+    bottom: auto;
+  }
+}
 .vd-report-list {
   max-height: min(40vh, 16rem);
   overflow-y: auto;

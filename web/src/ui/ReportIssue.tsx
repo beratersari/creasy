@@ -8,7 +8,10 @@ import { REPORT_NOTE_MIN, reportNoteReady } from '../util/jobReport'
 type Target = { kind: 'general' } | { kind: 'job'; job: JobItem }
 
 function jobLabel(job: JobItem): string {
+  const title = (job.mr_title || '').trim()
   const ticket = (job.jira_id || '').trim()
+  if (title && ticket) return `${job.job_id} — ${title} (${ticket})`
+  if (title) return `${job.job_id} — ${title}`
   return ticket ? `${job.job_id} — ${ticket}` : job.job_id
 }
 
@@ -17,7 +20,7 @@ function jobIdFromPath(pathname: string): string | null {
   return m ? decodeURIComponent(m[1]) : null
 }
 
-export function ReportIssue() {
+export function ReportIssue({ placement = 'up' }: { placement?: 'up' | 'down' }) {
   const location = useLocation()
   const rootRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -150,7 +153,11 @@ export function ReportIssue() {
       </button>
 
       {open && (
-        <div className="vd-report-panel" role="dialog" aria-label="Report issue">
+        <div
+          className={placement === 'down' ? 'vd-report-panel vd-report-panel-down' : 'vd-report-panel'}
+          role="dialog"
+          aria-label="Report issue"
+        >
           <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-text-muted">
             What is this about?
           </div>
@@ -193,7 +200,8 @@ export function ReportIssue() {
                   >
                     <span className="font-mono text-[11px] text-text-secondary">{job.job_id}</span>
                     <span className="block truncate text-xs text-text">
-                      {(job.jira_id || '—') + (job.status ? ` · ${job.status}` : '')}
+                      {((job.mr_title || '').trim() || job.jira_id || '—') +
+                        (job.status ? ` · ${job.status}` : '')}
                     </span>
                   </button>
                 )

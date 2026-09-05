@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
+from creasy.api.report import build_report_context
 from creasy.logging import get_logger, read_job_log_lines
 from creasy.opencode.serve import read_serve_log, serve_log_path
 from creasy.workspace.identity import mr_key
@@ -194,13 +195,7 @@ def api_meta(request: Request) -> dict:
 @router.get("/api/report-context")
 def api_report_context(request: Request) -> dict:
     _check_token(request)
-    health = _mgr(request).health()
-    return {
-        "meta": {"app_name": "creasy", "server_time": _now()},
-        "queue": {"items": [], "queued_count": health.get("queued") or 0},
-        "live": {"running": health.get("running") or 0, "queued": health.get("queued") or 0},
-        "server_time": _now(),
-    }
+    return build_report_context(_mgr(request))
 
 
 @router.websocket("/ws")

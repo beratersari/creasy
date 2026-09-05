@@ -37,12 +37,12 @@ describe('job report zip', () => {
 
   it('names the zip from ticket, job id, and stamp', () => {
     expect(reportZipName(job, '2026-08-30T12:00:00.000Z')).toBe(
-      'osm-report-PROJ-1-job_aaa-20260830-120000.zip',
+      'creasy-report-PROJ-1-job_aaa-20260830-120000.zip',
     )
     expect(reportZipName({ jira_id: 'A/B', job_id: 'job x' }, '2026-01-02T03:04:05Z')).toBe(
-      'osm-report-A_B-job_x-20260102-030405.zip',
+      'creasy-report-A_B-job_x-20260102-030405.zip',
     )
-    expect(reportZipName(null, '2026-08-30T12:00:00.000Z')).toBe('osm-report-general-20260830-120000.zip')
+    expect(reportZipName(null, '2026-08-30T12:00:00.000Z')).toBe('creasy-report-general-20260830-120000.zip')
   })
 
   it('puts the note, job records, and process extras in the bundle', () => {
@@ -79,7 +79,7 @@ describe('job report zip', () => {
     expect(files['job/system.log']).toBe('line one\n')
     expect(files['opencode-serve.log']).toBe('opencode serve listening\n')
     expect(files['job/git.txt']).toContain('C:/osm/.temp/PROJ-1')
-    expect(files['job/git.txt']).toContain('always deletes the clone')
+    expect(files['job/git.txt']).toContain('keeps the clone with the MR')
     expect(files['runtime.json']).toContain('3.12')
     expect(files['settings.json']).toContain('opencode')
     expect(files['queue.json']).toContain('job_q')

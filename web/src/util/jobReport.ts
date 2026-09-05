@@ -32,10 +32,10 @@ function stampFromIso(exportedAt: string): string {
 
 export function reportZipName(job?: Pick<JobItem, 'jira_id' | 'job_id'> | null, exportedAt?: string): string {
   const stamp = stampFromIso(exportedAt || new Date().toISOString())
-  if (!job) return `osm-report-general-${stamp}.zip`
+  if (!job) return `creasy-report-general-${stamp}.zip`
   const ticket = safeName(job.jira_id || 'ticket')
   const id = safeName(job.job_id || 'job')
-  return `osm-report-${ticket}-${id}-${stamp}.zip`
+  return `creasy-report-${ticket}-${id}-${stamp}.zip`
 }
 
 function jsonFile(payload: unknown): string {
@@ -119,11 +119,8 @@ function partMarkdown(part: ChatPart): string[] {
 
 function gitExplanation(job: JobItem): string {
   return [
-    'No live git snapshot is available for this job.',
-    '',
-    'OSM always deletes the clone when the job ends (success or fail).',
-    'The next job for the same ticket re-clones to the same path.',
-    'Chat vs disk drift is expected after delete.',
+    'Creasy keeps the clone with the MR until close or merge.',
+    'A finished job kills the serve but leaves the tree so later /review or /ask can resume ses_*.',
     '',
     `clone_path: ${job.clone_path || '(none recorded)'}`,
     `repo_url: ${job.repo_url || '(none)'}`,
@@ -131,8 +128,6 @@ function gitExplanation(job: JobItem): string {
     `status: ${job.status}`,
     `started_at: ${job.started_at || '?'}`,
     `completed_at: ${job.completed_at || '?'}`,
-    '',
-    'Do not treat a missing working tree as a product-repo problem.',
     '',
   ].join('\n')
 }
@@ -180,7 +175,7 @@ function processFiles(input: JobReportInput): Record<string, string> {
 
 function readme(kind: 'job' | 'general', job?: JobItem | null): string {
   const lines = [
-    'OpenCode Session Manager issue report',
+    'Creasy issue report',
     '',
     `Kind: ${kind}`,
     '',
@@ -205,14 +200,14 @@ function readme(kind: 'job' | 'general', job?: JobItem | null): string {
       'job/record.json             Dashboard job record (no callback_url)',
       'job/parameters.json         Fields needed to reproduce the run',
       'job/retry_attempts.json     Outer-retry bookkeeping',
-      'job/prompts.json            User messages OSM POSTed',
+      'job/prompts.json            User messages posted to OpenCode',
       'job/prompts/                Same prompts as individual text files',
       'job/chat.json               Transcript snapshot or live serve copy',
       'job/chat.md                 Same transcript, readable',
       'job/result.txt              Last assistant text (the job product)',
-      'job/system.log              OSM per-job manager log',
+      'job/system.log              Per-job manager log (filtered by job_id)',
       'job/opencode-serve.log      stdout/stderr from this job\'s opencode serve',
-      'job/git.txt                 Clone path / repo — no live git (clone is deleted)',
+      'job/git.txt                 Clone path / repo (kept until MR close/merge)',
     )
   }
   lines.push('')
