@@ -303,6 +303,81 @@ def test_hang_retry_posts_resume_not_original(tmp_config, monkeypatch):
     assert result.text == "second attempt ok"
 
 
+def test_hang_exhausted_does_not_repost_prior_text(tmp_config, monkeypatch):
+    spy = SpyGitlab()
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), spy)
+
+    class FakeClient:
+        def __init__(self, *a, **k) -> None:
+            pass
+
+        def resume_or_create(self, inbound, title):
+            return "ses_abc", False
+
+        def post_message(self, session_id, text, *, model, agent):
+            return None
+
+        def wait_idle(self, session_id, *, timeout, hang_timeout, should_stop=None, idle_settle=8.0):
+            raise OpenCodeError("hang")
+
+        def get_session(self, session_id):
+            return SimpleNamespace(status_code=200)
+
+        def create_session(self, title):
+            return "ses_abc"
+
+        def list_messages(self, session_id):
+            return [
+                {
+                    "info": {"id": "msg_old", "role": "assistant"},
+                    "parts": [{"type": "text", "text": "previous review body"}],
+                }
+            ]
+
+        def abort(self, session_id):
+            return None
+
+        def close(self):
+            return None
+
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(
+        w,
+        "start_serve",
+        lambda **k: ServeHandle(pid=1, port=9, base_url="http://127.0.0.1:9", proc=None, log_path=tmp_config.serve_dir / "s.log"),  # type: ignore[arg-type]
+    )
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "OpenCodeClient", FakeClient)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+    monkeypatch.setattr(
+        runner,
+        "_ensure_workspace",
+        lambda job, mr, stop: WorkspaceRecord(
+            mr_key=job.mr_key,
+            project_id=job.project_id,
+            mr_iid=job.mr_iid,
+            clone_path=str(tmp_config.work_dir / "1-1"),
+            last_sha="newsha",
+            session_id="ses_abc",
+        ),
+    )
+    (tmp_config.work_dir / "1-1").mkdir(parents=True)
+    monkeypatch.setattr(w, "resolve_merge_base", lambda *a, **k: "base")
+    monkeypatch.setattr(
+        w,
+        "diff_stat",
+        lambda *a, **k: DiffIndex(merge_base="base", stat="stat", paths=["a.py"], statuses={"a.py": "M"}),
+    )
+    tmp_config.opencode_retry_count = 1
+    result = runner.run(_job(), lambda: False)
+    assert result.error == "hang"
+    assert result.text == ""
+    assert spy.notes
+    assert "previous review body" not in spy.notes[0]
+    assert "failed" in spy.notes[0].lower()
+
+
 def test_cancelled_running_job_posts_note(tmp_config):
     spy = SpyGitlab()
     runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), spy)

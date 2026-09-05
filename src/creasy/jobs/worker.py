@@ -112,6 +112,13 @@ class OpenCodeRunner:
         logger.info("serve started pid=%s port=%s", handle.pid, handle.port)
         self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
+    def _track_git_pid(self, job: JobRecord, pid: int) -> None:
+        job.extra_pids = [pid] if pid else []
+        self._persist_job(job, "extra pids")
+
+    def _git_kw(self, job: JobRecord, should_stop: Callable[[], bool]) -> dict:
+        return {"should_stop": should_stop, "on_pid": lambda pid: self._track_git_pid(job, pid)}
+
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
         if job.trigger == "reset":
             return self._run_reset(job, should_stop)
@@ -132,13 +139,20 @@ class OpenCodeRunner:
             result.base_sha = mr.base_sha
             result.start_sha = mr.start_sha or mr.base_sha
             clone = Path(workspace.clone_path)
+            git_kw = self._git_kw(job, should_stop)
             merge_base = resolve_merge_base(
                 clone,
                 target_branch=mr.target_branch,
                 preferred_base=mr.base_sha,
                 timeout=min(60.0, self.config.git_timeout),
+                **git_kw,
             )
-            index = diff_stat(clone, merge_base, timeout=min(60.0, self.config.git_timeout))
+            index = diff_stat(
+                clone,
+                merge_base,
+                timeout=min(60.0, self.config.git_timeout),
+                **git_kw,
+            )
             result.merge_base = merge_base
             result.diff_stat = index.stat
             result.changed_paths = list(index.paths)
@@ -225,16 +239,20 @@ class OpenCodeRunner:
             if should_stop():
                 result.cancelled = True
                 return result
-            if last_error and not text:
-                result.error = last_error
-            result.text = text
             try:
                 messages = client.list_messages(session_id)
                 result.chat_snapshot = snapshot_chat(messages, session_id)
-                if not result.text:
-                    result.text = last_assistant_text(messages)
             except Exception:
-                pass
+                messages = []
+            if last_error:
+                result.error = last_error
+                result.text = ""
+                workspace.session_id = session_id
+                workspace.last_job_id = job.job_id
+                self.workspaces.save(workspace)
+                self._post_note(job, result)
+                return result
+            result.text = text or last_assistant_text(messages)
             markdown, findings = split_findings(result.text)
             result.text = markdown
             workspace.session_id = session_id
@@ -360,10 +378,17 @@ class OpenCodeRunner:
         http_url = mr.http_url or self.gitlab.resolve_http_url(job.project_id, record.http_url)
         if not http_url:
             raise GitError("no http repo url for project")
+        git_kw = self._git_kw(job, should_stop)
         if not dest.exists() or not (dest / ".git").exists():
             if dest.exists():
                 delete_clone(dest)
-            clone_repo(http_url, dest, self.config.gitlab_token, timeout=self.config.git_timeout)
+            clone_repo(
+                http_url,
+                dest,
+                self.config.gitlab_token,
+                timeout=self.config.git_timeout,
+                **git_kw,
+            )
         sha = fetch_and_checkout(
             dest,
             source_branch=mr.source_branch,
@@ -371,6 +396,7 @@ class OpenCodeRunner:
             sha=mr.sha,
             token=self.config.gitlab_token,
             timeout=self.config.git_timeout,
+            **git_kw,
         )
         record.clone_path = str(dest)
         record.source_branch = mr.source_branch
@@ -406,6 +432,8 @@ class OpenCodeRunner:
             result.posted = True
         except Exception as exc:  # noqa: BLE001
             logger.error("post note failed: %s", exc)
+            if not result.error:
+                result.error = f"post note failed: {exc}"
             return
         if result.cancelled or (result.error and not result.text):
             return
