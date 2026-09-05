@@ -95,7 +95,7 @@ export function JobDetailPage() {
         </h1>
         <p className="mt-1 font-mono text-xs text-text-muted">
           {job?.job_id ? `${job.job_id} · ` : ''}
-          {job?.agent_mode} · {job?.model} · attempt {job?.attempt}/{job?.retry_count}
+          {job?.agent_mode} · {job?.model}
           {elapsed !== '—' ? ` · ${elapsed}` : ''}
         </p>
       </div>
@@ -160,7 +160,6 @@ function isTerminalSuccess(job: JobItem): boolean {
 }
 
 function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
-  const attempts = job.attempts || []
   const showResult = isTerminalSuccess(job) && Boolean(job.text)
   return (
     <div className="space-y-6 text-sm">
@@ -180,45 +179,14 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
         <MetaCard label="Model" mono value={job.model || '—'} />
         <MetaCard label="Session" mono value={job.session_id || '—'} />
         <MetaCard label="Branch" mono value={job.source_branch || '—'} />
-        <MetaCard label="Repo" mono className="sm:col-span-2" value={job.repo_url || '—'} />
+        <MetaCard label="MR url" mono className="sm:col-span-2" value={job.repo_url || '—'} />
         <MetaCard label="Clone" mono className="sm:col-span-2 lg:col-span-3" value={job.clone_path || '—'} />
         <MetaCard label="Serve" mono value={job.serve_port ? `${job.serve_pid}@${job.serve_port}` : '—'} />
-        <MetaCard label="Attempt" value={`${job.attempt || 1} / ${job.retry_count || 1}`} />
-        <MetaCard label="Timeout" value={`${job.timeout_in_seconds}s`} />
         <MetaCard label="Started" mono value={job.started_at || '—'} />
         <MetaCard label="Completed" mono value={job.completed_at || '—'} />
-        <MetaCard label="Callback" value={job.callback_status_code ? String(job.callback_status_code) : '—'} />
       </div>
       {job.error_message && (
         <pre className="vd-pre text-danger-text">{job.error_message}</pre>
-      )}
-      {attempts.length > 0 && (
-        <div className="overflow-x-auto rounded border border-border">
-          <table className="w-full min-w-[32rem] text-left text-xs">
-            <thead className="bg-bg-elevated text-[10px] uppercase tracking-wide text-text-muted">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Kind</th>
-                <th className="px-3 py-2">Prompt</th>
-                <th className="px-3 py-2">Session</th>
-                <th className="px-3 py-2">Error</th>
-                <th className="px-3 py-2">Ended</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {attempts.map((a) => (
-                <tr key={`${a.number}-${a.ended_at}`}>
-                  <td className="px-3 py-2 font-mono">{a.number}</td>
-                  <td className="px-3 py-2">{a.kind}</td>
-                  <td className="px-3 py-2 font-mono">{a.prompt_id || '—'}</td>
-                  <td className="px-3 py-2 font-mono">{a.session_id || '—'}</td>
-                  <td className="max-w-xs truncate px-3 py-2 font-mono">{a.error || '—'}</td>
-                  <td className="px-3 py-2 font-mono text-text-muted">{a.ended_at || '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </div>
   )

@@ -19,6 +19,18 @@ def test_jobs_page_keeps_osm_workbench() -> None:
     assert "Find merge request" in page
 
 
+def test_job_detail_omits_unused_osm_fields() -> None:
+    detail = (ROOT / "web" / "src" / "pages" / "jobs" / "JobDetailPage.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert 'label="Attempt"' not in detail
+    assert 'label="Timeout"' not in detail
+    assert 'label="Callback"' not in detail
+    assert "job.attempts" not in detail
+    assert "timeout_in_seconds" not in detail
+    assert "callback_status_code" not in detail
+
+
 def test_report_issue_lives_only_in_the_sidebar() -> None:
     shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
     jobs = (ROOT / "web" / "src" / "pages" / "jobs" / "JobsPage.tsx").read_text(encoding="utf-8")
