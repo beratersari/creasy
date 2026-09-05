@@ -70,7 +70,7 @@ def payload(event: str, project_id: int, mr_iid: int, note: str = "") -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("-u", "--url", default="http://127.0.0.1:8000/webhook")
+    parser.add_argument("-u", "--url", default="http://127.0.0.1:9001/webhook")
     parser.add_argument("-s", "--secret", default="")
     parser.add_argument("--event", default="mr-open", choices=["mr-open", "mr-update", "mr-close", "mr-merge", "mr-comment"])
     parser.add_argument("--project-id", type=int, default=84969716)

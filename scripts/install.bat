@@ -132,7 +132,7 @@ echo OpenCode is separate:
 echo   scripts\install-opencode.bat
 echo Then:
 echo   scripts\start.bat
-echo Dashboard: http://127.0.0.1:8000/jobs
+echo Dashboard: http://127.0.0.1:9001/jobs
 echo.
 call :maybe_pause
 exit /b 0

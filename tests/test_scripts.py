@@ -34,6 +34,26 @@ def test_vendor_scripts_call_build_dist():
         assert "--in-place" in body
 
 
+def test_default_ports_do_not_collide_with_virtual_developer():
+    """virtual_developer binds 8080 + Vite 5173. Creasy uses 9001 + 5174."""
+    from creasy.config import Config
+
+    assert Config().port == 9001
+    assert 'port=_int("PORT", 9001)' in _read("src/creasy/config.py")
+    assert 'DASH_PORT="${PORT:-9001}"' in _read("scripts/start.sh")
+    assert 'set "DASH_PORT=9001"' in _read("scripts/start.bat")
+    vite = _read("web/vite.config.ts")
+    assert "port: 5174" in vite
+    assert "127.0.0.1:9001" in vite
+    assert "5173" not in vite
+    assert "127.0.0.1:8000" not in vite
+    assert "127.0.0.1:8080" not in vite
+    assert "PORT=9001" in _read(".env.example")
+    ci = _read(".github/workflows/ci.yml")
+    assert "127.0.0.1:9001" in ci
+    assert "127.0.0.1:8000" not in ci
+
+
 def test_start_scripts_launch_creasy():
     bat = _read("scripts/start.bat")
     sh = _read("scripts/start.sh")

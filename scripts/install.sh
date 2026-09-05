@@ -97,5 +97,5 @@ echo "OpenCode is separate:"
 echo "  scripts/install-opencode.sh"
 echo "Then:"
 echo "  scripts/start.sh"
-echo "Dashboard: http://127.0.0.1:8000/jobs"
+echo "Dashboard: http://127.0.0.1:9001/jobs"
 echo

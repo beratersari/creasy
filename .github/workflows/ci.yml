@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CREASY_NONINTERACTIVE: "1"
-      PORT: "8000"
+      PORT: "9001"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -102,7 +102,7 @@ jobs:
           echo $! > /tmp/creasy.pid
           ok=0
           for _ in $(seq 1 45); do
-            if curl -sf --max-time 2 "http://127.0.0.1:8000/health" >/dev/null; then
+            if curl -sf --max-time 2 "http://127.0.0.1:9001/health" >/dev/null; then
               ok=1
               break
             fi
@@ -114,9 +114,9 @@ jobs:
             sleep 2
           done
           test "$ok" = "1"
-          curl -sf "http://127.0.0.1:8000/health"
+          curl -sf "http://127.0.0.1:9001/health"
           echo
-          code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:8000/jobs")
+          code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:9001/jobs")
           test "$code" = "200"
           grep -q "Creasy" /tmp/jobs.html
           grep -q "/assets/" /tmp/jobs.html
@@ -131,7 +131,7 @@ jobs:
     runs-on: windows-latest
     env:
       CREASY_NONINTERACTIVE: "1"
-      PORT: "8000"
+      PORT: "9001"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -162,6 +162,6 @@ jobs:
         shell: cmd
         run: |
           call scripts\start.bat
-          curl -sf http://127.0.0.1:8000/health
-          curl -sf http://127.0.0.1:8000/jobs | findstr /C:"Creasy"
-          curl -sf http://127.0.0.1:8000/jobs | findstr /C:"/assets/"
+          curl -sf http://127.0.0.1:9001/health
+          curl -sf http://127.0.0.1:9001/jobs | findstr /C:"Creasy"
+          curl -sf http://127.0.0.1:9001/jobs | findstr /C:"/assets/"

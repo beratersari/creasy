@@ -33,7 +33,7 @@ PAGE = Path(__file__).resolve().parent / "index.html"
 def _env() -> dict[str, str]:
     load_dotenv(ROOT / ".env", override=False)
     return {
-        "creasy_url": os.getenv("CREASY_URL", "http://127.0.0.1:8000").rstrip("/"),
+        "creasy_url": os.getenv("CREASY_URL", "http://127.0.0.1:9001").rstrip("/"),
         "webhook_secret": (os.getenv("WEBHOOK_SECRET") or "").strip(),
         "gitlab_url": (os.getenv("GITLAB_URL") or "https://gitlab.com").rstrip("/"),
         "gitlab_token": (os.getenv("GITLAB_TOKEN") or "").strip(),

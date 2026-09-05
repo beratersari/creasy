@@ -45,7 +45,7 @@ npm --prefix web run build
 python -m creasy
 ```
 
-Dashboard: http://127.0.0.1:8000/jobs  
+Dashboard: http://127.0.0.1:9001/jobs  
 Webhook: `POST /webhook`  
 Health: `GET /health`
 

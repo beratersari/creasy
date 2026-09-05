@@ -19,7 +19,7 @@ if exist "%HERE%\pyproject.toml" (
 )
 cd /d "%ROOT%"
 
-set "DASH_PORT=8000"
+set "DASH_PORT=9001"
 if defined PORT set "DASH_PORT=%PORT%"
 set "VENV_PY=%ROOT%\.venv\Scripts\python.exe"
 set "CREASY_PY="

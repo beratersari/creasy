@@ -382,7 +382,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 
 | Variable | Default | Role |
 |---|---|---|
-| `HOST` / `PORT` | `0.0.0.0` / `8000` | Public webhook bind |
+| `HOST` / `PORT` | `0.0.0.0` / `9001` | Public webhook bind (not virtual_developer 8080) |
 | `GITLAB_URL` | `https://gitlab.com` | API base |
 | `GITLAB_TOKEN` | required | API + clone |
 | `WEBHOOK_SECRET` | required in prod | `X-Gitlab-Token` |

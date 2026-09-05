@@ -23,7 +23,7 @@ def _int(name: str, default: int) -> int:
 @dataclass
 class Config:
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 9001
     gitlab_url: str = "https://gitlab.com"
     gitlab_token: str = ""
     webhook_secret: str = ""
@@ -68,7 +68,7 @@ def load_config(env_file: str | None = ".env") -> Config:
     data_dir = Path(os.getenv("DATA_DIR", "./data")).resolve()
     cfg = Config(
         host=os.getenv("HOST", "0.0.0.0"),
-        port=_int("PORT", 8000),
+        port=_int("PORT", 9001),
         gitlab_url=os.getenv("GITLAB_URL", "https://gitlab.com").rstrip("/"),
         gitlab_token=(os.getenv("GITLAB_TOKEN") or "").strip(),
         webhook_secret=(os.getenv("WEBHOOK_SECRET") or "").strip(),

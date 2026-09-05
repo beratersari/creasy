@@ -13,7 +13,7 @@ else
 fi
 cd "$ROOT"
 
-DASH_PORT="${PORT:-8000}"
+DASH_PORT="${PORT:-9001}"
 VENV_PY="$ROOT/.venv/bin/python"
 CREASY_PY=""
 if [[ -x "$VENV_PY" ]]; then
