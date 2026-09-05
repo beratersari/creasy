@@ -100,8 +100,10 @@ These look like bugs. They are not.
   same `ses_*` only — do not invent a blank session.
 - `/review` (and auto MR events): full map prompt (title, description,
   draft, labels, latest pipeline, branches, merge-base, stat, paths,
-  rules file if present, `/review` remainder).
-  One OpenCode turn. Parse findings from an optional `creasy-findings`
+  `/review` remainder). Do not paste project rules into the prompt.
+  The reviewer reads `agent/rules/CODE_REVIEW.md` from the clone if
+  that file exists.
+  One OpenCode turn. Parse findings from an optional `opencoderman-findings`
   fence or from `#### N. \`path:lines\`` titles. If GET `/message`
   is unreadable (400), create a new `ses_*` and continue.
 - `/ask`: question only. If SHA moved, prepend a one-line note +
@@ -110,16 +112,19 @@ These look like bugs. They are not.
 - OpenCode only. No Codex.
 - Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
   `gitlab-reviewer`).
-  Agent and skill files live in the `opencode-configs` submodule
-  (`agents/*.md`, `skills/*/SKILL.md`). That pack also vendors the
+  Agent and skill files live in the OpenCoderman pack
+  (`opencode-configs` submodule: `agents/*.md`, `skills/*/SKILL.md`).
+  That pack also vendors the
   OpenCode CLI (`vendor/bin/<os>/`) in its CI artifact; `install.py`
   copies it into `~/.opencode/bin`. `install-opencode` uses the same
   replace rules as that pack: rename `~/.opencode` to
   `~/.opencode_backup_YYYYMMDD_HHMMSS`, drop other OpenCode dirs from
-  PATH, write a clean home, install the vendored CLI (Creasy
-  `vendor/bin`, else the pack's, else the backup), and prepend
-  `~/.opencode/bin`. Add a new agent in that submodule, not under
-  `scripts/`.
+  PATH, write a clean `~/.opencode` (agents, skills, CLI). Do not copy
+  into `~/.config/opencode`; leftover trees there are renamed to
+  `~/.config/opencode_backup_*` so OpenCode does not load a second
+  copy. Then install the vendored CLI (Creasy `vendor/bin`, else the
+  pack's, else the backup) and prepend `~/.opencode/bin`. Add a new
+  agent in that submodule, not under `scripts/`.
 
 ### Dashboard
 

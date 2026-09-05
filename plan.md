@@ -224,9 +224,10 @@ The prompt is a **map**, not the change set:
 1. MR title, description, author, `source → target`, HEAD sha, draft, labels, latest pipeline.
 2. **Separation point:** merge-base SHA (`git merge-base origin/<target> HEAD`, or GitLab `diff_refs.base_sha` when present).
 3. `git diff --stat <base>...HEAD` and the changed-path list (added/modified/deleted/renamed). Filter with `REVIEW_EXTENSIONS` / `MAX_FILE_SIZE_KB`; skip binaries.
-4. Project rules if present (`agent/rules/CODE_REVIEW.md`, else `.creasy/CODE_REVIEW.md`).
-5. Optional remainder after `/review`.
-6. Hard instructions:
+4. Optional remainder after `/review`. Do not paste project rules.
+   The reviewer reads `agent/rules/CODE_REVIEW.md` from the clone if
+   that file exists.
+5. Hard instructions:
    - Analyze **from the separation point**, not the whole repo history.
    - Run `git log <base>..HEAD` and `git diff <base>...HEAD` (and per-path diffs) yourself. Do not assume the prompt contains hunks.
    - For each changed path, read the current file and its callers/tests. Review the change in context.
@@ -258,7 +259,7 @@ thread unless the last Creasy note is ≥ 90% similar (then skip).
 A failed thread is logged and skipped; it does not fail the job.
 
 The agent reply is the markdown review, plus an optional
-`creasy-findings` fence. Creasy strips that fence before posting
+`opencoderman-findings` fence. Creasy strips that fence before posting
 the note. Threads come from the fence when present, else from
 `#### N. \`path:lines\`` titles. Map each finding onto the
 three-dot diff and send GitLab `position` (`base_sha` /
@@ -350,7 +351,7 @@ creasy/
     review/
       prompt.py
       format.py            # wrap assistant text as MR markdown
-      findings.py          # parse/strip creasy-findings JSON
+      findings.py          # parse/strip opencoderman-findings JSON
       position.py          # GitLab discussion position from the diff
     logging.py
   tests/
@@ -381,7 +382,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `OPENCODE_MODEL` | `opencode/big-pickle` | `provider/id` |
 | `OPENCODE_TIMEOUT` | `1800` | One attempt, seconds |
 | `OPENCODE_RETRY_COUNT` | `2` | Attempts, first included |
-| `OPENCODE_AGENT` | `gitlab-reviewer` | OpenCode agent id. Installer writes the read-only `gitlab-reviewer` agent |
+| `OPENCODE_AGENT` | `gitlab-reviewer` | OpenCode agent id. Installer writes the read-only `gitlab-reviewer` agent under `~/.opencode` only |
 | `MAX_CONCURRENT_JOBS` | `2` | Live serves |
 | `DATA_DIR` | `./data` | clones, logs, job/workspace JSON |
 | `SKIP_DRAFT_MRS` | `true` | |
@@ -453,7 +454,7 @@ On `close`/`merge`:
 - Diff: prompt contains merge-base + `--stat` + paths, never the full unified diff; GitLab `/changes` is not required.
 - Webhook handler: secret 401, immediate 200, background enqueue.
 - Worker with a fake OpenCode client: success posts a note; failure posts an error note; clone still exists after finish.
-- Findings: `creasy-findings` JSON is stripped from the note when present; otherwise `####` titles supply path/lines. Each valid finding becomes a discussion; a 400 from GitLab does not fail the job. Rebase: merge-base is the **new** target tip for mapping, but discussion SHAs still come from MR `diff_refs`.
+- Findings: `opencoderman-findings` JSON is stripped from the note when present; otherwise `####` titles supply path/lines. Each valid finding becomes a discussion; a 400 from GitLab does not fail the job. Rebase: merge-base is the **new** target tip for mapping, but discussion SHAs still come from MR `diff_refs`.
 - Large-file discussions: one thread per planted line in a 1000+ line file (no OpenCode).
 - Live OpenCode review (`tests/test_opencode_review.py`) is skipped unless `CREASY_LIVE_OPENCODE=1`.
 - Cancel: running job is killed and next queued job for that MR starts; cancelling a queued job does not touch the runner; cancel-all-for-MR leaves the clone on disk.
