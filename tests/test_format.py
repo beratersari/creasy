@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from creasy import __version__
 from creasy.gitlab.events import first_command
 from creasy.jobs.models import JobRecord, mint_job_id
 from creasy.review.format import (
@@ -74,7 +75,9 @@ def test_soften_leaves_include_and_fences_alone() -> None:
 def test_success_note_is_comment_sized() -> None:
     job = _job(text="# Review\n\n---\n\n## Summary\n\nLooks risky.")
     body = format_success(job)
-    assert body.startswith("**Creasy — Review**")
+    assert body.startswith(f"**Creasy {__version__} — Review**")
+    assert f"`{job.model}`" in body
+    assert f"`{job.job_id}`" in body
     assert "## Creasy" not in body
     assert "### Summary" in body
     assert "Looks risky." in body
@@ -139,14 +142,14 @@ strcpy(dest, src);
 def test_ask_note_uses_answer_label() -> None:
     job = _job(trigger="ask", text="Because the lock is per MR.")
     body = format_success(job)
-    assert body.startswith("**Creasy — Answer**")
+    assert body.startswith(f"**Creasy {__version__} — Answer**")
     assert first_command(body) is None
 
 
 def test_failure_and_cancel_notes_are_not_commands() -> None:
     job = _job(error_message="boom")
     for body in (format_failure(job), format_cancelled(job)):
-        assert body.startswith("**Creasy —")
+        assert body.startswith(f"**Creasy {__version__} —")
         assert first_command(body) is None
         assert "## " not in body
 

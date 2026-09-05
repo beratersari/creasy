@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from creasy import __version__
 from creasy.jobs.models import JobRecord
 from creasy.logging import redact_userinfo
 from creasy.review.findings import split_findings
@@ -110,13 +111,13 @@ def format_success(job: JobRecord) -> str:
     model = job.model or "unknown"
     markdown, _findings = split_findings(job.text or "")
     body = soften_markdown(markdown.strip()) or "_(empty OpenCode response)_"
-    return f"**Creasy — {kind}** · `{model}` · `{job.job_id}`\n\n{body}\n"
+    return f"**Creasy {__version__} — {kind}** · `{model}` · `{job.job_id}`\n\n{body}\n"
 
 
 def format_failure(job: JobRecord) -> str:
     err = redact_userinfo((job.error_message or job.text or "unknown error").strip()) or "unknown error"
-    return f"**Creasy — Review failed** · `{job.job_id}`\n\n```\n{err}\n```\n"
+    return f"**Creasy {__version__} — Review failed** · `{job.job_id}`\n\n```\n{err}\n```\n"
 
 
 def format_cancelled(job: JobRecord) -> str:
-    return f"**Creasy — Cancelled** · `{job.job_id}` was cancelled.\n"
+    return f"**Creasy {__version__} — Cancelled** · `{job.job_id}` was cancelled.\n"
