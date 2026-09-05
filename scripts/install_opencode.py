@@ -103,6 +103,48 @@ def review_agent_dests(user_home: Path | None = None) -> list[Path]:
     return agent_dests("gitlab-reviewer", user_home)
 
 
+def vendor_ripgrep(root: Path) -> Path | None:
+    vendor_bin = Path(root) / "vendor" / "bin"
+    name = "rg.exe" if os.name == "nt" else "rg"
+    if os.name == "nt":
+        candidates = (vendor_bin / "windows" / name, vendor_bin / name)
+    elif sys.platform == "darwin":
+        machine = platform.machine().lower()
+        tag = "darwin-arm64" if machine in {"arm64", "aarch64"} else "darwin-x64"
+        candidates = (vendor_bin / tag / name, vendor_bin / name)
+    else:
+        candidates = (vendor_bin / "linux" / name, vendor_bin / name)
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def cache_ripgrep_dir(user_home: Path | None = None) -> Path:
+    return (user_home or home()) / ".cache" / "opencode" / "bin"
+
+
+def seed_ripgrep(root: Path, user_home: Path | None = None) -> list[Path]:
+    """Copy vendored rg next to the CLI and into OpenCode's download cache."""
+    src = vendor_ripgrep(root)
+    if src is None:
+        print("[WARNING] No vendored ripgrep; first serve may try to download rg.")
+        return []
+    written: list[Path] = []
+    dests = (
+        dest_dir(user_home) / src.name,
+        cache_ripgrep_dir(user_home) / src.name,
+    )
+    for dest in dests:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if os.name != "nt":
+            dest.chmod(dest.stat().st_mode | 0o111)
+        written.append(dest)
+        print(f"[OK] ripgrep seeded: {dest}")
+    return written
+
+
 def vendor_binary(root: Path) -> Path | None:
     vendor_bin = Path(root) / "vendor" / "bin"
     if os.name == "nt":
@@ -264,6 +306,7 @@ def install(root: Path, *, user_home: Path | None = None) -> Path:
     if os.name != "nt":
         dest.chmod(dest.stat().st_mode | 0o111)
     print(f"[OK] Binary installed: {dest}")
+    seed_ripgrep(root, user_home=base)
     print(f"Install root: {opencode_home(base)}")
     return dest
 

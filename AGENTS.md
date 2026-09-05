@@ -84,7 +84,9 @@ These look like bugs. They are not.
 
 - HTTPS only. Inject `GITLAB_TOKEN` as `oauth2:{token}@host`, then
   **scrub origin userinfo**. `GIT_TERMINAL_PROMPT=0`.
-  `GIT_SSL_NO_VERIFY=1` and `http.sslVerify=false`. No SSH.
+  `GIT_SSL_NO_VERIFY=1` and `http.sslVerify=false`.
+  `GCM_INTERACTIVE=never`, `GCM_MODAL_PROMPT=false`,
+  `GCM_GUI_PROMPT=false`. `-c core.longpaths=true`. No SSH.
 - First review: clone into `DATA_DIR/workspaces/{mr_key}`. Later
   jobs: `git fetch` source + target, checkout the MR `sha`.
 - After checkout, `merge-base origin/<target> HEAD`. Use GitLab
@@ -97,7 +99,9 @@ These look like bugs. They are not.
 
 - One `opencode serve` per job on `127.0.0.1:<ephemeral>`. Never
   hardcode a serve port. Never `opencode --auto`. No permission
-  auto-approve.
+  auto-approve. Serve env sets `OPENCODE_DISABLE_MODELS_FETCH=1`
+  and seeds `~/.cache/opencode/bin/rg` from the pack so first
+  run does not download models.dev or ripgrep.
 - Scope HTTP with `x-opencode-directory: <clone>`.
 - First job for an MR: create `ses_*` and store it on the workspace.
   Later jobs: resume that id. If OpenCode rejects it, create a new

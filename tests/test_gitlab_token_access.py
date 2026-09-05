@@ -34,6 +34,9 @@ def test_isolated_git_env_disables_ssl_verify() -> None:
     env = isolated_git_env()
     assert env["GIT_SSL_NO_VERIFY"] == "1"
     assert env["GIT_TERMINAL_PROMPT"] == "0"
+    assert env["GCM_INTERACTIVE"] == "never"
+    assert env["GCM_MODAL_PROMPT"] == "false"
+    assert env["GCM_GUI_PROMPT"] == "false"
 
 
 def test_run_git_passes_ssl_verify_false(monkeypatch) -> None:
@@ -49,6 +52,7 @@ def test_run_git_passes_ssl_verify_false(monkeypatch) -> None:
     assert cmd[0] == "git"
     assert "http.sslVerify=false" in cmd
     assert "credential.helper=" in cmd
+    assert "core.longpaths=true" in cmd
 
 
 def test_inject_token_empty_leaves_url() -> None:

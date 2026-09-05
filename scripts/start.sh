@@ -22,6 +22,10 @@ fi
 
 export GIT_TERMINAL_PROMPT=0
 export GIT_SSL_NO_VERIFY=1
+export OPENCODE_DISABLE_MODELS_FETCH=1
+export GCM_INTERACTIVE=never
+export GCM_MODAL_PROMPT=false
+export GCM_GUI_PROMPT=false
 export PYTHONUNBUFFERED=1
 if [[ -d "$HOME/.opencode/bin" ]]; then
   export PATH="$HOME/.opencode/bin:$PATH"

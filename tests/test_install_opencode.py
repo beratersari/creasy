@@ -27,12 +27,14 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
     shutil.copy2(REPO / "opencoderman" / "install.py", root / "opencoderman" / "install.py")
     if vendor:
         bin_name = "opencode.exe" if os.name == "nt" else "opencode"
+        rg_name = "rg.exe" if os.name == "nt" else "rg"
         if os.name == "nt":
-            path = root / "vendor" / "bin" / "windows" / bin_name
+            folder = root / "vendor" / "bin" / "windows"
         else:
-            path = root / "vendor" / "bin" / bin_name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"NEW")
+            folder = root / "vendor" / "bin"
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / bin_name).write_bytes(b"NEW")
+        (folder / rg_name).write_bytes(b"RG")
     return root
 
 
@@ -86,6 +88,9 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
     assert dest == home / ".opencode" / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
+    rg_name = "rg.exe" if os.name == "nt" else "rg"
+    assert (home / ".opencode" / "bin" / rg_name).read_bytes() == b"RG"
+    assert (home / ".cache" / "opencode" / "bin" / rg_name).read_bytes() == b"RG"
     cfg = json.loads((home / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
     assert cfg.get("plugin") == []
     agent = (home / ".opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
@@ -293,3 +298,27 @@ def test_missing_configs_submodule_fails(tmp_path: Path) -> None:
         assert "opencoderman" in str(exc)
     else:
         raise AssertionError("expected FileNotFoundError")
+
+
+def test_restricted_child_env_disables_models_fetch_and_gcm() -> None:
+    from creasy.opencode.serve import restricted_child_env
+
+    env = restricted_child_env({"PATH": "x"})
+    assert env["OPENCODE_DISABLE_MODELS_FETCH"] == "1"
+    assert env["OPENCODE_SERVER_PASSWORD"] == ""
+    assert env["GCM_MODAL_PROMPT"] == "false"
+    assert env["GCM_GUI_PROMPT"] == "false"
+    assert env["GIT_SSL_NO_VERIFY"] == "1"
+
+
+def test_seed_ripgrep_cache_copies_from_opencode_bin(tmp_path: Path) -> None:
+    from creasy.opencode.serve import seed_ripgrep_cache
+
+    name = "rg.exe" if os.name == "nt" else "rg"
+    src = tmp_path / "home" / ".opencode" / "bin" / name
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"RG-BIN")
+    dest = seed_ripgrep_cache(user_home=tmp_path / "home")
+    assert dest is not None
+    assert dest.read_bytes() == b"RG-BIN"
+    assert dest == tmp_path / "home" / ".cache" / "opencode" / "bin" / name

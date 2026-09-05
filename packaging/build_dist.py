@@ -544,6 +544,40 @@ def fetch_standalone_python(ver: dict[str, str], os_name: str, dest: Path) -> st
     return asset
 
 
+def ripgrep_asset(ver: dict[str, str], os_name: str, arch: str) -> str:
+    rg_ver = ver.get("RIPGREP_VERSION") or "15.1.0"
+    if os_name == "windows":
+        return f"ripgrep-{rg_ver}-x86_64-pc-windows-msvc.zip"
+    if os_name == "linux":
+        return f"ripgrep-{rg_ver}-x86_64-unknown-linux-musl.tar.gz"
+    if arch == "arm64":
+        return f"ripgrep-{rg_ver}-aarch64-apple-darwin.tar.gz"
+    return f"ripgrep-{rg_ver}-x86_64-apple-darwin.tar.gz"
+
+
+def fetch_ripgrep(ver: dict[str, str], os_name: str, arch: str, dest_bin: Path) -> str:
+    rg_ver = ver.get("RIPGREP_VERSION") or "15.1.0"
+    asset = ripgrep_asset(ver, os_name, arch)
+    url = f"https://github.com/BurntSushi/ripgrep/releases/download/{rg_ver}/{asset}"
+    dest_bin.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="creasy-rg-") as tmp:
+        tmp_path = Path(tmp)
+        archive = tmp_path / asset
+        download(url, archive)
+        extracted = tmp_path / "extract"
+        extract_archive(archive, extracted)
+        names = ("rg.exe", "rg") if os_name == "windows" else ("rg", "rg.exe")
+        binary = find_file(extracted, names)
+        if binary is None:
+            raise SystemExit(f"ripgrep binary not found in {asset}")
+        target = dest_bin / binary.name
+        shutil.copy2(binary, target)
+        if os_name != "windows":
+            target.chmod(target.stat().st_mode | 0o111)
+        print(f"  ripgrep binary: {target} ({target.stat().st_size / (1024 * 1024):.1f} MB)")
+    return asset
+
+
 def fetch_opencode(ver: dict[str, str], os_name: str, arch: str, dest_bin: Path) -> str:
     version = ver["OPENCODE_VERSION"]
     repo = ver.get("OPENCODE_REPO") or "anomalyco/opencode"
@@ -741,6 +775,7 @@ def main(argv: list[str] | None = None) -> int:
     oc_root = cache / "bin"
     for pack_os, pack_arch, dest_name in oc_needed:
         oc_assets.append(fetch_opencode(ver, pack_os, pack_arch, oc_root / dest_name))
+        fetch_ripgrep(ver, pack_os, pack_arch, oc_root / dest_name)
 
     if args.in_place:
         (cache / "SUPPORTED_PYTHON.txt").write_text(

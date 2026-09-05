@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +24,66 @@ def free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
+
+
+def restricted_child_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Env for opencode serve / git children on restricted Windows boxes."""
+    env = dict(base if base is not None else os.environ)
+    env["OPENCODE_SERVER_PASSWORD"] = ""
+    # Skip models.dev (stalls / log-spam on intercept or air-gapped nets).
+    env["OPENCODE_DISABLE_MODELS_FETCH"] = "1"
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_SSL_NO_VERIFY"] = "1"
+    env.setdefault("GIT_ASKPASS", "echo")
+    env["GCM_INTERACTIVE"] = "never"
+    env["GCM_MODAL_PROMPT"] = "false"
+    env["GCM_GUI_PROMPT"] = "false"
+    return env
+
+
+def _vendor_ripgrep() -> Path | None:
+    name = "rg.exe" if os.name == "nt" else "rg"
+    root = Path(__file__).resolve().parents[3]
+    vendor = root / "vendor" / "bin"
+    tags: list[str] = []
+    if os.name == "nt":
+        tags = ["windows"]
+    elif sys.platform == "darwin":
+        machine = platform.machine().lower()
+        tags = ["darwin-arm64" if machine in {"arm64", "aarch64"} else "darwin-x64"]
+    else:
+        tags = ["linux"]
+    candidates = [vendor / tag / name for tag in tags]
+    candidates.append(vendor / name)
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def seed_ripgrep_cache(user_home: Path | None = None) -> Path | None:
+    """Copy vendored rg into ~/.cache/opencode/bin so serve does not download it."""
+    name = "rg.exe" if os.name == "nt" else "rg"
+    home = Path(user_home) if user_home is not None else Path(
+        os.environ.get("USERPROFILE") or Path.home()
+    )
+    dest = home / ".cache" / "opencode" / "bin" / name
+    if dest.is_file():
+        return dest
+    sources = [
+        home / ".opencode" / "bin" / name,
+        _vendor_ripgrep(),
+    ]
+    for src in sources:
+        if src is None or not src.is_file():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if os.name != "nt":
+            dest.chmod(dest.stat().st_mode | 0o111)
+        logger.info("seeded ripgrep %s", dest)
+        return dest
+    return None
 
 
 def serve_log_path(serve_dir: Path, job_id: str) -> Path:
@@ -76,8 +138,8 @@ def start_serve(
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     log_f.write(f"\n===== opencode serve start {stamp} port={port} cwd={cwd} =====\n")
     log_f.flush()
-    env = os.environ.copy()
-    env["OPENCODE_SERVER_PASSWORD"] = ""
+    seed_ripgrep_cache()
+    env = restricted_child_env()
     try:
         proc = subprocess.Popen(
             cmd,

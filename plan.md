@@ -280,6 +280,10 @@ This is a webhook server, not a desktop OSM worker. No GCM popup.
 - TLS: `verify=False` on every outbound HTTP client. Git uses
   `GIT_SSL_NO_VERIFY=1` and `-c http.sslVerify=false` (on-prem /
   intercept; no custom-CA path yet).
+- Git children also get `GCM_MODAL_PROMPT=false`,
+  `GCM_GUI_PROMPT=false`, and `-c core.longpaths=true`.
+- OpenCode serve sets `OPENCODE_DISABLE_MODELS_FETCH=1` and the
+  pack/install seeds `rg` into `~/.cache/opencode/bin`.
 
 ### 7. Stack
 

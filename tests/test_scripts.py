@@ -44,6 +44,10 @@ def test_start_scripts_launch_creasy():
     assert "GIT_SSL_NO_VERIFY" in bat
     assert "GIT_SSL_NO_VERIFY" in sh
     assert "GIT_SSL_NO_VERIFY" in _read("scripts/run-server.bat")
+    for body in (bat, sh, _read("scripts/run-server.bat")):
+        assert "OPENCODE_DISABLE_MODELS_FETCH" in body
+        assert "GCM_MODAL_PROMPT" in body
+        assert "GCM_GUI_PROMPT" in body
     assert "opencode" in bat.lower()
     assert "opencode" in sh
 

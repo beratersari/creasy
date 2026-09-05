@@ -62,6 +62,18 @@ def test_opencode_asset_names() -> None:
     assert "arm64" in mod.opencode_asset(ver, "darwin", "arm64")
 
 
+def test_ripgrep_asset_names() -> None:
+    ver = {"RIPGREP_VERSION": "15.1.0"}
+    mod = _load()
+    win = mod.ripgrep_asset(ver, "windows", "x64")
+    linux = mod.ripgrep_asset(ver, "linux", "x64")
+    dar = mod.ripgrep_asset(ver, "darwin", "arm64")
+    assert win.endswith("x86_64-pc-windows-msvc.zip")
+    assert linux.endswith("x86_64-unknown-linux-musl.tar.gz")
+    assert "aarch64-apple-darwin" in dar
+    assert "15.1.0" in win and "15.1.0" in linux
+
+
 def test_copy_dirs_include_opencode_configs() -> None:
     mod = _load()
     assert "opencoderman" in mod.COPY_DIRS
