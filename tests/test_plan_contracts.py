@@ -84,14 +84,20 @@ class SpyGitlab:
         self.discussion_error: Exception | None = None
         self.list_error: Exception | None = None
         self.reply_error: Exception | None = None
+        self.mr_error: Exception | None = None
+        self.note_error: Exception | None = None
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
+        if self.mr_error:
+            raise self.mr_error
         return self.mr
 
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:
         return fallback or self.mr.http_url
 
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict:
+        if self.note_error:
+            raise self.note_error
         self.notes.append(body)
         return {"ok": True}
 
@@ -453,6 +459,169 @@ def test_worker_failure_posts_error_note_and_keeps_clone(tmp_config, monkeypatch
     assert result.posted
     assert spy.notes and "failed" in spy.notes[0].lower()
     assert dest.exists()
+
+
+def test_worker_clone_auth_failure_posts_error_note(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.mr = _mr(http_url="https://gitlab.example/group/repo.git")
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    started: list[int] = []
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(
+        w,
+        "clone_repo",
+        lambda *a, **k: (_ for _ in ()).throw(
+            GitError("git failed (128): HTTP Basic: Access denied")
+        ),
+    )
+    monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+
+    result = runner.run(_job(), lambda: False)
+    assert result.error.startswith("git failed:")
+    assert "Access denied" in result.error
+    assert result.posted
+    assert result.clone_path == ""
+    assert spy.notes and "Review failed" in spy.notes[0]
+    assert "Access denied" in spy.notes[0]
+    assert not dest.exists()
+    assert started == []
+
+
+def test_worker_fetch_auth_failure_keeps_clone_and_posts_error(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    dest.mkdir(parents=True)
+    (dest / ".git").mkdir()
+    spy = SpyGitlab()
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    started: list[int] = []
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(
+        w,
+        "fetch_and_checkout",
+        lambda *a, **k: (_ for _ in ()).throw(
+            GitError("git failed (128): The project you were looking for could not be found")
+        ),
+    )
+    monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+
+    result = runner.run(_job(), lambda: False)
+    assert result.error.startswith("git failed:")
+    assert "could not be found" in result.error
+    assert result.posted
+    assert spy.notes and "Review failed" in spy.notes[0]
+    assert dest.exists()
+    assert started == []
+
+
+def test_worker_mr_fetch_401_posts_error_note(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.mr_error = GitLabError(
+        "fetch MR failed: Client error '401 Unauthorized' for url 'https://gitlab.example/api/v4/projects/1/merge_requests/1'",
+        status_code=401,
+    )
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    started: list[int] = []
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+
+    result = runner.run(_job(), lambda: False)
+    assert result.error.startswith("pipeline failed:")
+    assert "401" in result.error
+    assert result.posted
+    assert spy.notes and "Review failed" in spy.notes[0]
+    assert not dest.exists()
+    assert started == []
+
+
+def test_worker_missing_repo_url_posts_error_note(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.mr = _mr(http_url="")
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    started: list[int] = []
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+
+    result = runner.run(_job(), lambda: False)
+    assert result.error.startswith("git failed:")
+    assert "no http repo url" in result.error
+    assert result.posted
+    assert not dest.exists()
+    assert started == []
+
+
+def test_worker_note_403_leaves_job_unposted(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.note_error = GitLabError("post note failed: 403 Forbidden", status_code=403)
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait="looks good"), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    result = runner.run(_job(), lambda: False)
+    assert result.error == ""
+    assert result.text == "looks good"
+    assert result.posted is False
+    assert spy.notes == []
+    assert dest.exists()
+
+
+def test_worker_empty_token_is_passed_to_clone(tmp_config, monkeypatch):
+    tmp_config.gitlab_token = ""
+    dest = tmp_config.work_dir / "1-1"
+    spy = SpyGitlab()
+    spy.mr = _mr(http_url="https://gitlab.example/group/repo.git")
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    seen: dict[str, object] = {}
+    import creasy.jobs.worker as w
+
+    def _clone(url, dest_path, token, *, timeout):
+        seen["url"] = url
+        seen["token"] = token
+        raise GitError("git failed (128): Authentication failed")
+
+    monkeypatch.setattr(w, "clone_repo", _clone)
+    monkeypatch.setattr(w, "start_serve", lambda **k: None)
+    monkeypatch.setattr(w, "stop_serve", lambda h: None)
+    monkeypatch.setattr(w, "stop_job_holders", lambda *a, **k: None)
+
+    result = runner.run(_job(), lambda: False)
+    assert seen["token"] == ""
+    assert seen["url"] == "https://gitlab.example/group/repo.git"
+    assert result.error.startswith("git failed:")
+    assert result.posted
+    assert not dest.exists()
 
 
 def test_unreadable_session_creates_new(tmp_config, monkeypatch):
