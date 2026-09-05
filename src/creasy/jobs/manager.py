@@ -44,6 +44,7 @@ class Manager:
         self._running_mr: set[str] = set()
         self._cancel: dict[str, threading.Event] = {}
         self._threads: list[threading.Thread] = []
+        self._draining_mr: set[str] = set()
 
     def boot(self) -> None:
         leftover = [j for j in self.store.list_all() if j.status in {"queued", "running"}]
@@ -102,6 +103,9 @@ class Manager:
             return "ignored", None, "manager is not accepting jobs"
         key = mr_key(trigger.project_id, trigger.mr_iid)
         with self._lock:
+            if key in self._draining_mr:
+                logger.info("skip %s for %s (MR is closing)", trigger.kind, key)
+                return "ignored", None, "MR is closing"
             running = self.store.running_for_mr(key)
             queued_ids = self.queue.queued_ids(key)
             if not trigger.explicit and (running or queued_ids):
@@ -186,41 +190,54 @@ class Manager:
         # Drain the FIFO first (under the start lock) so _after_job cannot
         # pop the next comment and start it while we cancel the runner.
         with self._lock:
+            if delete_clone_dir:
+                self._draining_mr.add(key)
             cancelled = self._cancel_queued_locked(key)
             running = self.store.running_for_mr(key)
-        if running:
-            ok, _ = self.cancel_job(running.job_id)
-            if ok:
-                cancelled += 1
-        if delete_clone_dir:
+        try:
             if running:
-                for thread in list(self._threads):
-                    if thread.name == running.job_id:
-                        thread.join(timeout=15)
-                        break
-            with self._lock:
-                cancelled += self._cancel_queued_locked(key)
-            record = self.workspaces.get(key)
-            path = Path(record.clone_path) if record and record.clone_path else clone_path_for(self.config.work_dir, key)
-            holders = running
-            if holders is None:
-                holders = JobRecord(
-                    job_id="cleanup",
-                    mr_key=key,
-                    project_id=project_id,
-                    mr_iid=mr_iid,
-                    trigger="review",
-                )
-            try:
-                stop_job_holders(holders, path, protect=protect_pids())
-            except Exception:  # noqa: BLE001
-                logger.exception("stop_job_holders failed %s", key)
-            try:
-                delete_clone_path(path, reason=delete_reason)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("delete clone failed %s: %s", key, exc)
-            self.workspaces.delete(key)
-        return cancelled, key
+                ok, _ = self.cancel_job(running.job_id)
+                if ok:
+                    cancelled += 1
+            if delete_clone_dir:
+                if running:
+                    for thread in list(self._threads):
+                        if thread.name == running.job_id:
+                            thread.join(timeout=30)
+                            break
+                    latest = self.store.get(running.job_id)
+                    if latest:
+                        try:
+                            kill_job_tree([latest.serve_pid, *list(latest.extra_pids or [])])
+                        except Exception:  # noqa: BLE001
+                            logger.exception("cleanup kill leftover pids failed %s", key)
+                with self._lock:
+                    cancelled += self._cancel_queued_locked(key)
+                record = self.workspaces.get(key)
+                path = Path(record.clone_path) if record and record.clone_path else clone_path_for(self.config.work_dir, key)
+                holders = running
+                if holders is None:
+                    holders = JobRecord(
+                        job_id="cleanup",
+                        mr_key=key,
+                        project_id=project_id,
+                        mr_iid=mr_iid,
+                        trigger="review",
+                    )
+                try:
+                    stop_job_holders(holders, path, protect=protect_pids())
+                except Exception:  # noqa: BLE001
+                    logger.exception("stop_job_holders failed %s", key)
+                try:
+                    delete_clone_path(path, reason=delete_reason)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("delete clone failed %s: %s", key, exc)
+                self.workspaces.delete(key)
+            return cancelled, key
+        finally:
+            if delete_clone_dir:
+                with self._lock:
+                    self._draining_mr.discard(key)
 
     def _cancel_queued_locked(self, key: str) -> int:
         cancelled = 0
@@ -233,6 +250,8 @@ class Manager:
 
     def _try_start_locked(self, mr_key_value: str) -> bool:
         if self.stopping or not self.ready:
+            return False
+        if mr_key_value in self._draining_mr:
             return False
         if mr_key_value in self._running_mr:
             return False

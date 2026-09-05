@@ -20,6 +20,39 @@ def _trig(kind="review", comment="", iid=3) -> ReviewTrigger:
     )
 
 
+def test_submit_ignored_while_mr_is_closing(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    manager._draining_mr.add("9-3")
+    ack, job, message = manager.submit(_trig("review", "after close"))
+    assert ack == "ignored"
+    assert job is None
+    assert "closing" in message
+    manager.shutdown()
+
+
+def test_close_does_not_start_comment_arriving_during_cleanup(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    dest = tmp_config.work_dir / "9-12"
+    dest.mkdir(parents=True)
+    manager.workspaces.save(
+        WorkspaceRecord(mr_key="9-12", project_id=9, mr_iid=12, clone_path=str(dest))
+    )
+    manager.submit(_trig("review", "first", iid=12))
+    assert runner.started.wait(2)
+    manager._draining_mr.add("9-12")
+    ack, job, _ = manager.submit(_trig("ask", "during close", iid=12))
+    assert ack == "ignored"
+    assert job is None
+    manager.cleanup_mr(CleanupTrigger(project_id=9, mr_iid=12, action="close"))
+    assert "9-12" not in manager._draining_mr
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_cancel_queued_leaves_runner(tmp_config):
     runner = FakeRunner()
     manager = Manager(tmp_config, runner)
