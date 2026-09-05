@@ -120,7 +120,7 @@ function partMarkdown(part: ChatPart): string[] {
 function gitExplanation(job: JobItem): string {
   return [
     'Creasy keeps the clone with the MR until close or merge.',
-    'A finished job kills the serve but leaves the tree so later /review or /ask can resume ses_*.',
+    'A finished job kills the serve but leaves the tree so later /review or /ask can resume ses_*. /reset clears comments and that session.',
     '',
     `clone_path: ${job.clone_path || '(none recorded)'}`,
     `repo_url: ${job.repo_url || '(none)'}`,
