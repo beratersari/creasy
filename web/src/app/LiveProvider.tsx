@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { dashboardWsUrl } from '../api/client'
+import { TOKEN_EVENT } from '../api/token'
 import { LiveContext } from './live'
 
 export function LiveProvider({ children }: { children: ReactNode }) {
@@ -9,6 +10,13 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     running: 0,
     queueQueued: 0,
   })
+  const [authTick, setAuthTick] = useState(0)
+
+  useEffect(() => {
+    const onToken = () => setAuthTick((n) => n + 1)
+    window.addEventListener(TOKEN_EVENT, onToken)
+    return () => window.removeEventListener(TOKEN_EVENT, onToken)
+  }, [])
 
   useEffect(() => {
     let ws: WebSocket | null = null
@@ -40,7 +48,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       closed = true
       ws?.close()
     }
-  }, [])
+  }, [authTick])
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>
 }

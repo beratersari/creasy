@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from creasy.api.dashboard import router as dashboard_router
 from creasy.gitlab.client import GitLabError, MergeRequest
@@ -657,9 +658,9 @@ def test_worker_note_403_leaves_job_unposted(tmp_config, monkeypatch):
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait="looks good"), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
     result = runner.run(_job(), lambda: False)
-    assert result.error == ""
-    assert result.text == "looks good"
     assert result.posted is False
+    assert "post note failed" in result.error
+    assert result.text == "looks good"
     assert spy.notes == []
     assert dest.exists()
 
@@ -674,7 +675,7 @@ def test_worker_empty_token_is_passed_to_clone(tmp_config, monkeypatch):
     seen: dict[str, object] = {}
     import creasy.jobs.worker as w
 
-    def _clone(url, dest_path, token, *, timeout):
+    def _clone(url, dest_path, token, *, timeout, **_kwargs):
         seen["url"] = url
         seen["token"] = token
         raise GitError("git failed (128): Authentication failed")
@@ -875,6 +876,27 @@ def test_dashboard_open_when_token_unset(tmp_config):
     app.include_router(dashboard_router)
     client = TestClient(app)
     assert client.get("/api/jobs").status_code == 200
+    manager.shutdown()
+
+
+def test_dashboard_ws_requires_token_when_set(tmp_config):
+    tmp_config.dashboard_token = "dash-secret"
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    app = FastAPI()
+    app.state.config = tmp_config
+    app.state.manager = manager
+    app.include_router(dashboard_router)
+    client = TestClient(app)
+    try:
+        with client.websocket_connect("/ws"):
+            raise AssertionError("unauthenticated websocket should not connect")
+    except WebSocketDisconnect as exc:
+        assert exc.code == 1008
+    with client.websocket_connect("/ws?token=dash-secret") as ws:
+        payload = ws.receive_json()
+        assert "running" in payload
     manager.shutdown()
 
 

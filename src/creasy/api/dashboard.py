@@ -22,14 +22,23 @@ router = APIRouter()
 logger = get_logger("dashboard")
 
 
+def _provided_dashboard_token(headers, query_token: str = "") -> str:
+    header = (headers.get("x-creasy-token") or headers.get("X-Creasy-Token") or "").strip()
+    auth = headers.get("authorization") or headers.get("Authorization") or ""
+    bearer = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    return (query_token or header or bearer).strip()
+
+
+def _token_matches(expected: str, got: str) -> bool:
+    return not expected or got == expected
+
+
 def _check_token(request: Request) -> None:
     token = request.app.state.config.dashboard_token
     if not token:
         return
-    auth = request.headers.get("Authorization") or ""
-    header = request.headers.get("X-Creasy-Token") or ""
-    bearer = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    if header != token and bearer != token:
+    got = _provided_dashboard_token(request.headers)
+    if not _token_matches(token, got):
         raise HTTPException(status_code=401, detail="dashboard token required")
 
 
@@ -233,6 +242,11 @@ def api_report_context(request: Request) -> dict:
 
 @router.websocket("/ws")
 async def dashboard_ws(ws: WebSocket) -> None:
+    expected = ws.app.state.config.dashboard_token
+    got = _provided_dashboard_token(ws.headers, ws.query_params.get("token") or "")
+    if not _token_matches(expected, got):
+        await ws.close(code=1008)
+        return
     await ws.accept()
     try:
         while True:
