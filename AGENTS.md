@@ -19,8 +19,12 @@ These look like bugs. They are not.
 1. **The product of a job is one MR note plus optional diff threads.**
    Last assistant markdown (findings JSON stripped) as the Overview
    note, then one Discussions-API thread per structured finding
-   (`path` + line range). Short error / cancelled notes have no
-   threads. A failed thread does not fail the job. No git push.
+   (`path` + line range). A later `/review` that matches an existing
+   unresolved Creasy thread replies there, unless the last Creasy
+   note is ≥ 90% similar (Ratcliff-Obershelp / token Jaccard /
+   3-gram Jaccard) — then skip the reply and do not open a new
+   thread. Short error / cancelled notes have no threads. A failed
+   thread does not fail the job. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/review` or `/ask` can resume `ses_*` on the same path.

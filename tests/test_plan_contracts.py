@@ -329,6 +329,74 @@ new file mode 100644
     assert "still overflows" in spy.replies[0]["body"]
 
 
+def test_worker_skips_similar_thread_reply(tmp_config, monkeypatch):
+    dest = tmp_config.work_dir / "1-1"
+    from creasy.review.findings import Finding
+    from creasy.review.position import format_discussion
+
+    same = format_discussion(
+        Finding(
+            path="src/buf.cpp",
+            start_line=2,
+            end_line=2,
+            side="new",
+            severity="critical",
+            title="overflow",
+            body="strcpy overflows",
+        )
+    )
+    spy = SpyGitlab()
+    spy.existing = [
+        {
+            "id": "disc_old",
+            "notes": [
+                {
+                    "body": same,
+                    "resolved": False,
+                    "position": {"new_path": "src/buf.cpp", "new_line": 2},
+                }
+            ],
+        }
+    ]
+    workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
+    runner = OpenCodeRunner(tmp_config, workspaces, spy)
+    reply = """```creasy-findings
+{"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
+```
+"""
+    diff = """diff --git a/src/buf.cpp b/src/buf.cpp
+new file mode 100644
+--- /dev/null
++++ b/src/buf.cpp
+@@ -0,0 +1,3 @@
++char dest[8];
++strcpy(dest, src);
++return dest;
+"""
+
+    def _ensure(job, mr, stop):
+        return workspaces.save(
+            WorkspaceRecord(
+                mr_key=job.mr_key,
+                project_id=job.project_id,
+                mr_iid=job.mr_iid,
+                clone_path=str(dest),
+                last_sha="newsha",
+            )
+        )
+
+    _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
+    monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
+    import creasy.jobs.worker as w
+
+    monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
+    result = runner.run(_job(), lambda: False)
+    assert result.posted
+    assert result.findings_posted == 0
+    assert spy.replies == []
+    assert spy.discussions == []
+
+
 def test_worker_posts_new_thread_when_reply_fails(tmp_config, monkeypatch):
     dest = tmp_config.work_dir / "1-1"
     spy = SpyGitlab()

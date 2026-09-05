@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from creasy.review.findings import Finding
 from creasy.review.position import CREASY_FINDING_MARK, format_discussion
+from creasy.review.similarity import should_skip_similar_reply, text_similarity
 from creasy.review.threads import match_creasy_thread, parse_creasy_thread, parse_creasy_threads
 
 
@@ -127,3 +128,43 @@ def test_no_overlap_and_side_mismatch() -> None:
     assert old_only[0].side == "old"
     assert match_creasy_thread(_finding(side="new"), old_only, set()) is None
     assert match_creasy_thread(_finding(side="old", start_line=40, end_line=40), old_only, set()) is not None
+
+
+def test_parse_keeps_last_creasy_note_body() -> None:
+    raw = _raw()
+    raw["notes"].append(
+        {"body": f"{CREASY_FINDING_MARK}\n**Critical** · overflow\n\nstill overflows", "resolved": False}
+    )
+    thread = parse_creasy_thread(raw)
+    assert thread is not None
+    assert "still overflows" in thread.last_body
+
+
+def test_identical_notes_are_above_similarity_threshold() -> None:
+    text = format_discussion(_finding())
+    assert text_similarity(text, text) >= 0.90
+    assert should_skip_similar_reply(text, text)
+
+
+def test_near_duplicate_long_notes_skip() -> None:
+    base = format_discussion(
+        _finding(
+            body=(
+                "strcpy copies src into an 8-byte stack buffer with no length check. "
+                "main calls it with a 34-character string so every run overflows dest."
+            )
+        )
+    )
+    tweaked = base.replace("every run overflows dest", "every run overflows dest.")
+    assert should_skip_similar_reply(tweaked, base)
+
+
+def test_different_finding_does_not_skip() -> None:
+    old = format_discussion(_finding(title="overflow", body="strcpy overflows dest"))
+    new = format_discussion(_finding(title="use after free", body="delete then dereference ptr"))
+    assert text_similarity(old, new) < 0.90
+    assert not should_skip_similar_reply(new, old)
+
+
+def test_empty_last_body_does_not_skip() -> None:
+    assert not should_skip_similar_reply(format_discussion(_finding()), "")

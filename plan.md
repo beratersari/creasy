@@ -252,8 +252,10 @@ We do **not** walk each file through a separate OpenCode call (old reviewer). We
 MR note per job, plus one GitLab diff thread per structured finding
 the agent emits. The note is still the full review. Threads are
 anchors on `path` + line range (`x.cpp` 30–40), posted via
-`POST /projects/:id/merge_requests/:iid/discussions`. A failed
-thread is logged and skipped; it does not fail the job.
+`POST /projects/:id/merge_requests/:iid/discussions`. If the
+finding overlaps an unresolved Creasy thread, reply on that
+thread unless the last Creasy note is ≥ 90% similar (then skip).
+A failed thread is logged and skipped; it does not fail the job.
 
 The agent reply is the markdown review, plus an optional
 `creasy-findings` fence. Creasy strips that fence before posting

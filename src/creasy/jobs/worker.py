@@ -15,6 +15,7 @@ from creasy.jobs.store import JobStore
 from creasy.review.findings import Finding, split_findings
 from creasy.review.format import format_cancelled, format_failure, format_success
 from creasy.review.position import build_position_variants, format_discussion
+from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
 from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt, load_review_rules
 from creasy.workspace.diffmap import parse_unified_diff
@@ -380,6 +381,7 @@ class OpenCodeRunner:
         used: set[str] = set()
         posted = 0
         replies = 0
+        skipped = 0
         for finding in findings:
             variants = build_position_variants(
                 finding,
@@ -399,6 +401,16 @@ class OpenCodeRunner:
                 continue
             body = format_discussion(finding)
             matched = match_creasy_thread(finding, existing, used)
+            if matched and should_skip_similar_reply(body, matched.last_body):
+                used.add(matched.discussion_id)
+                skipped += 1
+                logger.info(
+                    "skip similar reply job=%s discussion=%s path=%s",
+                    job.job_id,
+                    matched.discussion_id,
+                    finding.path,
+                )
+                continue
             if matched and self._reply_finding(job, matched.discussion_id, body):
                 used.add(matched.discussion_id)
                 posted += 1
@@ -425,9 +437,17 @@ class OpenCodeRunner:
                     last_error,
                 )
         result.findings_posted = posted
-        if posted:
-            logger.info("posted %s diff thread(s) replies=%s", posted, replies)
-            self._append_job_log(job, f"posted {posted} diff thread(s) replies={replies}")
+        if posted or skipped:
+            logger.info(
+                "posted %s diff thread(s) replies=%s skipped_similar=%s",
+                posted,
+                replies,
+                skipped,
+            )
+            self._append_job_log(
+                job,
+                f"posted {posted} diff thread(s) replies={replies} skipped_similar={skipped}",
+            )
 
     def _existing_creasy_threads(self, job: JobRecord):
         lister = getattr(self.gitlab, "list_discussions", None)

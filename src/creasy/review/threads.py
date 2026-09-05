@@ -24,6 +24,7 @@ class ExistingThread:
     end_line: int
     side: str
     resolved: bool
+    last_body: str = ""
 
 
 def is_creasy_finding_body(body: str) -> bool:
@@ -94,7 +95,19 @@ def parse_creasy_thread(raw: dict[str, Any]) -> Optional[ExistingThread]:
         end_line=end,
         side=side,
         resolved=bool(first.get("resolved") or raw.get("resolved")),
+        last_body=_last_creasy_body(notes),
     )
+
+
+def _last_creasy_body(notes: list) -> str:
+    last = ""
+    for note in notes:
+        if not isinstance(note, dict) or note.get("system"):
+            continue
+        body = str(note.get("body") or "")
+        if is_creasy_finding_body(body):
+            last = body
+    return last
 
 
 def parse_creasy_threads(raw: Iterable[Any]) -> list[ExistingThread]:
