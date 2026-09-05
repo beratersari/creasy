@@ -22,9 +22,9 @@ def _load():
 
 def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
     root = tmp_path / "pkg"
-    shutil.copytree(REPO / "opencode-configs" / "agents", root / "opencode-configs" / "agents")
-    shutil.copytree(REPO / "opencode-configs" / "skills", root / "opencode-configs" / "skills")
-    shutil.copy2(REPO / "opencode-configs" / "install.py", root / "opencode-configs" / "install.py")
+    shutil.copytree(REPO / "opencoderman" / "agents", root / "opencoderman" / "agents")
+    shutil.copytree(REPO / "opencoderman" / "skills", root / "opencoderman" / "skills")
+    shutil.copy2(REPO / "opencoderman" / "install.py", root / "opencoderman" / "install.py")
     if vendor:
         bin_name = "opencode.exe" if os.name == "nt" else "opencode"
         if os.name == "nt":
@@ -37,7 +37,7 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
 
 
 def test_review_agent_source_is_primary_readonly() -> None:
-    text = (REPO / "opencode-configs" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    text = (REPO / "opencoderman" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
     assert text.startswith("---")
     assert "mode: primary" in text
     assert "edit: deny" in text
@@ -167,7 +167,7 @@ def test_pack_vendor_used_when_creasy_vendor_missing(tmp_path: Path) -> None:
         tag = "darwin-arm64" if machine in {"arm64", "aarch64"} else "darwin-x64"
     else:
         tag = "linux"
-    path = root / "opencode-configs" / "vendor" / "bin" / tag / bin_name
+    path = root / "opencoderman" / "vendor" / "bin" / tag / bin_name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"PACK")
     dest = mod.install(root, user_home=tmp_path / "home")
@@ -207,11 +207,11 @@ def test_config_only_home_is_backed_up_and_new_home_created(tmp_path: Path) -> N
 
 
 def test_cpp_skills_state_when_to_load() -> None:
-    cpp98 = (REPO / "opencode-configs" / "skills" / "cpp98" / "SKILL.md").read_text(
+    cpp98 = (REPO / "opencoderman" / "skills" / "cpp98" / "SKILL.md").read_text(
         encoding="utf-8"
     )
     modern = (
-        REPO / "opencode-configs" / "skills" / "modern-cpp" / "SKILL.md"
+        REPO / "opencoderman" / "skills" / "modern-cpp" / "SKILL.md"
     ).read_text(encoding="utf-8")
     assert cpp98.startswith("---")
     assert modern.startswith("---")
@@ -231,7 +231,7 @@ def test_cpp_skills_state_when_to_load() -> None:
 
 
 def test_extra_skills_state_when_to_load() -> None:
-    root = REPO / "opencode-configs" / "skills"
+    root = REPO / "opencoderman" / "skills"
     names = sorted(p.name for p in root.iterdir() if (p / "SKILL.md").is_file())
     assert len(names) >= 40
     for name in names:
@@ -250,10 +250,10 @@ def test_default_agent_is_gitlab_reviewer() -> None:
 def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:
     mod = _load()
     root = _plant_root(tmp_path, vendor=True)
-    extra = root / "opencode-configs" / "agents" / "planner.md"
+    extra = root / "opencoderman" / "agents" / "planner.md"
     extra.write_text("---\nmode: primary\n---\nplanner\n", encoding="utf-8")
-    (root / "opencode-configs" / "skills" / "extra").mkdir()
-    (root / "opencode-configs" / "skills" / "extra" / "SKILL.md").write_text(
+    (root / "opencoderman" / "skills" / "extra").mkdir()
+    (root / "opencoderman" / "skills" / "extra" / "SKILL.md").write_text(
         "---\nname: extra\n---\n", encoding="utf-8"
     )
     home = tmp_path / "home"
@@ -290,6 +290,6 @@ def test_missing_configs_submodule_fails(tmp_path: Path) -> None:
     try:
         mod.list_agent_files(root)
     except FileNotFoundError as exc:
-        assert "opencode-configs" in str(exc)
+        assert "opencoderman" in str(exc)
     else:
         raise AssertionError("expected FileNotFoundError")

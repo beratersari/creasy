@@ -75,8 +75,8 @@ def test_bat_files_avoid_osm_cmd_bugs():
 def test_install_opencode_scripts_require_configs():
     bat = _read("scripts/install-opencode.bat")
     sh = _read("scripts/install-opencode.sh")
-    assert r"opencode-configs\agents\gitlab-reviewer.md" in bat
-    assert "opencode-configs/agents/gitlab-reviewer.md" in sh
+    assert r"opencoderman\agents\gitlab-reviewer.md" in bat
+    assert "opencoderman/agents/gitlab-reviewer.md" in sh
     assert "submodule update --init" in bat
     assert "submodule update --init" in sh
 

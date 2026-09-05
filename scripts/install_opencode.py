@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install the OpenCode CLI and this repo's agents/skills (offline, stdlib).
 
-Uses the same replace rules as opencode-configs/install.py: backup
+Uses the same replace rules as opencoderman/install.py: backup
 ~/.opencode, unhook other installs from PATH, write a clean ~/.opencode
 (do not copy into ~/.config/opencode; leftover trees there are backed
 up and left unwritten), then copy the vendored binary (or the binary
@@ -26,9 +26,9 @@ STOCK_CONFIG = """{
 }
 """
 
-CONFIGS_REL = Path("opencode-configs")
-REVIEW_AGENT_REL = CONFIGS_REL / "agents" / "gitlab-reviewer.md"
-REVIEW_SKILLS_REL = CONFIGS_REL / "skills"
+PACK_REL = Path("opencoderman")
+REVIEW_AGENT_REL = PACK_REL / "agents" / "gitlab-reviewer.md"
+REVIEW_SKILLS_REL = PACK_REL / "skills"
 
 
 def home() -> Path:
@@ -58,7 +58,7 @@ def dest_binary(user_home: Path | None = None) -> Path:
 
 
 def configs_root(root: Path) -> Path:
-    return Path(root) / CONFIGS_REL
+    return Path(root) / PACK_REL
 
 
 def review_agent_source(root: Path) -> Path:
@@ -73,7 +73,7 @@ def list_agent_files(root: Path) -> list[Path]:
     folder = configs_root(root) / "agents"
     if not folder.is_dir():
         raise FileNotFoundError(
-            f"OpenCode configs missing: {folder} (git submodule update --init)"
+            f"OpenCoderman missing: {folder} (git submodule update --init)"
         )
     files = sorted(path for path in folder.glob("*.md") if path.is_file())
     if not files:
@@ -85,7 +85,7 @@ def list_skill_dirs(root: Path) -> list[Path]:
     folder = review_skills_source(root)
     if not folder.is_dir():
         raise FileNotFoundError(
-            f"OpenCode configs missing: {folder} (git submodule update --init)"
+            f"OpenCoderman missing: {folder} (git submodule update --init)"
         )
     dirs = sorted(
         path for path in folder.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()
@@ -200,9 +200,9 @@ def load_pack_installer(root: Path):
     path = configs_root(root) / "install.py"
     if not path.is_file():
         raise FileNotFoundError(
-            f"OpenCode configs installer missing: {path} (git submodule update --init)"
+            f"OpenCoderman installer missing: {path} (git submodule update --init)"
         )
-    spec = importlib.util.spec_from_file_location("opencode_configs_install", path)
+    spec = importlib.util.spec_from_file_location("opencoderman_install", path)
     if spec is None or spec.loader is None:
         raise FileNotFoundError(f"cannot load {path}")
     mod = importlib.util.module_from_spec(spec)
@@ -222,7 +222,7 @@ def latest_backup_binary(user_home: Path | None = None) -> Path | None:
 
 
 def prepend_user_path(directory: Path) -> None:
-    """Windows-only leftover helper. New installs use opencode-configs PATH logic."""
+    """Windows-only leftover helper. New installs use OpenCoderman PATH logic."""
     if os.name != "nt":
         return
     import winreg

@@ -113,7 +113,7 @@ These look like bugs. They are not.
 - Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
   `gitlab-reviewer`).
   Agent and skill files live in the OpenCoderman pack
-  (`opencode-configs` submodule: `agents/*.md`, `skills/*/SKILL.md`).
+  (`opencoderman` submodule: `agents/*.md`, `skills/*/SKILL.md`).
   That pack also vendors the
   OpenCode CLI (`vendor/bin/<os>/`) in its CI artifact; `install.py`
   copies it into `~/.opencode/bin`. `install-opencode` uses the same

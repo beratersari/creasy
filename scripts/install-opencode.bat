@@ -31,8 +31,8 @@ echo Project : %ROOT%
 echo Target  : %USERPROFILE%\.opencode
 echo.
 
-if not exist "%ROOT%\opencode-configs\agents\gitlab-reviewer.md" (
-    echo [ERROR] opencode-configs\agents\gitlab-reviewer.md is missing.
+if not exist "%ROOT%\opencoderman\agents\gitlab-reviewer.md" (
+    echo [ERROR] opencoderman\agents\gitlab-reviewer.md is missing.
     echo Clone with: git clone --recurse-submodules
     echo Or run: git submodule update --init --recursive
     call :maybe_pause

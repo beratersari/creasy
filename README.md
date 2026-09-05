@@ -5,7 +5,7 @@ Code review easy. GitLab webhooks trigger a deep OpenCode review of a merge requ
 Agent rules and commit conventions: [AGENTS.md](AGENTS.md).
 OpenCode agents and skills live in
 [OpenCoderman](https://github.com/beratersari/opencoderman)
-(`opencode-configs` submodule) so other projects can reuse them.
+(`opencoderman` submodule) so other projects can reuse them.
 
 Clone with submodules:
 

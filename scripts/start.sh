@@ -53,7 +53,7 @@ if command -v opencode >/dev/null 2>&1; then
   echo "[OK] opencode on PATH"
 else
   echo "[WARNING] opencode is not on PATH. Jobs will fail until OpenCode is installed."
-  echo "          Run scripts/install-opencode.sh (keeps existing home, copies opencode-configs)."
+  echo "          Run scripts/install-opencode.sh (keeps existing home, copies opencoderman)."
 fi
 
 if [[ -f "$ROOT/scripts/creasy-lib.sh" ]]; then
