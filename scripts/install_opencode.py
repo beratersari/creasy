@@ -280,7 +280,12 @@ def install(root: Path, *, user_home: Path | None = None) -> Path:
     pack = load_pack_installer(root)
     pack.install(configs_root(root), user_home=base)
     dest = dest_binary(base)
-    src = vendor_binary(root) or latest_backup_binary(base)
+    pack_vendor = getattr(pack, "vendor_binary", None)
+    src = vendor_binary(root)
+    if src is None and callable(pack_vendor):
+        src = pack_vendor(configs_root(root))
+    if src is None:
+        src = latest_backup_binary(base)
     if src is None:
         raise FileNotFoundError(f"No OpenCode binary under {root / 'vendor' / 'bin'}")
     dest.parent.mkdir(parents=True, exist_ok=True)

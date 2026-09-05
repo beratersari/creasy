@@ -106,12 +106,15 @@ These look like bugs. They are not.
 - Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
   `gitlab-reviewer`).
   Agent and skill files live in the `opencode-configs` submodule
-  (`agents/*.md`, `skills/*/SKILL.md`). `install-opencode` uses the
-  same replace rules as that pack: rename `~/.opencode` to
+  (`agents/*.md`, `skills/*/SKILL.md`). That pack also vendors the
+  OpenCode CLI (`vendor/bin/<os>/`) in its CI artifact; `install.py`
+  copies it into `~/.opencode/bin`. `install-opencode` uses the same
+  replace rules as that pack: rename `~/.opencode` to
   `~/.opencode_backup_YYYYMMDD_HHMMSS`, drop other OpenCode dirs from
-  PATH, write a clean home, install the vendored CLI (or the binary
-  from the backup if vendor is missing), and prepend `~/.opencode/bin`.
-  Add a new agent in that submodule, not under `scripts/`.
+  PATH, write a clean home, install the vendored CLI (Creasy
+  `vendor/bin`, else the pack's, else the backup), and prepend
+  `~/.opencode/bin`. Add a new agent in that submodule, not under
+  `scripts/`.
 
 ### Dashboard
 

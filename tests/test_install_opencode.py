@@ -153,6 +153,28 @@ def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) 
     assert json.loads((oc / "opencode.json").read_text(encoding="utf-8")).get("plugin") == []
 
 
+def test_pack_vendor_used_when_creasy_vendor_missing(tmp_path: Path) -> None:
+    import platform
+    import sys
+
+    mod = _load()
+    root = _plant_root(tmp_path, vendor=False)
+    bin_name = "opencode.exe" if os.name == "nt" else "opencode"
+    if os.name == "nt":
+        tag = "windows"
+    elif sys.platform == "darwin":
+        machine = platform.machine().lower()
+        tag = "darwin-arm64" if machine in {"arm64", "aarch64"} else "darwin-x64"
+    else:
+        tag = "linux"
+    path = root / "opencode-configs" / "vendor" / "bin" / tag / bin_name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"PACK")
+    dest = mod.install(root, user_home=tmp_path / "home")
+    assert dest.is_file()
+    assert dest.read_bytes() == b"PACK"
+
+
 def test_missing_vendor_and_missing_home_fails(tmp_path: Path) -> None:
     mod = _load()
     root = _plant_root(tmp_path, vendor=False)
