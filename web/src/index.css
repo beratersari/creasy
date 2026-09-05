@@ -127,10 +127,12 @@ body {
   border: 1px solid transparent; cursor: pointer; color: inherit;
 }
 .vd-btn-primary { background: var(--accent); color: #1a0d08; }
-.vd-btn-primary:hover { background: var(--accent-hover); }
-.vd-btn-primary:disabled, .vd-btn-secondary:disabled { opacity: 0.55; cursor: not-allowed; }
+.vd-btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.vd-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .vd-btn-secondary { background: transparent; border-color: var(--border); color: var(--text-secondary); }
-.vd-btn-secondary:hover { background: var(--surface-hover); color: var(--text); }
+.vd-btn-secondary:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.vd-btn-danger { background: var(--danger); color: #1a0808; }
+.vd-btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
 .vd-btn-ghost { background: transparent; color: var(--accent-text); padding: 0.2rem 0; border: 0; cursor: pointer; }
 .vd-btn-ghost:hover { text-decoration: underline; color: var(--text); }
 .vd-pre {
@@ -290,6 +292,32 @@ body {
 .vd-md input[type="checkbox"] { margin-right: 0.35rem; }
 .vd-fade { animation: vd-fade 0.16s ease; }
 @keyframes vd-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vd-pop { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.vd-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(6, 10, 22, 0.72);
+  animation: vd-fade 0.16s ease;
+}
+.vd-modal {
+  width: 100%;
+  max-width: 26rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+  padding: 1.35rem 1.4rem;
+  animation: vd-pop 0.2s ease;
+}
+.vd-modal-title { margin: 0; font-size: 1.05rem; font-weight: 650; color: var(--text); }
+.vd-modal-body { margin-top: 0.75rem; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.55; }
+.vd-modal-actions { margin-top: 1.2rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
 
 .vd-chat { display: flex; flex-direction: column; gap: 0.85rem; min-height: 0; }
 .vd-chat-toolbar {

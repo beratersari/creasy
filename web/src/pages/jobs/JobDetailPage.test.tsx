@@ -1,5 +1,5 @@
 import React from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { JobDetailPage } from './JobDetailPage'
@@ -9,7 +9,8 @@ const fetchPrompts = vi.fn()
 const fetchChat = vi.fn()
 const fetchLogs = vi.fn()
 const fetchServeLog = vi.fn()
-const fetchReportContext = vi.fn()
+const cancelJob = vi.fn()
+const cancelMr = vi.fn()
 
 vi.mock('../../api/client', () => ({
   fetchJob: (...args: unknown[]) => fetchJob(...args),
@@ -17,7 +18,8 @@ vi.mock('../../api/client', () => ({
   fetchChat: (...args: unknown[]) => fetchChat(...args),
   fetchLogs: (...args: unknown[]) => fetchLogs(...args),
   fetchServeLog: (...args: unknown[]) => fetchServeLog(...args),
-  fetchReportContext: (...args: unknown[]) => fetchReportContext(...args),
+  cancelJob: (...args: unknown[]) => cancelJob(...args),
+  cancelMr: (...args: unknown[]) => cancelMr(...args),
 }))
 
 vi.mock('../../app/live', () => ({
@@ -50,19 +52,6 @@ const jobB = {
 }
 
 describe('JobDetailPage', () => {
-  beforeEach(() => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:report')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
-    fetchReportContext.mockResolvedValue({
-      meta: { app_name: 'OpenCode Session Manager' },
-      runtime: {},
-      settings: {},
-      queue: { items: [], queued_count: 0 },
-      app_log: { text: '', missing: true },
-      crash_log: { text: '', missing: true },
-    })
-  })
-
   afterEach(() => {
     cleanup()
     fetchJob.mockReset()
@@ -70,7 +59,8 @@ describe('JobDetailPage', () => {
     fetchChat.mockReset()
     fetchLogs.mockReset()
     fetchServeLog.mockReset()
-    fetchReportContext.mockReset()
+    cancelJob.mockReset()
+    cancelMr.mockReset()
     vi.restoreAllMocks()
   })
 
@@ -141,6 +131,61 @@ describe('JobDetailPage', () => {
       expect(screen.getByText('Result')).toBeTruthy()
     })
     expect(screen.getByText('final assistant answer')).toBeTruthy()
+  })
+
+  it('does not show OSM leftover fields Creasy never stores', async () => {
+    fetchJob.mockResolvedValue({ job: jobA, system_logs: [] })
+    fetchPrompts.mockResolvedValue({ prompts: [] })
+    fetchChat.mockResolvedValue({ messages: [] })
+    fetchLogs.mockResolvedValue({ lines: [] })
+    fetchServeLog.mockResolvedValue({ job_id: 'job_aaa', missing: true, text: '' })
+
+    renderAt('job_aaa')
+    await waitFor(() => {
+      expect(screen.getByText('Status')).toBeTruthy()
+    })
+    expect(screen.queryByText('Attempt')).toBeNull()
+    expect(screen.queryByText('Timeout')).toBeNull()
+    expect(screen.queryByText('Callback')).toBeNull()
+    expect(screen.queryByText(/attempt 1\/1/)).toBeNull()
+  })
+
+  it('disables stop controls after the job ends', async () => {
+    fetchJob.mockResolvedValue({ job: jobA, system_logs: [] })
+    fetchPrompts.mockResolvedValue({ prompts: [] })
+    fetchChat.mockResolvedValue({ messages: [] })
+    fetchLogs.mockResolvedValue({ lines: [] })
+    fetchServeLog.mockResolvedValue({ job_id: 'job_aaa', missing: true, text: '' })
+
+    renderAt('job_aaa')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Stop job' })).toBeTruthy()
+    })
+    expect((screen.getByRole('button', { name: 'Stop job' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Stop MR queue' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('lets the operator stop a live job after confirm', async () => {
+    fetchJob.mockResolvedValue({
+      job: { ...jobA, status: 'running', live: true, project_id: 1, mr_iid: 2 },
+      system_logs: [],
+    })
+    fetchPrompts.mockResolvedValue({ prompts: [] })
+    fetchChat.mockResolvedValue({ messages: [] })
+    fetchLogs.mockResolvedValue({ lines: [] })
+    fetchServeLog.mockResolvedValue({ job_id: 'job_aaa', missing: true, text: '' })
+    cancelJob.mockResolvedValue({ ok: true })
+
+    renderAt('job_aaa')
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Stop job' }) as HTMLButtonElement).disabled).toBe(false)
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Stop job' }))
+    const dialog = screen.getByRole('dialog', { name: 'Stop this job?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop job' }))
+    await waitFor(() => {
+      expect(cancelJob).toHaveBeenCalledWith('job_aaa')
+    })
   })
 
   it('shows elapsed from started_at to completed_at', async () => {

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { cancelJob as postCancelJob, cancelMr as postCancelMr, fetchChat, fetchJob, fetchLogs, fetchPrompts, fetchServeLog } from '../../api/client'
 import type { ChatMessage, JobItem, LogLine, PromptRow } from '../../api/types'
 import { useLive } from '../../app/live'
+import { ConfirmDialog } from '../../ui/ConfirmDialog'
 import { LiveDot } from '../../ui/LiveDot'
 import { MarkdownBody } from '../../ui/MarkdownBody'
 import { MetaCard } from '../../ui/MetaCard'
@@ -10,6 +11,13 @@ import { StatusBadge } from '../../ui/StatusBadge'
 import { Tabs } from '../../ui/Tabs'
 import { useJobElapsed } from '../../util/time'
 import { JobChatTab } from './JobChatTab'
+
+function jobIsStoppable(job: JobItem | null): boolean {
+  if (!job) return false
+  if (job.live) return true
+  const status = (job.status || '').toLowerCase()
+  return status === 'queued' || status === 'running'
+}
 
 type Tab = 'overview' | 'prompt' | 'chat' | 'logs'
 
@@ -25,9 +33,12 @@ export function JobDetailPage() {
   const [serveLogMissing, setServeLogMissing] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
+  const [confirm, setConfirm] = useState<'job' | 'mr' | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const seqRef = useRef(0)
   const elapsed = useJobElapsed(job)
+  const canStop = jobIsStoppable(job)
 
   const load = useCallback(async (id: string, mine: number, opts: { clearOnError: boolean }) => {
     if (!id) return
@@ -72,6 +83,8 @@ export function JobDetailPage() {
     setServeLog('')
     setServeLogMissing(true)
     setError(null)
+    setConfirm(null)
+    setBusy(false)
     void load(jobId.trim(), mine, { clearOnError: true })
   }, [jobId, load])
 
@@ -79,57 +92,107 @@ export function JobDetailPage() {
     if (job?.live) void load(jobId.trim(), seqRef.current, { clearOnError: false })
   }, [live.generation]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const onStopJob = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await postCancelJob(jobId.trim())
+      setConfirm(null)
+      await load(jobId.trim(), seqRef.current, { clearOnError: false })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Stop failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onStopMr = async () => {
+    if (!job?.project_id || !job?.mr_iid) return
+    setBusy(true)
+    setError(null)
+    try {
+      await postCancelMr(job.project_id, job.mr_iid)
+      setConfirm(null)
+      navigate('/jobs')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Stop MR queue failed')
+      setBusy(false)
+    }
+  }
+
   return (
     <section className="space-y-5">
-      <div>
-        <Link to="/jobs" className="vd-btn-ghost mb-3 inline-block text-sm">
-          ← Jobs
-        </Link>
-        <div className="flex flex-wrap items-center gap-2">
-          {job?.jira_id && <span className="font-mono text-lg font-semibold">{job.jira_id}</span>}
-          {job && <StatusBadge status={job.status} />}
-          {job?.live && <LiveDot />}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <Link to="/jobs" className="vd-btn-ghost mb-3 inline-block text-sm">
+            ← Jobs
+          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {job?.jira_id && <span className="font-mono text-lg font-semibold">{job.jira_id}</span>}
+            {job && <StatusBadge status={job.status} />}
+            {job?.live && <LiveDot />}
+          </div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+            {(job?.mr_title || '').trim() || job?.job_id || 'Job'}
+          </h1>
+          <p className="mt-1 font-mono text-xs text-text-muted">
+            {job?.job_id ? `${job.job_id} · ` : ''}
+            {job?.agent_mode} · {job?.model}
+            {elapsed !== '—' ? ` · ${elapsed}` : ''}
+          </p>
         </div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-          {(job?.mr_title || '').trim() || job?.job_id || 'Job'}
-        </h1>
-        <p className="mt-1 font-mono text-xs text-text-muted">
-          {job?.job_id ? `${job.job_id} · ` : ''}
-          {job?.agent_mode} · {job?.model}
-          {elapsed !== '—' ? ` · ${elapsed}` : ''}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="vd-btn vd-btn-danger"
+            disabled={!canStop || busy}
+            onClick={() => setConfirm('job')}
+          >
+            Stop job
+          </button>
+          <button
+            type="button"
+            className="vd-btn vd-btn-secondary"
+            disabled={!canStop || !job?.project_id || !job?.mr_iid || busy}
+            onClick={() => setConfirm('mr')}
+          >
+            Stop MR queue
+          </button>
+          <button
+            type="button"
+            className="vd-btn vd-btn-secondary"
+            disabled={busy}
+            onClick={() => void load(jobId.trim(), seqRef.current, { clearOnError: true })}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div className="flex flex-wrap justify-end gap-2">
-        <button
-          type="button"
-          className="vd-btn vd-btn-secondary"
-          disabled={!job}
-          onClick={() => {
-            void postCancelJob(jobId.trim()).then(() => void load(jobId.trim(), seqRef.current, { clearOnError: false }))
-          }}
-        >
-          Cancel job
-        </button>
-        <button
-          type="button"
-          className="vd-btn vd-btn-secondary"
-          disabled={!job}
-          onClick={() => {
-            if (!job?.project_id || !job?.mr_iid) return
-            void postCancelMr(job.project_id, job.mr_iid).then(() => navigate('/jobs'))
-          }}
-        >
-          Cancel MR queue
-        </button>
-        <button
-          type="button"
-          className="vd-btn vd-btn-secondary"
-          onClick={() => void load(jobId.trim(), seqRef.current, { clearOnError: true })}
-        >
-          Refresh
-        </button>
-      </div>
+      <ConfirmDialog
+        open={confirm === 'job'}
+        title="Stop this job?"
+        body={`Stops the OpenCode serve for this run.\n\nJob: ${job?.job_id || jobId}`}
+        confirmLabel="Stop job"
+        danger
+        busy={busy}
+        onConfirm={() => void onStopJob()}
+        onCancel={() => {
+          if (!busy) setConfirm(null)
+        }}
+      />
+      <ConfirmDialog
+        open={confirm === 'mr'}
+        title="Stop the MR queue?"
+        body={`Stops this job and every queued comment for ${job?.jira_id || 'this MR'}. The clone stays on disk.`}
+        confirmLabel="Stop MR queue"
+        danger
+        busy={busy}
+        onConfirm={() => void onStopMr()}
+        onCancel={() => {
+          if (!busy) setConfirm(null)
+        }}
+      />
 
       <Tabs
         tabs={[
