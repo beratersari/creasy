@@ -308,7 +308,9 @@ class Manager:
                 status = "cancelled"
             elif result.timeout:
                 status = "timeout"
-            elif result.error and not result.text:
+            elif result.error or not result.posted:
+                if not result.error:
+                    result.error = "overview note was not posted"
                 status = "error"
             else:
                 status = "success"

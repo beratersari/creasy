@@ -24,7 +24,7 @@ class FakeRunner:
             if should_stop():
                 return RunResult(cancelled=True, error="cancelled")
         self.release.clear()
-        return RunResult(text="ok " + job.trigger, session_id="ses_test")
+        return RunResult(text="ok " + job.trigger, session_id="ses_test", posted=True)
 
 
 @pytest.fixture
