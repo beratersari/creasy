@@ -39,6 +39,23 @@ def test_isolated_git_env_disables_ssl_verify() -> None:
     assert env["GCM_GUI_PROMPT"] == "false"
 
 
+def test_run_git_cancelled_kills_waiting_process() -> None:
+    pids: list[int] = []
+
+    def on_pid(pid: int) -> None:
+        if pid:
+            pids.append(pid)
+
+    with pytest.raises(GitError, match="cancelled"):
+        _run_git(
+            ["hash-object", "--stdin"],
+            timeout=10,
+            should_stop=lambda: True,
+            on_pid=on_pid,
+        )
+    assert pids
+
+
 def test_run_git_passes_ssl_verify_false(monkeypatch) -> None:
     seen: dict[str, object] = {}
 
