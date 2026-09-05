@@ -44,12 +44,20 @@ jobs:
       - name: Read product version
         id: ver
         run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Assert staged packs include .env.example
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          for pack in linux-x64 windows-x64 darwin windows-linux; do
+            test -f "dist/stage/creasy-${v}-${pack}/.env.example"
+          done
       - name: Upload Linux pack
         uses: actions/upload-artifact@v4
         with:
           name: creasy-${{ steps.ver.outputs.version }}-linux-x64
           path: dist/stage/creasy-${{ steps.ver.outputs.version }}-linux-x64/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
       - name: Upload Windows pack
         uses: actions/upload-artifact@v4
@@ -57,6 +65,7 @@ jobs:
           name: creasy-${{ steps.ver.outputs.version }}-windows-x64
           path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-x64/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
       - name: Upload Darwin pack
         uses: actions/upload-artifact@v4
@@ -64,6 +73,7 @@ jobs:
           name: creasy-${{ steps.ver.outputs.version }}-darwin
           path: dist/stage/creasy-${{ steps.ver.outputs.version }}-darwin/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
       - name: Upload Windows+Linux pack
         uses: actions/upload-artifact@v4
@@ -71,6 +81,7 @@ jobs:
           name: creasy-${{ steps.ver.outputs.version }}-windows-linux
           path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-linux/
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 30
       - name: Install + start from the Linux pack
         run: |

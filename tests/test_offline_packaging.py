@@ -66,6 +66,20 @@ def test_copy_dirs_include_opencode_configs() -> None:
     mod = _load()
     assert "opencoderman" in mod.COPY_DIRS
     assert "agents" not in mod.SKIP_DIR_NAMES
+    assert ".env.example" in mod.COPY_FILES
+
+
+def test_stage_app_copies_env_example(tmp_path: Path) -> None:
+    """install.sh / start.sh seed .env from this file after unpacking the CI zip."""
+    mod = _load()
+    root = Path(__file__).resolve().parents[1]
+    payload = tmp_path / "payload"
+    mod.stage_app(root, payload)
+    packed = payload / ".env.example"
+    assert packed.is_file()
+    text = packed.read_text(encoding="utf-8")
+    assert "GITLAB_TOKEN" in text
+    assert "WEBHOOK_SECRET" in text
 
 
 def test_stage_app_copies_opencode_configs(tmp_path: Path) -> None:
