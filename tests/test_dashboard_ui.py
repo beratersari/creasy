@@ -10,6 +10,8 @@ def test_osm_shell_branded_creasy() -> None:
     assert "Creasy" in shell
     assert 'vd-mark">CR' in shell
     assert "Jobs" in shell
+    assert shell.count("connectionLabel(") == 1
+    assert "bg-live" not in shell
 
 
 def test_jobs_page_keeps_osm_workbench() -> None:
