@@ -19,6 +19,19 @@ def test_jobs_page_keeps_osm_workbench() -> None:
     assert "Find merge request" in page
 
 
+def test_report_issue_lives_only_in_the_sidebar() -> None:
+    shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
+    jobs = (ROOT / "web" / "src" / "pages" / "jobs" / "JobsPage.tsx").read_text(encoding="utf-8")
+    detail = (ROOT / "web" / "src" / "pages" / "jobs" / "JobDetailPage.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "ReportIssue" in shell
+    assert "ReportIssue" not in jobs
+    assert "ReportIssue" not in detail
+    assert "Report issue" not in detail
+    assert not (ROOT / "web" / "src" / "ui" / "ReportIssueDialog.tsx").is_file()
+
+
 def test_dashboard_does_not_start_reviews() -> None:
     client = (ROOT / "web" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
     assert "POST /jobs" not in client

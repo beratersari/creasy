@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { cancelJob as postCancelJob, cancelMr as postCancelMr, fetchChat, fetchJob, fetchLogs, fetchPrompts, fetchServeLog } from '../../api/client'
-import { downloadIssueReport } from '../../util/downloadReport'
 import type { ChatMessage, JobItem, LogLine, PromptRow } from '../../api/types'
 import { useLive } from '../../app/live'
 import { LiveDot } from '../../ui/LiveDot'
 import { MarkdownBody } from '../../ui/MarkdownBody'
 import { MetaCard } from '../../ui/MetaCard'
-import { ReportIssueDialog } from '../../ui/ReportIssueDialog'
 import { StatusBadge } from '../../ui/StatusBadge'
 import { Tabs } from '../../ui/Tabs'
-import { reportNoteReady } from '../../util/jobReport'
 import { useJobElapsed } from '../../util/time'
 import { JobChatTab } from './JobChatTab'
 
@@ -28,9 +25,6 @@ export function JobDetailPage() {
   const [serveLogMissing, setServeLogMissing] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('overview')
-  const [reportOpen, setReportOpen] = useState(false)
-  const [reportBusy, setReportBusy] = useState(false)
-  const [reportError, setReportError] = useState<string | null>(null)
 
   const seqRef = useRef(0)
   const elapsed = useJobElapsed(job)
@@ -78,29 +72,8 @@ export function JobDetailPage() {
     setServeLog('')
     setServeLogMissing(true)
     setError(null)
-    setReportOpen(false)
-    setReportBusy(false)
-    setReportError(null)
     void load(jobId.trim(), mine, { clearOnError: true })
   }, [jobId, load])
-
-  const downloadReport = useCallback(
-    async (note: string) => {
-      const id = jobId.trim()
-      if (!id || !reportNoteReady(note)) return
-      setReportBusy(true)
-      setReportError(null)
-      try {
-        await downloadIssueReport({ kind: 'job', jobId: id, note })
-        setReportOpen(false)
-      } catch (e) {
-        setReportError(e instanceof Error ? e.message : 'Failed to build report')
-      } finally {
-        setReportBusy(false)
-      }
-    },
-    [jobId],
-  )
 
   useEffect(() => {
     if (job?.live) void load(jobId.trim(), seqRef.current, { clearOnError: false })
@@ -133,17 +106,6 @@ export function JobDetailPage() {
           className="vd-btn vd-btn-secondary"
           disabled={!job}
           onClick={() => {
-            setReportError(null)
-            setReportOpen(true)
-          }}
-        >
-          Report issue
-        </button>
-        <button
-          type="button"
-          className="vd-btn vd-btn-secondary"
-          disabled={!job}
-          onClick={() => {
             void postCancelJob(jobId.trim()).then(() => void load(jobId.trim(), seqRef.current, { clearOnError: false }))
           }}
         >
@@ -168,18 +130,6 @@ export function JobDetailPage() {
           Refresh
         </button>
       </div>
-
-      {reportOpen && job && (
-        <ReportIssueDialog
-          title={`${job.jira_id} · ${job.job_id}`}
-          busy={reportBusy}
-          error={reportError}
-          onClose={() => {
-            if (!reportBusy) setReportOpen(false)
-          }}
-          onDownload={(note) => void downloadReport(note)}
-        />
-      )}
 
       <Tabs
         tabs={[

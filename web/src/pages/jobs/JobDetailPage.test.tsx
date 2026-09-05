@@ -228,7 +228,7 @@ describe('JobDetailPage', () => {
     expect(screen.getByText('opencode serve listening')).toBeTruthy()
   })
 
-  it('opens the report dialog for the selected job', async () => {
+  it('does not add a second report-issue control on the job page', async () => {
     fetchJob.mockResolvedValue({ job: jobA, system_logs: [] })
     fetchPrompts.mockResolvedValue({ prompts: [] })
     fetchChat.mockResolvedValue({ messages: [] })
@@ -237,27 +237,8 @@ describe('JobDetailPage', () => {
 
     renderAt('job_aaa')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Report issue' })).toBeTruthy()
+      expect(screen.getByRole('heading', { name: 'job_aaa' })).toBeTruthy()
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Report issue' }))
-    expect(screen.getByRole('dialog', { name: 'Report issue' })).toBeTruthy()
-    expect(screen.getByText(/AAA-1 · job_aaa/)).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Download zip' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
-    fireEvent.change(screen.getByPlaceholderText('What went wrong?'), {
-      target: { value: 'too short' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Download zip' }))
-    expect(fetchLogs).not.toHaveBeenCalledWith('job_aaa', { limit: 0 })
-    fireEvent.change(screen.getByPlaceholderText('What went wrong?'), {
-      target: { value: 'it stopped mid-answer' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Download zip' }))
-    await waitFor(() => {
-      expect(fetchLogs).toHaveBeenCalledWith('job_aaa', { limit: 0 })
-      expect(fetchServeLog).toHaveBeenCalledWith('job_aaa')
-      expect(fetchReportContext).toHaveBeenCalled()
-    })
+    expect(screen.queryByRole('button', { name: 'Report issue' })).toBeNull()
   })
 })

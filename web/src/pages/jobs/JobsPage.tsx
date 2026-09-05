@@ -7,7 +7,6 @@ import { LiveDot } from '../../ui/LiveDot'
 import { PageHeader } from '../../ui/PageHeader'
 import { StatusBadge, statusToneClass } from '../../ui/StatusBadge'
 import { formatJobElapsed, jobElapsedWindow, useNow } from '../../util/time'
-import { ReportIssue } from '../../ui/ReportIssue'
 import { JOB_FILTERS, type JobListFilter } from './filters'
 
 export function JobsPage() {
@@ -70,18 +69,15 @@ export function JobsPage() {
         title="Jobs"
         description={live.connected ? 'One card is one accepted run.' : 'Disconnected — list may be stale.'}
         actions={
-          <div className="flex flex-wrap items-end gap-3">
-            <ReportIssue placement="down" />
-            <label className="block text-xs text-text-muted">
-              Find merge request
-              <input
-                className="vd-input mt-1 w-52 font-mono"
-                placeholder="84969716-30"
-                value={jira}
-                onChange={(e) => setJira(e.target.value)}
-              />
-            </label>
-          </div>
+          <label className="block text-xs text-text-muted">
+            Find merge request
+            <input
+              className="vd-input mt-1 w-52 font-mono"
+              placeholder="84969716-30"
+              value={jira}
+              onChange={(e) => setJira(e.target.value)}
+            />
+          </label>
         }
       />
 
