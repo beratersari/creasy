@@ -163,7 +163,13 @@ def start_serve(
     if on_spawn is not None:
         on_spawn(handle)
     try:
-        wait_health(handle.base_url, str(cwd), timeout=timeout, should_stop=should_stop)
+        wait_health(
+            handle.base_url,
+            str(cwd),
+            timeout=timeout,
+            should_stop=should_stop,
+            proc=handle.proc,
+        )
     except Exception:
         stop_serve(handle)
         raise
@@ -177,6 +183,7 @@ def wait_health(
     *,
     timeout: float,
     should_stop: Optional[Callable[[], bool]] = None,
+    proc: Optional[subprocess.Popen] = None,
 ) -> dict:
     deadline = time.time() + timeout
     last: Optional[Exception] = None
@@ -186,11 +193,19 @@ def wait_health(
         while time.time() < deadline:
             if should_stop and should_stop():
                 raise RuntimeError("manager shutting down")
+            if proc is not None and proc.poll() is not None:
+                raise RuntimeError(
+                    f"serve process exited before health pid={proc.pid} code={proc.returncode}"
+                )
             try:
                 response = client.get(url, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
                     if isinstance(data, dict):
+                        if proc is not None and proc.poll() is not None:
+                            raise RuntimeError(
+                                f"serve process exited before health pid={proc.pid} code={proc.returncode}"
+                            )
                         return data
                 last = Exception(f"HTTP {response.status_code}")
             except RuntimeError:
