@@ -28,13 +28,16 @@ These look like bugs. They are not.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/review` or `/ask` can resume `ses_*` on the same path.
-3. **Each comment is a new job.** New `job_id`, new serve, one prompt,
-   one note, then kill that serve. Do not hold a serve open waiting
-   for the next GitLab comment.
-4. **Comments queue FIFO per MR.** A later `/review` or `/ask` while
-   that MR is running is **queued**, not 409, not coalesced to “latest
-   only”. Auto `open` / `update` / `reopen` are skipped if that MR
-   already has a running or queued job.
+3. **Each comment is a new job.** New `job_id`. `/review` and `/ask`
+   start a serve, one prompt, one note, then kill that serve. `/reset`
+   is a job with **no** serve and **no** model call: it deletes that
+   MR’s notes and threads authored by the `GITLAB_TOKEN` user, then
+   clears the stored `ses_*`. Do not hold a serve open waiting for
+   the next GitLab comment.
+4. **Comments queue FIFO per MR.** A later `/review`, `/ask`, or
+   `/reset` while that MR is running is **queued**, not 409, not
+   coalesced to “latest only”. Auto `open` / `update` / `reopen` are
+   skipped if that MR already has a running or queued job.
 5. **Do not put the unified diff in the prompt.** Give merge-base,
    `git diff --stat <base>...HEAD`, and the path list. OpenCode reads
    the tree and runs git itself. Do not filter paths by extension.
@@ -60,10 +63,12 @@ These look like bugs. They are not.
 - MR `open` / `reopen` → enqueue review. `update` only if `oldrev` is
   present. `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: first command token wins. `/review` → full
-  review job. `/ask <question>` → follow-up. Empty `/ask` → ignore.
-  Notes from the token’s own user → ignore.
+  review job. `/ask <question>` → follow-up. `/reset` → delete that
+  MR’s notes and threads authored by the token user (no OpenCode).
+  Empty `/ask` → ignore. Empty `/reset` still runs. Notes from the
+  token’s own user → ignore.
 - Draft MRs: skip auto events when `SKIP_DRAFT_MRS` is true. Explicit
-  `/review` and `/ask` still run.
+  `/review`, `/ask`, and `/reset` still run.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
 
@@ -168,7 +173,8 @@ note or discussion posting in `opencode/`.
 - `pytest` must stay runnable with no live GitLab and no `opencode`
   binary. Fake the runner for manager/webhook tests.
 - Event tests cover open / update-with-and-without-`oldrev` / close /
-  merge / `/review` / `/ask` / empty `/ask` / bot note / first-command.
+  merge / `/review` / `/ask` / empty `/ask` / `/reset` / bot note /
+  first-command.
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are

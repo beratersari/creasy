@@ -20,6 +20,8 @@ POST /webhook  (ack immediately)
     │       └─ enqueue a full review job (resume ses_* if we have one)
     ├─ Note on an MR whose body contains "/ask"
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
+    ├─ Note on an MR whose body contains "/reset"
+    │       └─ enqueue a wipe of that MR’s notes/threads authored by the token user (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │
@@ -82,7 +84,7 @@ Yes. A completed review does not throw away the OpenCode conversation.
 
 OpenCode sessions live in the global `opencode.db`, keyed by workspace `directory`. The serve process is killed when the job ends; the `ses_*` id is not.
 
-**Decision (user):** later comments continue the same session via `/review` or `/ask`. Ordinary notes are ignored.
+**Decision (user):** later comments continue the same session via `/review` or `/ask`. `/reset` deletes the token user’s notes and threads on that MR and clears `ses_*` so the next `/review` starts a new session. Ordinary notes are ignored.
 
 Shared resume flow for both commands after a finished job:
 
@@ -99,18 +101,22 @@ Shared resume flow for both commands after a finished job:
 |---|---|---|
 | `/review [notes]` | Full review prompt again: MR metadata, merge-base, `--stat`, file list, project rules, “analyze from the separation point”, plus the remainder after `/review` | Create a session and run the full review |
 | `/ask <question>` | Only the question (plus a one-line “SHA changed to …” if the branch moved). Do **not** rebuild the full review prompt. The previous review is already in chat history. | Still run: clone if needed, create a session, send a short context (title, source→target, changed-file list) + the question. Do not require a prior `/review`. |
+| `/reset` | **No OpenCode.** Delete every MR note and discussion authored by the `GITLAB_TOKEN` user on that MR. Clear the stored `ses_*`. Keep the clone and job history. Do not post a new note. | Same wipe. No session to clear. |
 
 `/ask` with no question text after the command: ignore the webhook (200) and do not start a job. Optionally we can post “usage: `/ask <question>`” later; v1 just ignores.
+
+`/reset` with no extra text still runs.
 
 Rules:
 
 - First job for an MR: no `ses_*` yet → create a session, save it.
 - Later `/review` or `/ask` on the same MR: resume that `ses_*` so the agent still has the previous review in chat history.
+- `/reset` clears the stored `ses_*`. The next `/review` or `/ask` creates a new session.
 - If OpenCode rejects the id (expired / unknown), create a **new** session and continue. Do not fail the job. Save the new id. For `/ask` after a rejected id, include the short MR context so the new session is not blind.
 - Mid-job hang retry (we already posted the user message): resume the **same** id only. Do not invent a blank session and pretend it is a continue.
 - Different MRs never share a session.
 - Process restart does not keep the serve, but the next `/review` or `/ask` still resumes from `opencode.db` because the clone path is unchanged.
-- Comments with neither `/review` nor `/ask` are ignored. Thank-yous and LGTM do not spend an OpenCode slot.
+- Comments with neither `/review` nor `/ask` nor `/reset` are ignored. Thank-yous and LGTM do not spend an OpenCode slot.
 
 ### 3. Triggers
 
@@ -123,22 +129,23 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
 | `object_kind=note`, `noteable_type=MergeRequest`, body contains `/review` | Enqueue full review (resume `ses_*` if stored) |
 | `object_kind=note`, `noteable_type=MergeRequest`, body contains `/ask` + question text | Enqueue follow-up on the same `ses_*` |
+| `object_kind=note`, `noteable_type=MergeRequest`, body contains `/reset` | Enqueue a PAT-author wipe on that MR (no OpenCode) |
 | Everything else | 200 ignored |
 
-If both `/review` and `/ask` appear in one note, the **first** command token wins.
+If `/review`, `/ask`, and `/reset` appear in one note, the **first** command token wins.
 
 Extra guards:
 
 - Ignore notes authored by the token’s own user so our posted review cannot retrigger.
-- Treat `/review` and `/ask` as command tokens (word-style match), not substrings of “preview” / “task”.
-- Skip draft MRs by default (`SKIP_DRAFT_MRS=true`) for auto MR events. `/review` and `/ask` on a draft still run (explicit human request).
+- Treat `/review`, `/ask`, and `/reset` as command tokens (word-style match), not substrings of “preview” / “task”.
+- Skip draft MRs by default (`SKIP_DRAFT_MRS=true`) for auto MR events. `/review`, `/ask`, and `/reset` on a draft still run (explicit human request).
 - Title/description-only MR updates do not review (`oldrev` missing).
 
 Webhook HTTP response is always an immediate ack (`accepted`, `queued`, or `ignored`). A comment that arrives while that MR already has a running job is **accepted and queued**, not 409. Review work never holds the GitLab webhook socket.
 
 ### 4. Each comment is a separate job (same as OSM)
 
-Same contract as OSM: **one inbound trigger → one job → one prompt → one terminal result**. We do not keep a job or an `opencode serve` open waiting for the next GitLab comment.
+Same contract as OSM: **one inbound trigger → one job → one terminal result**. `/review` and `/ask` are one prompt plus one note. `/reset` is a wipe with no prompt and no note. We do not keep a job or an `opencode serve` open waiting for the next GitLab comment.
 
 | Layer | Lifetime | Identity |
 |---|---|---|
@@ -166,9 +173,9 @@ Why not one long-lived job:
 Per-MR FIFO:
 
 - At most **one running serve** per MR.
-- A later `/review` or `/ask` while that MR is already running or already has queued jobs → mint a **new** `job_id`, append it to that MR’s queue, ack `queued`.
-- When the running job finishes (success or fail), pop the next queued job for **that same MR** and start it (resume `ses_*`, same clone).
-- Jobs for one MR run **in arrival order**. `/review` then `/ask` then `/review` is three jobs, all executed, none discarded.
+- A later `/review`, `/ask`, or `/reset` while that MR is already running or already has queued jobs → mint a **new** `job_id`, append it to that MR’s queue, ack `queued`.
+- When the running job finishes (success or fail), pop the next queued job for **that same MR** and start it (resume `ses_*` unless the job is `/reset`, same clone).
+- Jobs for one MR run **in arrival order**. `/review` then `/reset` then `/review` is three jobs: review, wipe, then a new session.
 - Different MRs still share the global `MAX_CONCURRENT_JOBS` cap. If the host is full, the next job waits in the global dispatcher until a slot frees; order within an MR is still FIFO.
 
 ```
@@ -182,7 +189,7 @@ job_aaa ends → start job_bbb (resume ses_*) → then job_ccc
 Auto MR events (`open` / `update` with new commits / `reopen`) are not comments:
 
 - If that MR already has a **running or queued** job, **do not** enqueue another auto-review. The queued/running work will see the latest SHA when it fetches. This is the only coalesce, and it is only for webhook noise (push storms, title-less `update` we already ignore).
-- Explicit `/review` and `/ask` are **never** dropped.
+- Explicit `/review`, `/ask`, and `/reset` are **never** dropped.
 
 Close/merge: cancel the running job **and drain/cancel** that MR’s queued jobs, then delete the workspace. Do not start queued comments after the MR is gone.
 
@@ -454,7 +461,8 @@ On `close`/`merge`:
 
 ## Tests (v1, no live GitLab / OpenCode required)
 
-- `events.py`: open / update-with-oldrev / update-without-oldrev / close / merge / `/review` note / `/ask` note / `/ask` with empty question / bot note / draft / unrelated note / both commands (first wins).
+- `events.py`: open / update-with-oldrev / update-without-oldrev / close / merge / `/review` note / `/ask` note / `/ask` with empty question / `/reset` note / bot note / draft / unrelated note / both commands (first wins).
+- `/reset`: deletes notes and discussions authored by the token user; leaves other authors; does not start OpenCode or post a new note; clears stored `ses_*`.
 - `identity.py`: safe folder, path stays under `work_dir`.
 - `manager`: second `/ask` while `/review` is running is queued (not 409, not dropped); both jobs run in order; two different MRs both run; close cancels running + queued jobs.
 - `workspace`: missing → clone; existing → fetch path; close → directory gone.
