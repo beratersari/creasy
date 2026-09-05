@@ -149,7 +149,7 @@ def test_opencode_review_threads_large_file(tmp_path, tmp_config, monkeypatch):
     assert "src/big_planted.cpp" in (result.diff_stat or "")
     assert spy.notes
     note = spy.notes[0]
-    assert "creasy-findings" not in note
+    assert "opencoderman-findings" not in note
     assert first_command_safe(note) is None
 
     planted_threads = [

@@ -5,7 +5,7 @@ from creasy.review.findings import split_findings
 from creasy.review.format import format_success
 
 
-def test_split_strips_creasy_findings_fence() -> None:
+def test_split_strips_opencoderman_findings_fence() -> None:
     text = """### Summary
 C++ change. 1 Critical.
 
@@ -18,7 +18,7 @@ C++ change. 1 Critical.
 strcpy(dest, src);
 ```
 
-```creasy-findings
+```opencoderman-findings
 {
   "findings": [
     {
@@ -35,7 +35,7 @@ strcpy(dest, src);
 ```
 """
     markdown, findings = split_findings(text)
-    assert "creasy-findings" not in markdown
+    assert "opencoderman-findings" not in markdown
     assert "Unbounded strcpy" not in markdown
     assert "### Summary" in markdown
     assert "```cpp" in markdown
@@ -75,17 +75,17 @@ example payload:
     assert '{"name": "login"' in markdown
 
 
-def test_split_drops_broken_creasy_block() -> None:
+def test_split_drops_broken_findings_block() -> None:
     text = """### Summary
 ok
 
-```creasy-findings
+```opencoderman-findings
 not-json
 ```
 """
     markdown, findings = split_findings(text)
     assert findings == []
-    assert "creasy-findings" not in markdown
+    assert "opencoderman-findings" not in markdown
     assert "not-json" not in markdown
     assert "### Summary" in markdown
 
@@ -101,14 +101,14 @@ def test_success_note_hides_findings_json() -> None:
         text="""### Summary
 1 Critical.
 
-```creasy-findings
+```opencoderman-findings
 {"findings":[{"path":"x.cpp","start_line":30,"end_line":40,"title":"leak","body":"free it"}]}
 ```
 """,
     )
     body = format_success(job)
     assert "### Summary" in body
-    assert "creasy-findings" not in body
+    assert "opencoderman-findings" not in body
     assert '"path"' not in body
     assert "1 Critical." in body
 

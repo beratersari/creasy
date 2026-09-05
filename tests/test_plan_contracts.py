@@ -221,7 +221,7 @@ def test_worker_posts_note_and_diff_threads(tmp_config, monkeypatch):
     reply = """### Summary
 1 Critical.
 
-```creasy-findings
+```opencoderman-findings
 {"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
 ```
 """
@@ -255,7 +255,7 @@ new file mode 100644
     assert result.posted
     assert result.findings_posted == 1
     assert spy.notes and "### Summary" in spy.notes[0]
-    assert "creasy-findings" not in spy.notes[0]
+    assert "opencoderman-findings" not in spy.notes[0]
     assert '"path"' not in spy.notes[0]
     assert len(spy.discussions) == 1
     disc = spy.discussions[0]
@@ -290,7 +290,7 @@ def test_worker_replies_to_overlapping_unresolved_thread(tmp_config, monkeypatch
     reply = """### Summary
 1 Critical.
 
-```creasy-findings
+```opencoderman-findings
 {"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"still overflows"}]}
 ```
 """
@@ -360,7 +360,7 @@ def test_worker_skips_similar_thread_reply(tmp_config, monkeypatch):
     ]
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
-    reply = """```creasy-findings
+    reply = """```opencoderman-findings
 {"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
 ```
 """
@@ -415,7 +415,7 @@ def test_worker_posts_new_thread_when_reply_fails(tmp_config, monkeypatch):
     ]
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
-    reply = """```creasy-findings
+    reply = """```opencoderman-findings
 {"findings":[{"path":"src/buf.cpp","start_line":2,"end_line":2,"severity":"critical","title":"overflow","body":"strcpy overflows"}]}
 ```
 """
@@ -460,7 +460,7 @@ def test_worker_discussion_failure_does_not_fail_job(tmp_config, monkeypatch):
     reply = """### Summary
 ok
 
-```creasy-findings
+```opencoderman-findings
 {"findings":[{"path":"src/buf.cpp","start_line":1,"title":"x","body":"y"}]}
 ```
 """

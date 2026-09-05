@@ -10,8 +10,9 @@ from typing import Any, Optional
 MAX_FINDINGS = 30
 _SIDES = frozenset({"new", "old"})
 _SEVERITIES = frozenset({"critical", "major", "minor", "improvement"})
+_FINDINGS_TAG = "opencoderman-findings"
 _FENCE = re.compile(
-    r"^[ \t]*(`{3,}|~{3,})(creasy-findings|json)[ \t]*\r?\n(.*?)\r?\n[ \t]*\1[ \t]*$",
+    r"^[ \t]*(`{3,}|~{3,})(opencoderman-findings|json)[ \t]*\r?\n(.*?)\r?\n[ \t]*\1[ \t]*$",
     re.MULTILINE | re.DOTALL,
 )
 _GROUP = re.compile(r"^###\s+(Critical|Major|Minor|Improvement)\s*$", re.I)
@@ -36,8 +37,9 @@ class Finding:
 def split_findings(text: str) -> tuple[str, list[Finding]]:
     """Return (markdown without the machine block, parsed findings).
 
-    Prefers a ``creasy-findings`` fence. A trailing ``json`` fence is
-    accepted only when it is an object with a ``findings`` list.
+    Prefers an ``opencoderman-findings`` fence. A trailing ``json``
+    fence is accepted only when it is an object with a ``findings``
+    list.
     """
     source = (text or "").replace("\r\n", "\n")
     matches = list(_FENCE.finditer(source))
@@ -57,8 +59,8 @@ def split_findings(text: str) -> tuple[str, list[Finding]]:
 
     if chosen is None:
         # Known machine fence with broken JSON: drop the last
-        # creasy-findings block so it never lands on the MR note.
-        last = next((m for m in reversed(matches) if m.group(2) == "creasy-findings"), None)
+        # machine findings block so it never lands on the MR note.
+        last = next((m for m in reversed(matches) if m.group(2) == _FINDINGS_TAG), None)
         if last is None:
             markdown = source.strip()
             return markdown, extract_markdown_findings(markdown)[:MAX_FINDINGS]
@@ -68,7 +70,7 @@ def split_findings(text: str) -> tuple[str, list[Finding]]:
     markdown = source
     for match in reversed(matches):
         tag = match.group(2)
-        if tag == "creasy-findings" or match is chosen:
+        if tag == _FINDINGS_TAG or match is chosen:
             markdown = markdown[: match.start()] + markdown[match.end() :]
     markdown = markdown.strip()
     if not findings:

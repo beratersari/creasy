@@ -89,7 +89,7 @@ def test_worker_posts_one_thread_per_planted_line_in_large_file(tmp_path, tmp_co
     assert {item.start_line for item in findings} == {plant.line for plant in plants}
     runner._post_note(job, result, findings=findings)
     assert result.posted
-    assert spy.notes and "creasy-findings" not in spy.notes[0]
+    assert spy.notes and "opencoderman-findings" not in spy.notes[0]
     lines = sorted(
         int(row["position"]["new_line"])
         for row in spy.discussions
