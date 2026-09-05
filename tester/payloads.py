@@ -31,6 +31,7 @@ EVENTS = [
     {"id": "reopen", "label": "MR reopen", "kind": "auto"},
     {"id": "review", "label": "/review", "kind": "note"},
     {"id": "ask", "label": "/ask", "kind": "note"},
+    {"id": "reset", "label": "/reset", "kind": "note"},
     {"id": "close", "label": "MR close", "kind": "cleanup"},
     {"id": "merge", "label": "MR merge", "kind": "cleanup"},
 ]
@@ -88,6 +89,11 @@ def build_payload(
     if event == "ask":
         question = note.strip() or "what is the main risk?"
         body = question if question.startswith("/ask") else f"/ask {question}"
+        return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
+    if event == "reset":
+        body = note.strip() or "/reset"
+        if not body.startswith("/reset"):
+            body = "/reset"
         return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
     raise ValueError(f"unknown event {event}")
 

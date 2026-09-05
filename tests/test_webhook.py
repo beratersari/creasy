@@ -77,6 +77,15 @@ def test_comment_queued_while_busy(tmp_config):
     }
     queued = client.post("/webhook", json=second, headers=headers)
     assert queued.json()["status"] == "queued"
+    reset = {
+        **note,
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "/reset"},
+    }
+    wiped = client.post("/webhook", json=reset, headers=headers)
+    assert wiped.json()["status"] == "queued"
+    job = manager.store.get(wiped.json()["job_id"])
+    assert job is not None
+    assert job.trigger == "reset"
     runner.release.set()
     manager.shutdown()
 

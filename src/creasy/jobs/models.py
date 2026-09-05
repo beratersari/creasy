@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-TriggerKind = Literal["open", "update", "reopen", "review", "ask"]
+TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
 JobStatus = Literal[
     "queued",
     "running",

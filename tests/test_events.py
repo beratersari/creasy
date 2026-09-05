@@ -100,6 +100,19 @@ def test_empty_ask_ignored():
     assert isinstance(got, Ignore)
 
 
+def test_reset_note():
+    got = classify_webhook(note_payload("/reset"))
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "reset"
+    assert got.explicit is True
+    extra = classify_webhook(note_payload("/reset please"))
+    assert isinstance(extra, ReviewTrigger)
+    assert extra.kind == "reset"
+    draft = classify_webhook(note_payload("/reset", draft=True), skip_drafts=True)
+    assert isinstance(draft, ReviewTrigger)
+    assert draft.explicit is True
+
+
 def test_bot_note_ignored():
     got = classify_webhook(note_payload("/review"), bot_user_id=9)
     assert isinstance(got, ReviewTrigger)
@@ -110,7 +123,9 @@ def test_bot_note_ignored():
 def test_unrelated_and_preview_ignored():
     assert isinstance(classify_webhook(note_payload("looks good")), Ignore)
     assert isinstance(classify_webhook(note_payload("nice preview of the UI")), Ignore)
+    assert isinstance(classify_webhook(note_payload("please reset this")), Ignore)
     assert first_command("please /review this") == ("review", "this")
+    assert first_command("please /reset this") == ("reset", "this")
 
 
 def test_first_command_wins():
@@ -120,6 +135,9 @@ def test_first_command_wins():
     got2 = classify_webhook(note_payload("/review now /ask later"))
     assert isinstance(got2, ReviewTrigger)
     assert got2.kind == "review"
+    got3 = classify_webhook(note_payload("/reset then /review"))
+    assert isinstance(got3, ReviewTrigger)
+    assert got3.kind == "reset"
 
 
 def test_reopen():

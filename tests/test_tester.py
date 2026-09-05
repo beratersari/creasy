@@ -25,6 +25,8 @@ def test_review_and_ask_notes():
     assert review["object_attributes"]["note"].startswith("/review")
     ask = build_payload("ask", project_id=1, mr_iid=2, note="why this lock?")
     assert ask["object_attributes"]["note"] == "/ask why this lock?"
+    reset = build_payload("reset", project_id=1, mr_iid=2)
+    assert reset["object_attributes"]["note"] == "/reset"
 
 
 def test_unknown_event_raises():

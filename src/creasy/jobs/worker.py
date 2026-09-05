@@ -6,6 +6,7 @@ from typing import Callable, Optional, Protocol
 
 from creasy.config import Config
 from creasy.gitlab.client import GitLabClient, GitLabError, MergeRequest
+from creasy.gitlab.wipe import WipeCancelled, wipe_author_comments
 from creasy.jobs.models import JobRecord
 from creasy.cleanup.end import stop_job_holders
 from creasy.logging import get_logger
@@ -112,6 +113,8 @@ class OpenCodeRunner:
         self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
+        if job.trigger == "reset":
+            return self._run_reset(job, should_stop)
         result = RunResult()
         handle: Optional[ServeHandle] = None
         client: Optional[OpenCodeClient] = None
@@ -275,6 +278,47 @@ class OpenCodeRunner:
                 logger.exception("job-end stop_job_holders failed job=%s", job.job_id)
             stop_serve(handle)
             # Keep the clone. OSM deletes here; Creasy waits for MR close/merge.
+
+    def _run_reset(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
+        """Delete PAT-authored notes/threads. No OpenCode, no clone, no MR note."""
+        result = RunResult()
+        if should_stop():
+            result.cancelled = True
+            return result
+        author_id = self.gitlab.current_user_id()
+        if author_id is None:
+            result.error = "reset failed: could not resolve GITLAB_TOKEN user"
+            return result
+        try:
+            stats = wipe_author_comments(
+                self.gitlab,
+                job.project_id,
+                job.mr_iid,
+                author_id,
+                should_stop=should_stop,
+            )
+        except WipeCancelled:
+            result.cancelled = True
+            return result
+        except GitLabError as exc:
+            result.error = f"reset failed: {exc}"
+            return result
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("reset wipe failed job=%s", job.job_id)
+            result.error = f"reset failed: {exc}"
+            return result
+        workspace = self.workspaces.get(job.mr_key)
+        if workspace is not None and workspace.session_id:
+            workspace.session_id = ""
+            self.workspaces.save(workspace)
+        result.session_id = ""
+        result.text = stats.summary()
+        result.posted = True
+        if stats.failed:
+            logger.warning("reset partial job=%s %s", job.job_id, stats.summary())
+        self._append_job_log(job, stats.summary())
+        logger.info("reset %s %s", job.mr_key, stats.summary())
+        return result
 
     def _prompt(
         self,

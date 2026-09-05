@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union
 
-TriggerKind = Literal["open", "update", "reopen", "review", "ask"]
+TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
 
-_CMD_RE = re.compile(r"(?:^|\s)/(review|ask)(?=\s|$)", re.IGNORECASE)
+_CMD_RE = re.compile(r"(?:^|\s)/(review|ask|reset)(?=\s|$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ Classified = Union[ReviewTrigger, CleanupTrigger, Ignore]
 
 
 def first_command(body: str) -> Optional[tuple[str, str]]:
-    """Return (command, remainder) for the first /review or /ask token."""
+    """Return (command, remainder) for the first /review, /ask, or /reset token."""
     text = body or ""
     match = _CMD_RE.search(text)
     if not match:
@@ -144,7 +144,7 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
         return Ignore("bot note")
     parsed = first_command(str(attrs.get("note") or ""))
     if parsed is None:
-        return Ignore("no /review or /ask")
+        return Ignore("no /review, /ask, or /reset")
     command, remainder = parsed
     if command == "ask" and not remainder:
         return Ignore("empty /ask")
@@ -153,8 +153,9 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
         return Ignore("missing project_id or mr_iid")
     project_id, mr_iid = ids
     mr = payload.get("merge_request") if isinstance(payload.get("merge_request"), dict) else {}
+    kind: TriggerKind = command  # review | ask | reset
     return ReviewTrigger(
-        kind="ask" if command == "ask" else "review",
+        kind=kind,
         project_id=project_id,
         mr_iid=mr_iid,
         source_branch=str(mr.get("source_branch") or ""),
