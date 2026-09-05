@@ -108,3 +108,24 @@ def test_rebase_onto_moved_target_uses_new_merge_base(tmp_path: Path, tmp_config
     assert "feature.py" in index.paths
     assert "later.py" not in index.paths
     assert "core.py" not in index.paths
+
+
+def test_workspace_get_returns_none_on_corrupt_json(tmp_path: Path):
+    store = WorkspaceStore(tmp_path / "meta")
+    path = tmp_path / "meta" / "1-1.json"
+    path.write_text("{not-json", encoding="utf-8")
+    assert store.get("1-1") is None
+
+
+def test_workspace_save_replaces_atomically(tmp_path: Path):
+    store = WorkspaceStore(tmp_path / "meta")
+    store.save(WorkspaceRecord(mr_key="2-3", project_id=2, mr_iid=3, session_id="ses_a"))
+    got = store.get("2-3")
+    assert got is not None
+    assert got.session_id == "ses_a"
+    leftovers = list((tmp_path / "meta").glob("*.tmp"))
+    assert leftovers == []
+    store.save(WorkspaceRecord(mr_key="2-3", project_id=2, mr_iid=3, session_id="ses_b"))
+    again = store.get("2-3")
+    assert again is not None
+    assert again.session_id == "ses_b"
