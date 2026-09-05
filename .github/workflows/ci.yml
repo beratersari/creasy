@@ -79,7 +79,14 @@ jobs:
           test -f "$root/pyproject.toml"
           chmod +x "$root"/scripts/*.sh "$root"/*.sh || true
           (cd "$root" && scripts/install.sh)
+          mkdir -p "$HOME/.config/opencode/agents"
+          echo leftover > "$HOME/.config/opencode/agents/stale.md"
           (cd "$root" && scripts/install-opencode.sh)
+          test -f "$HOME/.opencode/agents/gitlab-reviewer.md"
+          test -f "$HOME/.opencode/skills/cpp98/SKILL.md"
+          test ! -e "$HOME/.config/opencode"
+          cfg_backup=$(ls -d "$HOME/.config"/opencode_backup_* | head -1)
+          test -f "$cfg_backup/agents/stale.md"
           (cd "$root" && scripts/start.sh > /tmp/creasy-start.log 2>&1) &
           echo $! > /tmp/creasy.pid
           ok=0
@@ -131,7 +138,15 @@ jobs:
         run: scripts\install.bat
       - name: Offline install-opencode.bat
         shell: cmd
-        run: scripts\install-opencode.bat
+        run: |
+          mkdir "%USERPROFILE%\.config\opencode\agents" 2>nul
+          echo leftover> "%USERPROFILE%\.config\opencode\agents\stale.md"
+          call scripts\install-opencode.bat
+          if errorlevel 1 exit /b 1
+          if not exist "%USERPROFILE%\.opencode\agents\gitlab-reviewer.md" exit /b 1
+          if not exist "%USERPROFILE%\.opencode\skills\cpp98\SKILL.md" exit /b 1
+          if exist "%USERPROFILE%\.config\opencode" exit /b 1
+          dir /b /ad "%USERPROFILE%\.config\opencode_backup_*" >nul || exit /b 1
       - name: start.bat (new window + health wait)
         shell: cmd
         run: |

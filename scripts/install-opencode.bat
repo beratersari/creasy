@@ -1,7 +1,8 @@
 @echo off
 REM =============================================================================
 REM Creasy - install OpenCode CLI (offline)
-REM Backs up ~/.opencode, unhooks other installs from PATH, installs this pack.
+REM Backs up ~/.opencode, unhooks other installs from PATH, installs this pack
+REM into ~/.opencode only (leftover ~/.config/opencode is backed up, not rewritten).
 REM Does not install Python / the dashboard. Use install.bat for that.
 REM IMPORTANT: never use unescaped "->" in echo lines (cmd redirect).
 REM =============================================================================

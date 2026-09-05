@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Creasy — install OpenCode CLI (offline).
-# Backs up ~/.opencode, unhooks other installs from PATH, installs this pack.
+# Backs up ~/.opencode, unhooks other installs from PATH, installs this pack
+# into ~/.opencode only (leftover ~/.config/opencode is backed up, not rewritten).
 # Does not install Python / the dashboard. Use install.sh for that.
 set -euo pipefail
 

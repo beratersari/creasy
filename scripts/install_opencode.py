@@ -2,9 +2,10 @@
 """Install the OpenCode CLI and this repo's agents/skills (offline, stdlib).
 
 Uses the same replace rules as opencode-configs/install.py: backup
-~/.opencode, unhook other installs from PATH, write a clean home, then
-copy the vendored binary (or the binary from the backup if vendor is
-missing) and prepend ~/.opencode/bin.
+~/.opencode, unhook other installs from PATH, write a clean ~/.opencode
+(do not copy into ~/.config/opencode; leftover trees there are backed
+up and left unwritten), then copy the vendored binary (or the binary
+from the backup if vendor is missing) and prepend ~/.opencode/bin.
 """
 
 from __future__ import annotations
@@ -94,21 +95,12 @@ def list_skill_dirs(root: Path) -> list[Path]:
     return dirs
 
 
-def agent_dests(
-    name: str,
-    user_home: Path | None = None,
-    *,
-    include_opencode_home: bool = True,
-) -> list[Path]:
-    base = user_home or home()
-    dests = [config_home(base) / "agents" / f"{name}.md"]
-    if include_opencode_home:
-        dests.append(opencode_home(base) / "agents" / f"{name}.md")
-    return dests
+def agent_dests(name: str, user_home: Path | None = None) -> list[Path]:
+    return [opencode_home(user_home) / "agents" / f"{name}.md"]
 
 
-def review_agent_dests(user_home: Path | None = None, *, include_opencode_home: bool = True) -> list[Path]:
-    return agent_dests("gitlab-reviewer", user_home, include_opencode_home=include_opencode_home)
+def review_agent_dests(user_home: Path | None = None) -> list[Path]:
+    return agent_dests("gitlab-reviewer", user_home)
 
 
 def vendor_binary(root: Path) -> Path | None:
@@ -175,16 +167,11 @@ def _keep_existing_config(path: Path) -> None:
         print(f"[OK] Config left untouched (not plain JSON): {path}")
 
 
-def install_review_agent(
-    root: Path,
-    user_home: Path | None = None,
-    *,
-    include_opencode_home: bool = True,
-) -> list[Path]:
+def install_review_agent(root: Path, user_home: Path | None = None) -> list[Path]:
     written: list[Path] = []
     for src in list_agent_files(root):
         text = src.read_text(encoding="utf-8")
-        for dest in agent_dests(src.stem, user_home, include_opencode_home=include_opencode_home):
+        for dest in agent_dests(src.stem, user_home):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
             written.append(dest)
@@ -192,32 +179,16 @@ def install_review_agent(
     return written
 
 
-def review_skill_dests(
-    name: str,
-    user_home: Path | None = None,
-    *,
-    include_opencode_home: bool = True,
-) -> list[Path]:
-    base = user_home or home()
-    dests = [config_home(base) / "skills" / name / "SKILL.md"]
-    if include_opencode_home:
-        dests.append(opencode_home(base) / "skills" / name / "SKILL.md")
-    return dests
+def review_skill_dests(name: str, user_home: Path | None = None) -> list[Path]:
+    return [opencode_home(user_home) / "skills" / name / "SKILL.md"]
 
 
-def install_review_skills(
-    root: Path,
-    user_home: Path | None = None,
-    *,
-    include_opencode_home: bool = True,
-) -> list[Path]:
+def install_review_skills(root: Path, user_home: Path | None = None) -> list[Path]:
     written: list[Path] = []
     for skill_dir in list_skill_dirs(root):
         src = skill_dir / "SKILL.md"
         text = src.read_text(encoding="utf-8")
-        for dest in review_skill_dests(
-            skill_dir.name, user_home, include_opencode_home=include_opencode_home
-        ):
+        for dest in review_skill_dests(skill_dir.name, user_home):
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text, encoding="utf-8")
             written.append(dest)

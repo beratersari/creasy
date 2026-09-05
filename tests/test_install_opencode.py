@@ -45,6 +45,7 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "never edit" in text.lower() or "You never edit" in text
     assert "merge-base" in text
     assert "agent/rules/CODE_REVIEW.md" in text
+    assert ".creasy/CODE_REVIEW.md" not in text
     assert "Before you review, read project rules" in text
     assert "detect the C++ dialect" in text
     assert "CMAKE_CXX_STANDARD" in text
@@ -57,7 +58,7 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "implementer-only" in text
     assert "GitLab MR comment" in text
     assert "Never start a line with `#`" in text
-    assert "creasy-findings" in text
+    assert "opencoderman-findings" in text
     assert '"findings"' in text
     assert "### Summary" in text
     assert "### Critical" in text
@@ -84,12 +85,12 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
     home = tmp_path / "home"
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
+    assert dest == home / ".opencode" / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
     cfg = json.loads((home / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
     assert cfg.get("plugin") == []
-    agent = (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    agent = (home / ".opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
     assert "mode: primary" in agent
-    copy = (home / ".opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
-    assert copy == agent
+    assert not (home / ".config" / "opencode").exists()
     for name in (
         "cpp98",
         "modern-cpp",
@@ -99,13 +100,10 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
         "python",
         "web-security",
     ):
-        skill = home / ".config" / "opencode" / "skills" / name / "SKILL.md"
+        skill = home / ".opencode" / "skills" / name / "SKILL.md"
         assert skill.is_file()
         body = skill.read_text(encoding="utf-8")
         assert f"name: {name}" in body
-        assert (home / ".opencode" / "skills" / name / "SKILL.md").read_text(
-            encoding="utf-8"
-        ) == body
 
 
 def test_existing_install_is_backed_up_and_replaced(tmp_path: Path) -> None:
@@ -133,8 +131,9 @@ def test_existing_install_is_backed_up_and_replaced(tmp_path: Path) -> None:
     ]
     fresh = json.loads((oc / "opencode.json").read_text(encoding="utf-8"))
     assert fresh.get("plugin") == []
-    assert (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").is_file()
-    assert (home / ".config" / "opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
+    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
+    assert not (home / ".config" / "opencode").exists()
 
 
 def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) -> None:
@@ -149,7 +148,8 @@ def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) 
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
     assert dest.read_bytes() == b"OLD-BINARY"
-    assert (home / ".config" / "opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert not (home / ".config" / "opencode").exists()
     assert json.loads((oc / "opencode.json").read_text(encoding="utf-8")).get("plugin") == []
 
 
@@ -197,14 +197,13 @@ def test_config_only_home_is_backed_up_and_new_home_created(tmp_path: Path) -> N
     )
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
-    assert dest.name.startswith("opencode")
+    assert dest == home / ".opencode" / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
     assert dest.read_bytes() == b"NEW"
     assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
     backups = list((home / ".config").glob("opencode_backup_*"))
     assert len(backups) == 1
     assert json.loads((backups[0] / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
-    fresh = json.loads((home / ".config" / "opencode" / "opencode.json").read_text(encoding="utf-8"))
-    assert fresh.get("plugin") == []
+    assert not (home / ".config" / "opencode").exists()
 
 
 def test_cpp_skills_state_when_to_load() -> None:
@@ -259,8 +258,9 @@ def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:
     )
     home = tmp_path / "home"
     mod.install(root, user_home=home)
-    assert (home / ".config" / "opencode" / "agents" / "planner.md").is_file()
-    assert (home / ".config" / "opencode" / "skills" / "extra" / "SKILL.md").is_file()
+    assert (home / ".opencode" / "agents" / "planner.md").is_file()
+    assert (home / ".opencode" / "skills" / "extra" / "SKILL.md").is_file()
+    assert not (home / ".config" / "opencode").exists()
 
 
 def test_install_unhooks_other_bin_and_prepends_new(tmp_path: Path) -> None:
