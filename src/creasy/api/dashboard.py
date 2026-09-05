@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from creasy.api.report import build_report_context
 from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
-from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
+from creasy.jobs.models import ERROR_STATUSES
 from creasy.logging import get_logger, read_job_log_lines
 from creasy.opencode.serve import read_serve_log, serve_log_path
 from creasy.opencode.session import fetch_live_chat
@@ -109,13 +109,15 @@ def api_jobs(
         jobs = [j for j in jobs if j.mr_key == key]
     filt = (filter or "all").strip().lower()
     if filt == "active":
-        jobs = [j for j in jobs if j.status in LIVE_STATUSES]
+        jobs = [j for j in jobs if j.status == "running"]
     elif filt == "queued":
         jobs = [j for j in jobs if j.status == "queued"]
     elif filt == "error":
         jobs = [j for j in jobs if j.status in ERROR_STATUSES]
-    elif filt == "completed":
+    elif filt in {"completed", "success"}:
         jobs = [j for j in jobs if j.status == "success"]
+    elif filt == "cancelled":
+        jobs = [j for j in jobs if j.status == "cancelled"]
     total = len(jobs)
     start = (page - 1) * page_size
     slice_ = jobs[start : start + page_size]

@@ -4,9 +4,9 @@ function meta(status: string): { label: string; tone: string } {
   if (s === 'running') return { label: 'Running', tone: 'bg-info-muted text-info-text' }
   if (s === 'queued') return { label: 'Queued', tone: 'bg-warning-muted text-warning-text' }
   if (s === 'timeout') return { label: 'Timeout', tone: 'bg-warning-muted text-warning-text' }
-  if (s === 'not_found') return { label: 'Not found', tone: 'bg-danger-muted text-danger-text' }
+  if (s === 'cancelled') return { label: 'Cancelled', tone: 'bg-surface text-text-secondary' }
   if (s === 'error') return { label: 'Error', tone: 'bg-danger-muted text-danger-text' }
-  return { label: status || 'unknown', tone: 'bg-surface text-text-secondary' }
+  return { label: status || 'Unknown', tone: 'bg-surface text-text-secondary' }
 }
 
 export function StatusBadge({ status, size = 'md' }: { status: string; size?: 'sm' | 'md' }) {
@@ -18,8 +18,10 @@ export function StatusBadge({ status, size = 'md' }: { status: string; size?: 's
 export function statusToneClass(status: string): string {
   const s = (status || '').toLowerCase()
   if (s === 'success') return 'tone-success'
-  if (s === 'running' || s === 'queued') return 'tone-info'
+  if (s === 'running') return 'tone-info'
+  if (s === 'queued') return 'tone-warning'
   if (s === 'timeout') return 'tone-warning'
-  if (s === 'error' || s === 'not_found') return 'tone-danger'
+  if (s === 'cancelled') return 'tone-neutral'
+  if (s === 'error') return 'tone-danger'
   return 'tone-neutral'
 }

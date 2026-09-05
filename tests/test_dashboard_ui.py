@@ -14,7 +14,8 @@ def test_osm_shell_branded_creasy() -> None:
 
 def test_jobs_page_keeps_osm_workbench() -> None:
     page = (ROOT / "web" / "src" / "pages" / "jobs" / "JobsPage.tsx").read_text(encoding="utf-8")
-    assert "Workbench" in page
+    assert "Reviews" in page
+    assert "Workbench" not in page
     assert "vd-job" in page
     assert "Find merge request" in page
 
@@ -26,12 +27,16 @@ def test_job_detail_omits_unused_osm_fields() -> None:
     assert 'label="Attempt"' not in detail
     assert 'label="Timeout"' not in detail
     assert 'label="Callback"' not in detail
+    assert 'label="Job id"' not in detail
+    assert 'label="Merge request"' not in detail
     assert "job.attempts" not in detail
     assert "timeout_in_seconds" not in detail
     assert "callback_status_code" not in detail
+    assert "No OSM" not in detail
 
 
 def test_report_issue_lives_only_in_the_sidebar() -> None:
+    """One control. Job pages pre-select via the URL; do not add a second button."""
     shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
     jobs = (ROOT / "web" / "src" / "pages" / "jobs" / "JobsPage.tsx").read_text(encoding="utf-8")
     detail = (ROOT / "web" / "src" / "pages" / "jobs" / "JobDetailPage.tsx").read_text(

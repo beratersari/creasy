@@ -1,9 +1,10 @@
 export const JOB_FILTERS = [
   { id: 'all', label: 'All' },
-  { id: 'active', label: 'In flight' },
+  { id: 'active', label: 'Running' },
   { id: 'queue', label: 'Queue' },
   { id: 'error', label: 'Error' },
-  { id: 'completed', label: 'Completed' },
+  { id: 'completed', label: 'Success' },
+  { id: 'cancelled', label: 'Cancelled' },
 ] as const
 
 export type JobListFilter = (typeof JOB_FILTERS)[number]['id']
@@ -16,8 +17,9 @@ export function jobMatchesFilter(
   if (filter === 'all') return true
   if (filter === 'active') return s === 'running' || Boolean(job.live && s !== 'queued')
   if (filter === 'queue') return s === 'queued'
-  if (filter === 'error') return s === 'error' || s === 'timeout' || s === 'not_found'
+  if (filter === 'error') return s === 'error' || s === 'timeout'
   if (filter === 'completed') return s === 'success'
+  if (filter === 'cancelled') return s === 'cancelled'
   return true
 }
 

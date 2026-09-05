@@ -33,7 +33,7 @@ function stampFromIso(exportedAt: string): string {
 export function reportZipName(job?: Pick<JobItem, 'jira_id' | 'job_id'> | null, exportedAt?: string): string {
   const stamp = stampFromIso(exportedAt || new Date().toISOString())
   if (!job) return `creasy-report-general-${stamp}.zip`
-  const ticket = safeName(job.jira_id || 'ticket')
+  const ticket = safeName(job.jira_id || 'mr')
   const id = safeName(job.job_id || 'job')
   return `creasy-report-${ticket}-${id}-${stamp}.zip`
 }
@@ -195,7 +195,7 @@ function readme(kind: 'job' | 'general', job?: JobItem | null): string {
     lines.push(
       '',
       `Selected job: ${job.job_id}`,
-      `Ticket: ${job.jira_id}`,
+      `MR: ${job.jira_id}`,
       '',
       'job/record.json             Dashboard job record (no callback_url)',
       'job/parameters.json         Fields needed to reproduce the run',
@@ -223,7 +223,7 @@ export function buildJobReportFiles(input: JobReportInput): Record<string, strin
   const logs = (input.logs || []).map((line) => line.message).join('\n')
   const files: Record<string, string> = {
     'NOTE.txt': [
-      job ? `jira_id: ${job.jira_id}` : 'kind: general',
+      job ? `mr_key: ${job.jira_id}` : 'kind: general',
       job ? `job_id: ${job.job_id}` : '',
       `exported_at: ${input.exportedAt}`,
       '',

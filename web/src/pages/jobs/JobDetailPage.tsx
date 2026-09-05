@@ -9,6 +9,7 @@ import { MarkdownBody } from '../../ui/MarkdownBody'
 import { MetaCard } from '../../ui/MetaCard'
 import { StatusBadge } from '../../ui/StatusBadge'
 import { Tabs } from '../../ui/Tabs'
+import { triggerLabel } from '../../util/jobLabels'
 import { useJobElapsed } from '../../util/time'
 import { JobChatTab } from './JobChatTab'
 
@@ -136,8 +137,10 @@ export function JobDetailPage() {
             {(job?.mr_title || '').trim() || job?.job_id || 'Job'}
           </h1>
           <p className="mt-1 font-mono text-xs text-text-muted">
-            {job?.job_id ? `${job.job_id} · ` : ''}
-            {job?.agent_mode} · {job?.model}
+            {job?.job_id ? `${job.job_id}` : ''}
+            {job && triggerLabel(job.trigger) ? ` · ${triggerLabel(job.trigger)}` : ''}
+            {job?.agent_mode ? ` · ${job.agent_mode}` : ''}
+            {job?.model ? ` · ${job.model}` : ''}
             {elapsed !== '—' ? ` · ${elapsed}` : ''}
           </p>
         </div>
@@ -233,10 +236,9 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <MetaCard label="Job id" mono value={job.job_id} />
         <MetaCard label="Status" valueNode={<StatusBadge status={job.status} />} />
+        <MetaCard label="Trigger" mono value={triggerLabel(job.trigger) || '—'} />
         <MetaCard label="Elapsed" mono value={elapsed} />
-        <MetaCard label="Merge request" mono value={job.jira_id} />
         <MetaCard label="Title" className="sm:col-span-2" value={(job.mr_title || '').trim() || '—'} />
         <MetaCard label="Agent" value={job.agent_mode || '—'} />
         <MetaCard label="Model" mono value={job.model || '—'} />
@@ -246,7 +248,7 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
         <MetaCard label="Clone" mono className="sm:col-span-2 lg:col-span-3" value={job.clone_path || '—'} />
         <MetaCard label="Serve" mono value={job.serve_port ? `${job.serve_pid}@${job.serve_port}` : '—'} />
         <MetaCard label="Started" mono value={job.started_at || '—'} />
-        <MetaCard label="Completed" mono value={job.completed_at || '—'} />
+        <MetaCard label="Finished" mono value={job.completed_at || '—'} />
       </div>
       {job.error_message && (
         <pre className="vd-pre text-danger-text">{job.error_message}</pre>
@@ -257,7 +259,7 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
 
 function PromptTab({ prompts }: { prompts: PromptRow[] }) {
   if (prompts.length === 0) {
-    return <div className="vd-alert vd-alert-warning">No user messages posted yet.</div>
+    return <div className="vd-alert vd-alert-warning">No prompt stored for this job.</div>
   }
   return (
     <div className="space-y-3">
@@ -284,7 +286,7 @@ function LogsTab({
 }) {
   return (
     <div className="space-y-6">
-      <LogBlock title="Job log" empty="No OSM log lines for this job_id.">
+      <LogBlock title="Job log" empty="No log lines for this job yet.">
         {lines.length > 0
           ? lines.map((line, i) => (
               <div key={`${line.timestamp}-${i}`} className="border-b border-border/50 py-0.5">

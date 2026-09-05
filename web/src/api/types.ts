@@ -22,6 +22,7 @@ export type JobItem = {
   mr_iid?: number
   status: string
   live: boolean
+  trigger?: string
   agent_mode?: string
   model?: string
   session_id?: string

@@ -6,6 +6,7 @@ import { useLive } from '../../app/live'
 import { LiveDot } from '../../ui/LiveDot'
 import { PageHeader } from '../../ui/PageHeader'
 import { StatusBadge, statusToneClass } from '../../ui/StatusBadge'
+import { connectionLabel, triggerLabel } from '../../util/jobLabels'
 import { formatJobElapsed, jobElapsedWindow, useNow } from '../../util/time'
 import { JOB_FILTERS, type JobListFilter } from './filters'
 
@@ -65,9 +66,13 @@ export function JobsPage() {
   return (
     <section className="space-y-5">
       <PageHeader
-        kicker="Workbench"
+        kicker="Reviews"
         title="Jobs"
-        description={live.connected ? 'One card is one accepted run.' : 'Disconnected — list may be stale.'}
+        description={
+          live.connected
+            ? 'Each card is one review or /ask.'
+            : `${connectionLabel(false)} — list may be stale.`
+        }
         actions={
           <label className="block text-xs text-text-muted">
             Find merge request
@@ -164,10 +169,11 @@ export function JobsPage() {
                 </div>
                 <div className="mt-1 font-mono text-[11px] text-text-muted">
                   {(j.mr_title || '').trim() ? `${j.jira_id} · ` : ''}
-                  {j.job_id} · {j.agent_mode} · {j.model} · {formatJobElapsed(j, now)}
-                  {j.started_at || j.accepted_at
-                    ? ` · ${j.started_at || j.accepted_at}`
-                    : ''}
+                  {j.job_id}
+                  {triggerLabel(j.trigger) ? ` · ${triggerLabel(j.trigger)}` : ''}
+                  {j.agent_mode ? ` · ${j.agent_mode}` : ''}
+                  {j.model ? ` · ${j.model}` : ''}
+                  {` · ${formatJobElapsed(j, now)}`}
                 </div>
                 {j.error_message && <div className="mt-1.5 truncate text-xs text-danger-text">{j.error_message}</div>}
               </div>

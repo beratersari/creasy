@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { ReportIssue } from '../ui/ReportIssue'
+import { connectionLabel } from '../util/jobLabels'
 import { useLive } from './live'
 
 export function Shell() {
@@ -12,7 +13,7 @@ export function Shell() {
           <div>
             <div className="text-sm font-semibold">Creasy</div>
             <div className="text-[11px] text-text-muted">
-              {live.connected ? 'live' : 'offline'}
+              {connectionLabel(live.connected).toLowerCase()}
               {live.running ? ` · ${live.running} running` : ''}
             </div>
           </div>
@@ -27,7 +28,7 @@ export function Shell() {
           <div className="hidden items-center gap-2 px-1 md:flex">
             <span className={`h-2 w-2 rounded-full ${live.connected ? 'bg-live' : 'bg-warning'}`} />
             <span className={live.connected ? 'text-success-text' : 'text-warning-text'}>
-              {live.connected ? 'Connected' : 'Reconnecting'}
+              {connectionLabel(live.connected)}
             </span>
           </div>
         </div>
