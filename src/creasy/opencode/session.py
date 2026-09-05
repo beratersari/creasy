@@ -70,6 +70,27 @@ def session_activity(messages: list[dict[str, Any]]) -> tuple[int, int, bool]:
     return (len(messages or []), parts_n, has_structured)
 
 
+def _snapshot_part(part: dict[str, Any]) -> dict[str, Any]:
+    state = part.get("state") if isinstance(part.get("state"), dict) else {}
+    raw_input = part.get("input") if isinstance(part.get("input"), dict) else None
+    if raw_input is None and isinstance(state.get("input"), dict):
+        raw_input = state["input"]
+    output = part.get("output")
+    if output is None:
+        output = state.get("output")
+    row: dict[str, Any] = {
+        "id": str(part.get("id") or ""),
+        "type": str(part.get("type") or "text"),
+        "text": str(part.get("text") or state.get("text") or ""),
+        "tool": str(part.get("tool") or part.get("name") or ""),
+        "status": str(part.get("status") or state.get("status") or ""),
+        "output": "" if output is None else str(output),
+    }
+    if raw_input:
+        row["input"] = raw_input
+    return row
+
+
 def snapshot_chat(messages: list[dict[str, Any]], session_id: str) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for index, message in enumerate(messages):
@@ -81,14 +102,7 @@ def snapshot_chat(messages: list[dict[str, Any]], session_id: str) -> list[dict[
         if isinstance(parts_in, list):
             for part in parts_in:
                 if isinstance(part, dict):
-                    state = part.get("state") if isinstance(part.get("state"), dict) else {}
-                    parts.append(
-                        {
-                            "type": str(part.get("type") or "text"),
-                            "text": str(part.get("text") or state.get("text") or ""),
-                            "tool": str(part.get("tool") or ""),
-                        }
-                    )
+                    parts.append(_snapshot_part(part))
         structured = None
         if isinstance(info, dict):
             structured = info.get("structured_output") or info.get("structuredOutput")
@@ -97,8 +111,23 @@ def snapshot_chat(messages: list[dict[str, Any]], session_id: str) -> list[dict[
         if structured is not None:
             blob = structured if isinstance(structured, str) else json.dumps(structured)
             parts.append({"type": "structured_output", "text": blob, "tool": "StructuredOutput"})
-        out.append({"id": mid, "session_id": session_id, "role": role, "parts": parts})
+        created = info.get("time") if isinstance(info, dict) else None
+        if created is None:
+            created = message.get("time") or message.get("created_at")
+        row = {"id": mid, "session_id": session_id, "role": role, "parts": parts}
+        if created is not None:
+            row["created_at"] = created
+        out.append(row)
     return out
+
+
+def fetch_live_chat(base_url: str, directory: str, session_id: str) -> list[dict[str, Any]]:
+    """Pull the current session transcript from a running opencode serve."""
+    client = OpenCodeClient(base_url, directory)
+    try:
+        return snapshot_chat(client.list_messages(session_id), session_id)
+    finally:
+        client.close()
 
 
 class OpenCodeClient:

@@ -95,15 +95,19 @@ class OpenCodeRunner:
         except OSError as exc:
             logger.warning("job log write failed job=%s err=%s", job.job_id, exc)
 
+    def _persist_job(self, job: JobRecord, what: str) -> None:
+        if self.store is None:
+            return
+        try:
+            self.store.save(job)
+        except Exception:  # noqa: BLE001
+            logger.warning("could not persist %s job=%s", what, job.job_id)
+
     def _record_spawn(self, job: JobRecord, handle: ServeHandle) -> None:
         job.serve_pid = handle.pid
         job.serve_port = handle.port
         job.serve_base_url = handle.base_url
-        if self.store is not None:
-            try:
-                self.store.save(job)
-            except Exception:  # noqa: BLE001
-                logger.warning("could not persist serve pid job=%s", job.job_id)
+        self._persist_job(job, "serve pid")
         logger.info("serve started pid=%s port=%s", handle.pid, handle.port)
         self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
@@ -135,12 +139,16 @@ class OpenCodeRunner:
             result.merge_base = merge_base
             result.diff_stat = index.stat
             result.changed_paths = list(index.paths)
+            job.clone_path = workspace.clone_path
+            self._persist_job(job, "clone path")
             logger.info("diff stat for %s:\n%s", job.mr_key, index.stat)
 
             created_new = False
             prompt = self._prompt(
                 job, mr, index, workspace, created_new=False, previous_sha=previous_sha
             )
+            job.prompt = prompt
+            self._persist_job(job, "prompt")
             handle = start_serve(
                 bin_name=self.config.opencode_bin,
                 cwd=clone,
@@ -166,10 +174,14 @@ class OpenCodeRunner:
                 else:
                     raise
             result.session_id = session_id
+            job.session_id = session_id
+            self._persist_job(job, "session id")
             if created_new and job.trigger == "ask":
                 prompt = self._prompt(
                     job, mr, index, workspace, created_new=True, previous_sha=previous_sha
                 )
+                job.prompt = prompt
+                self._persist_job(job, "ask prompt")
             last_error = ""
             text = ""
             original_posted = False

@@ -39,4 +39,9 @@ describe('JobChatTab', () => {
     render(<JobChatTab messages={[]} />)
     expect(screen.getByText(/No transcript stored for this job/)).toBeTruthy()
   })
+
+  it('shows a live waiting state when the serve has no turns yet', () => {
+    render(<JobChatTab messages={[]} live />)
+    expect(screen.getByText(/Waiting for the first turn/)).toBeTruthy()
+  })
 })

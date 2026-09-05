@@ -15,6 +15,7 @@ from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
 from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
 from creasy.logging import get_logger, read_job_log_lines
 from creasy.opencode.serve import read_serve_log, serve_log_path
+from creasy.opencode.session import fetch_live_chat
 from creasy.workspace.identity import mr_key
 
 router = APIRouter()
@@ -40,9 +41,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
+def _live_chat_rows(job) -> list | None:
+    """Current serve transcript, or None if this job is not a live serve yet."""
+    if not getattr(job, "live", False):
+        return None
+    url = (getattr(job, "serve_base_url", None) or "").strip()
+    sid = (getattr(job, "session_id", None) or "").strip()
+    directory = (getattr(job, "clone_path", None) or "").strip()
+    if not url or not sid:
+        return None
+    try:
+        return fetch_live_chat(url, directory, sid)
+    except Exception as exc:  # noqa: BLE001
+        logger.info("live chat fetch failed job=%s: %s", job.job_id, exc)
+        return None
+
+
 def _chat_payload(job) -> dict:
+    live_rows = _live_chat_rows(job)
+    source = live_rows if live_rows is not None else (job.chat_snapshot or [])
     messages = []
-    for index, row in enumerate(job.chat_snapshot or []):
+    for index, row in enumerate(source):
         if not isinstance(row, dict):
             continue
         messages.append(
@@ -51,6 +70,16 @@ def _chat_payload(job) -> dict:
                 "session_id": row.get("session_id") or job.session_id or "",
                 "role": row.get("role") or "unknown",
                 "parts": row.get("parts") or [],
+                "created_at": row.get("created_at"),
+            }
+        )
+    if not messages and (job.prompt or "").strip():
+        messages.append(
+            {
+                "id": "user",
+                "session_id": job.session_id or "",
+                "role": "user",
+                "parts": [{"type": "text", "text": job.prompt}],
             }
         )
     return {
@@ -58,8 +87,9 @@ def _chat_payload(job) -> dict:
         "session_id": job.session_id,
         "session_ids": [job.session_id] if job.session_id else [],
         "messages": messages,
-        "chat": job.chat_snapshot,
+        "chat": source,
         "text": job.text,
+        "live": bool(getattr(job, "live", False)),
     }
 
 
