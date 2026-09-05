@@ -191,6 +191,13 @@ class GitLabClient:
 
     def list_discussions(self, project_id: int, mr_iid: int) -> list[dict[str, Any]]:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions"
+        return self._paginate(path, "list discussions failed")
+
+    def list_notes(self, project_id: int, mr_iid: int) -> list[dict[str, Any]]:
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/notes"
+        return self._paginate(path, "list notes failed")
+
+    def _paginate(self, path: str, err: str) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         page = 1
         while page <= 20:
@@ -198,7 +205,7 @@ class GitLabClient:
                 response = self._http.get(path, params={"per_page": 100, "page": page})
                 response.raise_for_status()
             except httpx.HTTPError as exc:
-                raise GitLabError(f"list discussions failed: {exc}") from exc
+                raise GitLabError(f"{err}: {exc}") from exc
             batch = response.json() if response.content else []
             if not isinstance(batch, list) or not batch:
                 break
@@ -211,6 +218,35 @@ class GitLabClient:
             except ValueError:
                 break
         return out
+
+    def delete_note(self, project_id: int, mr_iid: int, note_id: int) -> bool:
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/notes/{int(note_id)}"
+        return self._delete(path, f"delete note {note_id} failed")
+
+    def delete_discussion_note(
+        self,
+        project_id: int,
+        mr_iid: int,
+        discussion_id: str,
+        note_id: int,
+    ) -> bool:
+        disc = quote(str(discussion_id), safe="")
+        path = (
+            f"/projects/{project_id}/merge_requests/{mr_iid}"
+            f"/discussions/{disc}/notes/{int(note_id)}"
+        )
+        return self._delete(path, f"delete discussion note {note_id} failed")
+
+    def _delete(self, path: str, err: str) -> bool:
+        try:
+            response = self._http.delete(path)
+            if response.status_code in {200, 202, 204, 404}:
+                return True
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("%s: %s", err, exc)
+            return False
+        return True
 
     def reply_to_discussion(
         self,
