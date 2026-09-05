@@ -17,7 +17,7 @@ from creasy.review.format import format_cancelled, format_failure, format_succes
 from creasy.review.position import build_position_variants, format_discussion
 from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
-from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt, load_review_rules
+from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt
 from creasy.workspace.diffmap import parse_unified_diff
 from creasy.workspace.gitops import (
     GitError,
@@ -285,8 +285,7 @@ class OpenCodeRunner:
                 previous_sha=previous_sha,
                 include_context=created_new or not workspace.session_id,
             )
-        rules = load_review_rules(Path(workspace.clone_path))
-        return build_review_prompt(mr, index, extra_notes=job.comment_text, rules=rules)
+        return build_review_prompt(mr, index, extra_notes=job.comment_text)
 
     def _ensure_workspace(
         self,

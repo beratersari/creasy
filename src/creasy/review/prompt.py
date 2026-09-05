@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 from creasy.gitlab.client import MergeRequest
@@ -38,28 +37,13 @@ def format_mr_description(mr: MergeRequest, *, limit: int = _DESC_LIMIT) -> str:
     return _clip(mr.description, limit)
 
 
-def load_review_rules(clone_path: Path) -> str:
-    for rel in ("agent/rules/CODE_REVIEW.md", ".creasy/CODE_REVIEW.md"):
-        path = clone_path / rel
-        if path.is_file():
-            try:
-                return path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-    return ""
-
-
 def build_review_prompt(
     mr: MergeRequest,
     index: DiffIndex,
     *,
     extra_notes: str = "",
-    rules: str = "",
 ) -> str:
     paths = "\n".join(f"- `{path}` ({index.statuses.get(path, '?')})" for path in index.paths) or "- (none after filters)"
-    rules_block = ""
-    if rules.strip():
-        rules_block = f"\n## Project review rules\n\n{rules.strip()}\n"
     extra = ""
     if extra_notes.strip():
         extra = f"\n## Reviewer notes\n\n{extra_notes.strip()}\n"
@@ -85,7 +69,7 @@ The working tree is the MR source at HEAD. Analyze **from the separation point**
 ## Changed paths
 
 {paths}
-{rules_block}{extra}
+{extra}
 ## Instructions
 
 1. Run `git log {index.merge_base}..HEAD` and `git diff {index.merge_base}...HEAD` (and per-path diffs) yourself. Do not assume this prompt contains hunks.

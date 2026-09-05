@@ -36,13 +36,13 @@ def test_review_prompt_has_map_not_full_diff():
         paths=["src/a.py"],
         statuses={"src/a.py": "M"},
     )
-    prompt = build_review_prompt(_mr(), index, extra_notes="be strict", rules="No bare except")
+    prompt = build_review_prompt(_mr(), index, extra_notes="be strict")
     assert "bbb" in prompt
     assert "src/a.py" in prompt
     assert "git diff bbb...HEAD" in prompt
     assert "Do not assume this prompt contains hunks" in prompt
     assert "@@ " not in prompt
-    assert "No bare except" in prompt
+    assert "Project review rules" not in prompt
     assert "be strict" in prompt
     assert "Draft: no" in prompt
     assert "`backend`" in prompt
