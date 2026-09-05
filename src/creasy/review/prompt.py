@@ -7,6 +7,37 @@ from creasy.gitlab.client import MergeRequest
 from creasy.workspace.gitops import DiffIndex
 
 
+_DESC_LIMIT = 4000
+_ASK_DESC_LIMIT = 400
+
+
+def _clip(text: str, limit: int) -> str:
+    body = (text or "").strip()
+    if len(body) <= limit:
+        return body
+    return body[: limit].rstrip() + "\n… (truncated)"
+
+
+def format_mr_meta(mr: MergeRequest) -> str:
+    labels = ", ".join(f"`{name}`" for name in mr.labels[:20]) or "(none)"
+    status = (mr.pipeline_status or "").strip()
+    if status and mr.pipeline_url:
+        pipeline = f"{status} ({mr.pipeline_url})"
+    elif status:
+        pipeline = status
+    else:
+        pipeline = "(none)"
+    return (
+        f"Draft: {'yes' if mr.draft else 'no'}\n"
+        f"Labels: {labels}\n"
+        f"Latest pipeline: {pipeline}"
+    )
+
+
+def format_mr_description(mr: MergeRequest, *, limit: int = _DESC_LIMIT) -> str:
+    return _clip(mr.description, limit)
+
+
 def load_review_rules(clone_path: Path) -> str:
     for rel in ("agent/rules/CODE_REVIEW.md", ".creasy/CODE_REVIEW.md"):
         path = clone_path / rel
@@ -32,6 +63,8 @@ def build_review_prompt(
     extra = ""
     if extra_notes.strip():
         extra = f"\n## Reviewer notes\n\n{extra_notes.strip()}\n"
+    desc = format_mr_description(mr)
+    desc_block = f"\n## MR description\n\n{desc}\n" if desc else ""
     return f"""You are reviewing GitLab merge request !{mr.iid}: {mr.title}
 
 Author: {mr.author}
@@ -39,7 +72,8 @@ Branches: `{mr.source_branch}` → `{mr.target_branch}`
 HEAD sha: `{mr.sha}`
 Separation point (merge-base): `{index.merge_base}`
 MR URL: {mr.web_url}
-
+{format_mr_meta(mr)}
+{desc_block}
 The working tree is the MR source at HEAD. Analyze **from the separation point**, not the whole repo history.
 
 ## Diff stat (`git diff --stat {index.merge_base}...HEAD`)
@@ -82,6 +116,10 @@ def build_ask_prompt(
             f"MR !{mr.iid} {mr.title} (`{mr.source_branch}` → `{mr.target_branch}`). "
             f"Changed files: {paths or '(see git)'}."
         )
+        parts.append(format_mr_meta(mr).replace("\n", "; "))
+        desc = format_mr_description(mr, limit=_ASK_DESC_LIMIT)
+        if desc:
+            parts.append(f"Description: {desc}")
         if index:
             parts.append(f"Separation point: `{index.merge_base}`. Use `git diff {index.merge_base}...HEAD` if needed.")
     parts.append(question.strip())

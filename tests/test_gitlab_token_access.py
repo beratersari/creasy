@@ -137,6 +137,108 @@ def test_fetch_auth_failure_scrubs_origin_and_keeps_clone(tmp_path: Path, monkey
     assert origin == "https://gitlab.example/group/repo.git"
 
 
+def test_get_merge_request_reads_labels_and_head_pipeline() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(
+            200,
+            json={
+                "iid": 2,
+                "title": "Add login",
+                "description": "use SSO",
+                "author": {"username": "berat"},
+                "source_branch": "feat",
+                "target_branch": "main",
+                "sha": "abc",
+                "diff_refs": {"base_sha": "def", "start_sha": "def", "head_sha": "abc"},
+                "web_url": "http://gl/mr/2",
+                "draft": True,
+                "state": "opened",
+                "labels": ["backend", {"title": "auth"}, "backend"],
+                "head_pipeline": {"status": "failed", "web_url": "http://gl/p/9"},
+                "source": {"http_url_to_repo": "http://gl/repo.git"},
+            },
+        )
+
+    client = _client(handler)
+    try:
+        mr = client.get_merge_request(1, 2)
+        assert mr.draft is True
+        assert mr.description == "use SSO"
+        assert mr.labels == ["backend", "auth"]
+        assert mr.pipeline_status == "failed"
+        assert mr.pipeline_url == "http://gl/p/9"
+        assert not any(path.endswith("/pipelines") for path in seen)
+    finally:
+        client.close()
+
+
+def test_get_merge_request_fetches_pipeline_when_missing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/pipelines"):
+            return httpx.Response(
+                200,
+                json=[{"status": "success", "web_url": "http://gl/p/3"}],
+            )
+        return httpx.Response(
+            200,
+            json={
+                "iid": 2,
+                "title": "Add login",
+                "description": "",
+                "author": {"username": "a"},
+                "source_branch": "feat",
+                "target_branch": "main",
+                "sha": "abc",
+                "web_url": "http://gl/mr/2",
+                "draft": False,
+                "state": "opened",
+                "labels": [],
+                "source": {"http_url_to_repo": "http://gl/repo.git"},
+            },
+        )
+
+    client = _client(handler)
+    try:
+        mr = client.get_merge_request(1, 2)
+        assert mr.pipeline_status == "success"
+        assert mr.pipeline_url == "http://gl/p/3"
+    finally:
+        client.close()
+
+
+def test_get_merge_request_pipeline_fetch_failure_is_nonfatal() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/pipelines"):
+            return httpx.Response(403, text='{"message":"403"}')
+        return httpx.Response(
+            200,
+            json={
+                "iid": 2,
+                "title": "Add login",
+                "description": "",
+                "author": {"username": "a"},
+                "source_branch": "feat",
+                "target_branch": "main",
+                "sha": "abc",
+                "web_url": "http://gl/mr/2",
+                "draft": False,
+                "state": "opened",
+                "source": {"http_url_to_repo": "http://gl/repo.git"},
+            },
+        )
+
+    client = _client(handler)
+    try:
+        mr = client.get_merge_request(1, 2)
+        assert mr.pipeline_status == ""
+        assert mr.title == "Add login"
+    finally:
+        client.close()
+
+
 def test_gitlab_client_empty_token_omits_header() -> None:
     client = GitLabClient("https://gitlab.example", "")
     try:

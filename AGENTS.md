@@ -94,14 +94,15 @@ These look like bugs. They are not.
   Later jobs: resume that id. If OpenCode rejects it, create a new
   session and continue (do not fail the job). Mid-job hang retry:
   same `ses_*` only — do not invent a blank session.
-- `/review` (and auto MR events): full map prompt (title, branches,
-  merge-base, stat, paths, rules file if present, `/review` remainder).
+- `/review` (and auto MR events): full map prompt (title, description,
+  draft, labels, latest pipeline, branches, merge-base, stat, paths,
+  rules file if present, `/review` remainder).
   One OpenCode turn. Parse findings from an optional `creasy-findings`
   fence or from `#### N. \`path:lines\`` titles. If GET `/message`
   is unreadable (400), create a new `ses_*` and continue.
 - `/ask`: question only. If SHA moved, prepend a one-line note +
   updated `--stat`. If the session is new/rejected, prepend short MR
-  context.
+  context (including draft, labels, pipeline, and a clipped description).
 - OpenCode only. No Codex.
 - Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
   `gitlab-reviewer`).

@@ -197,7 +197,8 @@ We do **not** trust GitLab’s `/changes` payload as the source of truth. That A
 - title, description, author, web_url
 - `source_branch`, `target_branch`
 - `sha` (source HEAD), `diff_refs.base_sha` / `start_sha` / `head_sha`
-- draft / state
+- draft / state, labels
+- latest pipeline (`head_pipeline`, else `GET …/pipelines?per_page=1`)
 
 **Workspace (git, after clone or fetch)**
 
@@ -220,7 +221,7 @@ Pasting the whole unified diff into the first message is a bad default. Large MR
 
 The prompt is a **map**, not the change set:
 
-1. MR title, description, author, `source → target`, HEAD sha.
+1. MR title, description, author, `source → target`, HEAD sha, draft, labels, latest pipeline.
 2. **Separation point:** merge-base SHA (`git merge-base origin/<target> HEAD`, or GitLab `diff_refs.base_sha` when present).
 3. `git diff --stat <base>...HEAD` and the changed-path list (added/modified/deleted/renamed). Filter with `REVIEW_EXTENSIONS` / `MAX_FILE_SIZE_KB`; skip binaries.
 4. Project rules if present (`agent/rules/CODE_REVIEW.md`, else `.creasy/CODE_REVIEW.md`).

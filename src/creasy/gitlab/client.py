@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import quote
 
@@ -27,6 +27,27 @@ class MergeRequest:
     http_url: str
     draft: bool
     state: str
+    labels: list[str] = field(default_factory=list)
+    pipeline_status: str = ""
+    pipeline_url: str = ""
+
+
+def _parse_labels(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if isinstance(item, str):
+            name = item.strip()
+        elif isinstance(item, dict):
+            name = str(item.get("title") or item.get("name") or "").strip()
+        else:
+            name = ""
+        if name and name not in out:
+            out.append(name)
+        if len(out) >= 20:
+            break
+    return out
 
 
 class GitLabError(RuntimeError):
@@ -83,7 +104,10 @@ class GitLabClient:
             or (data.get("project") or {}).get("http_url_to_repo")
             or ""
         )
-        return MergeRequest(
+        pipe = data.get("head_pipeline") or data.get("pipeline") or {}
+        if not isinstance(pipe, dict):
+            pipe = {}
+        mr = MergeRequest(
             project_id=int(data.get("target_project_id") or project_id),
             iid=int(data["iid"]),
             title=str(data.get("title") or ""),
@@ -98,7 +122,27 @@ class GitLabClient:
             http_url=str(http_url),
             draft=bool(data.get("draft") or data.get("work_in_progress")),
             state=str(data.get("state") or ""),
+            labels=_parse_labels(data.get("labels")),
+            pipeline_status=str(pipe.get("status") or "").strip(),
+            pipeline_url=str(pipe.get("web_url") or "").strip(),
         )
+        if not mr.pipeline_status:
+            self._attach_latest_pipeline(mr)
+        return mr
+
+    def _attach_latest_pipeline(self, mr: MergeRequest) -> None:
+        path = f"/projects/{mr.project_id}/merge_requests/{mr.iid}/pipelines"
+        try:
+            response = self._http.get(path, params={"per_page": 1})
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fetch MR pipelines failed: %s", exc)
+            return
+        batch = response.json() if response.content else []
+        if not isinstance(batch, list) or not batch or not isinstance(batch[0], dict):
+            return
+        mr.pipeline_status = str(batch[0].get("status") or "").strip()
+        mr.pipeline_url = str(batch[0].get("web_url") or "").strip()
 
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict[str, Any]:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}/notes"
