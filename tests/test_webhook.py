@@ -24,6 +24,37 @@ def _app(tmp_config):
     return app, manager, runner
 
 
+def test_note_ignored_until_bot_user_resolves(tmp_config):
+    app, manager, runner = _app(tmp_config)
+    app.state.bot_user_id = None
+
+    class Gitlab:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def current_user_id(self):
+            self.calls += 1
+            return 7 if self.calls > 1 else None
+
+    app.state.gitlab = Gitlab()
+    client = TestClient(app)
+    headers = {"X-Gitlab-Token": "secret"}
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
+    }
+    first = client.post("/webhook", json=note, headers=headers)
+    assert first.json()["status"] == "ignored"
+    assert first.json()["reason"] == "bot user unknown"
+    second = client.post("/webhook", json=note, headers=headers)
+    assert second.json()["status"] == "accepted"
+    assert app.state.bot_user_id == 7
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_secret_required(tmp_config):
     app, _, _ = _app(tmp_config)
     client = TestClient(app)

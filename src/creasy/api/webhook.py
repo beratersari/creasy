@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -10,6 +11,19 @@ from creasy.logging import get_logger
 
 router = APIRouter()
 logger = get_logger("webhook")
+
+
+def _bot_user_id(request: Request) -> Optional[int]:
+    cached = getattr(request.app.state, "bot_user_id", None)
+    if cached is not None:
+        return cached
+    gitlab = getattr(request.app.state, "gitlab", None)
+    if gitlab is None:
+        return None
+    uid = gitlab.current_user_id()
+    if uid is not None:
+        request.app.state.bot_user_id = uid
+    return uid
 
 
 def _verify_secret(request: Request) -> None:
@@ -33,7 +47,10 @@ async def webhook(request: Request) -> JSONResponse:
 
     config = request.app.state.config
     manager = request.app.state.manager
-    bot_id = getattr(request.app.state, "bot_user_id", None)
+    bot_id = _bot_user_id(request)
+    kind = str(payload.get("object_kind") or "").strip().lower()
+    if kind == "note" and bot_id is None:
+        return JSONResponse({"status": "ignored", "reason": "bot user unknown"})
     classified = classify_webhook(payload, skip_drafts=config.skip_draft_mrs, bot_user_id=bot_id)
     logger.info("webhook classified=%s", type(classified).__name__)
 
