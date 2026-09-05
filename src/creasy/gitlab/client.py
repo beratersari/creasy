@@ -1,3 +1,9 @@
+"""GitLab REST v4 client.
+
+Uses ``PRIVATE-TOKEN`` and ``verify=False`` (INTENTIONAL: on-prem / TLS
+intercept; no custom-CA path yet).
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -62,10 +68,18 @@ class GitLabClient:
         self.base_url = base_url.rstrip("/")
         self.token = token
         self.timeout = timeout
+        try:
+            import urllib3
+
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        except Exception:
+            pass
+        # INTENTIONAL: verify=False (on-prem / TLS intercept; no custom-CA path yet).
         self._http = httpx.Client(
             base_url=f"{self.base_url}/api/v4",
             headers={"PRIVATE-TOKEN": token} if token else {},
             timeout=timeout,
+            verify=False,
         )
         self._user_id: Optional[int] = None
 

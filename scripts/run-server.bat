@@ -3,6 +3,7 @@ REM Runs Creasy in the Creasy window. Do not nest this inside a quoted cmd /c.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0\.."
 set "GIT_TERMINAL_PROMPT=0"
+set "GIT_SSL_NO_VERIFY=1"
 set "PYTHONUNBUFFERED=1"
 if exist "%USERPROFILE%\.opencode\bin" set "PATH=%USERPROFILE%\.opencode\bin;%PATH%"
 if exist "%CD%\vendor\bin" set "PATH=%CD%\vendor\bin;%PATH%"

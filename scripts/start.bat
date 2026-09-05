@@ -26,6 +26,7 @@ set "CREASY_PY="
 if exist "%VENV_PY%" set "CREASY_PY=%VENV_PY%"
 
 set "GIT_TERMINAL_PROMPT=0"
+set "GIT_SSL_NO_VERIFY=1"
 set "PYTHONUNBUFFERED=1"
 if exist "%USERPROFILE%\.opencode\bin" set "PATH=%USERPROFILE%\.opencode\bin;%PATH%"
 if exist "%ROOT%\vendor\bin" set "PATH=%ROOT%\vendor\bin;%PATH%"

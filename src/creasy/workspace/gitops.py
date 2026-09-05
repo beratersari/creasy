@@ -29,6 +29,8 @@ def isolated_git_env(token: str = "") -> dict[str, str]:
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_ASKPASS"] = "echo"
     env["GCM_INTERACTIVE"] = "never"
+    # INTENTIONAL: on-prem / TLS intercept. Same policy as httpx verify=False.
+    env["GIT_SSL_NO_VERIFY"] = "1"
     if token:
         env["CREASY_GIT_TOKEN"] = token
     return env
@@ -65,7 +67,7 @@ def _run_git(
     env: Optional[dict[str, str]] = None,
     timeout: float = 120,
 ) -> subprocess.CompletedProcess[str]:
-    cmd = ["git", "-c", "credential.helper=", *args]
+    cmd = ["git", "-c", "credential.helper=", "-c", "http.sslVerify=false", *args]
     logger.info("git %s cwd=%s", redact_userinfo(" ".join(str(a) for a in args)), cwd or ".")
     try:
         result = subprocess.run(

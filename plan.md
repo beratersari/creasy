@@ -277,6 +277,9 @@ This is a webhook server, not a desktop OSM worker. No GCM popup.
 - Clone URL is `https://oauth2:{token}@{host}/...`.
 - Immediately scrub `origin` userinfo after clone (same as OSM).
 - `GIT_TERMINAL_PROMPT=0`. Isolated git env. No SSH / `git@`.
+- TLS: `verify=False` on every outbound HTTP client. Git uses
+  `GIT_SSL_NO_VERIFY=1` and `-c http.sslVerify=false` (on-prem /
+  intercept; no custom-CA path yet).
 
 ### 7. Stack
 

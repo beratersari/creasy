@@ -41,6 +41,9 @@ def test_start_scripts_launch_creasy():
     assert "-m creasy" in sh
     assert "GIT_TERMINAL_PROMPT" in bat
     assert "GIT_TERMINAL_PROMPT" in sh
+    assert "GIT_SSL_NO_VERIFY" in bat
+    assert "GIT_SSL_NO_VERIFY" in sh
+    assert "GIT_SSL_NO_VERIFY" in _read("scripts/run-server.bat")
     assert "opencode" in bat.lower()
     assert "opencode" in sh
 
@@ -93,6 +96,9 @@ def test_ci_runs_vendor_install_start():
     assert workflow.count("submodules: true") >= 3
     assert "/health" in workflow
     assert "upload-artifact" in workflow
+    assert "include-hidden-files: true" in workflow
+    assert workflow.count("include-hidden-files: true") == workflow.count("uses: actions/upload-artifact")
+    assert "test -f" in workflow and ".env.example" in workflow
     assert "dist/stage/creasy-" in workflow
     assert "dist/creasy-*.zip" not in workflow
     assert "creasy-offline-zips" not in workflow

@@ -42,6 +42,10 @@ These look like bugs. They are not.
    GitLab `base_sha`. After a rebase onto a moved target, the old
    fork commit is still in the repo and would pull target-branch
    commits into the review.
+7. **Outbound HTTPS does not verify TLS.** On-prem / intercept
+   boxes are expected. Every `httpx` client uses `verify=False`.
+   Git uses `http.sslVerify=false` and `GIT_SSL_NO_VERIFY=1`.
+   Do not turn verification back on without a custom-CA path.
 
 ## Hard rules
 
@@ -79,7 +83,8 @@ These look like bugs. They are not.
 ### Clone and git
 
 - HTTPS only. Inject `GITLAB_TOKEN` as `oauth2:{token}@host`, then
-  **scrub origin userinfo**. `GIT_TERMINAL_PROMPT=0`. No SSH.
+  **scrub origin userinfo**. `GIT_TERMINAL_PROMPT=0`.
+  `GIT_SSL_NO_VERIFY=1` and `http.sslVerify=false`. No SSH.
 - First review: clone into `DATA_DIR/workspaces/{mr_key}`. Later
   jobs: `git fetch` source + target, checkout the MR `sha`.
 - After checkout, `merge-base origin/<target> HEAD`. Use GitLab

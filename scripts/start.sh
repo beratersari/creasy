@@ -21,6 +21,7 @@ if [[ -x "$VENV_PY" ]]; then
 fi
 
 export GIT_TERMINAL_PROMPT=0
+export GIT_SSL_NO_VERIFY=1
 export PYTHONUNBUFFERED=1
 if [[ -d "$HOME/.opencode/bin" ]]; then
   export PATH="$HOME/.opencode/bin:$PATH"

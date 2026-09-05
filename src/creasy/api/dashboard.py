@@ -10,8 +10,9 @@ from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSock
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
 from creasy.api.report import build_report_context
+from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
+from creasy.jobs.models import ERROR_STATUSES, LIVE_STATUSES
 from creasy.logging import get_logger, read_job_log_lines
 from creasy.opencode.serve import read_serve_log, serve_log_path
 from creasy.workspace.identity import mr_key
@@ -254,17 +255,44 @@ def spa_dir() -> Path:
     return Path(__file__).resolve().parents[3] / "web" / "dist"
 
 
+class _SpaStaticFiles(StaticFiles):
+    """StaticFiles that never serves .js as text/plain (Windows MIME bug)."""
+
+    def file_response(  # type: ignore[no-untyped-def]
+        self, full_path, stat_result, scope, status_code=200
+    ):
+        resp = super().file_response(
+            full_path, stat_result, scope, status_code=status_code
+        )
+        mt = media_type_for_path(Path(str(full_path)))
+        if mt:
+            resp.headers["content-type"] = mt
+            if hasattr(resp, "media_type"):
+                resp.media_type = mt
+        return resp
+
+
+def _spa_file(path: Path) -> FileResponse:
+    kwargs: dict = {"path": path}
+    mt = media_type_for_path(path)
+    if mt:
+        kwargs["media_type"] = mt
+    return FileResponse(**kwargs)
+
+
 def attach_spa(app) -> None:
+    # Windows registry can map .js → text/plain; force SPA-safe types first.
+    ensure_spa_mimetypes()
     dist = spa_dir()
     index = dist / "index.html"
     assets = dist / "assets"
     if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+        app.mount("/assets", _SpaStaticFiles(directory=assets), name="assets")
 
     def _index() -> FileResponse:
         if not index.is_file():
             raise HTTPException(status_code=404, detail="dashboard not built")
-        return FileResponse(index)
+        return _spa_file(index)
 
     @app.get("/")
     def root() -> FileResponse:
@@ -285,4 +313,4 @@ def attach_spa(app) -> None:
 
         @app.get("/favicon.svg")
         def favicon_svg() -> FileResponse:
-            return FileResponse(favicon)
+            return _spa_file(favicon)

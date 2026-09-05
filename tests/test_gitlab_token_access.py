@@ -15,6 +15,7 @@ from creasy.workspace.gitops import (
     clone_repo,
     fetch_and_checkout,
     inject_token,
+    isolated_git_env,
 )
 
 
@@ -27,6 +28,27 @@ def _client(handler, token: str = "tok") -> GitLabClient:
         transport=httpx.MockTransport(handler),
     )
     return client
+
+
+def test_isolated_git_env_disables_ssl_verify() -> None:
+    env = isolated_git_env()
+    assert env["GIT_SSL_NO_VERIFY"] == "1"
+    assert env["GIT_TERMINAL_PROMPT"] == "0"
+
+
+def test_run_git_passes_ssl_verify_false(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["cmd"] = list(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    _run_git(["status"])
+    cmd = seen["cmd"]
+    assert cmd[0] == "git"
+    assert "http.sslVerify=false" in cmd
+    assert "credential.helper=" in cmd
 
 
 def test_inject_token_empty_leaves_url() -> None:
@@ -243,6 +265,20 @@ def test_gitlab_client_empty_token_omits_header() -> None:
     client = GitLabClient("https://gitlab.example", "")
     try:
         assert "PRIVATE-TOKEN" not in client._http.headers
+    finally:
+        client.close()
+
+
+def test_gitlab_client_disables_tls_verify() -> None:
+    import ssl
+
+    client = GitLabClient("https://gitlab.example", "tok")
+    try:
+        pool = getattr(client._http._transport, "_pool", None)
+        ctx = getattr(pool, "_ssl_context", None)
+        assert ctx is not None
+        assert ctx.check_hostname is False
+        assert ctx.verify_mode == ssl.CERT_NONE
     finally:
         client.close()
 
