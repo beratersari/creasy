@@ -401,12 +401,25 @@ def test_empty_gitlab_diff_refs_drops_inline_threads(tmp_config, tmp_path: Path)
         _shutdown(manager, httpd)
 
 
-def test_marking_a_draft_ready_starts_a_review(tmp_config, tmp_path: Path):
-    """Draft open is skipped. Mark-as-ready (update, no oldrev, draft
-    flipped false) enqueues the review the author just asked for.
+def test_new_commits_and_mark_as_ready_do_not_start_a_review(tmp_config, tmp_path: Path):
+    """Auto review is open-only. A later push (update + oldrev) or
+    mark-as-ready must not spend a slot; /review still runs.
     """
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
+        push = {
+            "object_kind": "merge_request",
+            "object_attributes": {
+                "action": "update",
+                "iid": 7,
+                "target_project_id": 42,
+                "source_branch": "feat",
+                "target_branch": "main",
+                "title": "Add overflow",
+                "oldrev": "abc123",
+                "url": "http://gl/mr/7",
+            },
+        }
         ready = {
             "object_kind": "merge_request",
             "object_attributes": {
@@ -421,10 +434,13 @@ def test_marking_a_draft_ready_starts_a_review(tmp_config, tmp_path: Path):
             },
             "changes": {"draft": {"previous": True, "current": False}},
         }
-        classified = classify_webhook(ready, skip_drafts=True)
-        assert not isinstance(classified, Ignore)
-        res = client.post("/webhook", json=ready, headers={"X-Gitlab-Token": "secret"})
-        assert res.status_code == 200
+        assert isinstance(classify_webhook(push, skip_drafts=True), Ignore)
+        assert isinstance(classify_webhook(ready, skip_drafts=True), Ignore)
+        headers = {"X-Gitlab-Token": "secret"}
+        assert client.post("/webhook", json=push, headers=headers).json()["status"] == "ignored"
+        assert client.post("/webhook", json=ready, headers=headers).json()["status"] == "ignored"
+        assert manager.store.list_all() == []
+        res = client.post("/webhook", json=_note_body("/review"), headers=headers)
         assert res.json()["status"] == "accepted"
         job = _wait_job(manager, res.json()["job_id"])
         assert job.status == "success", job.error_message
@@ -502,10 +518,8 @@ def test_ask_then_reset_through_the_http_api(tmp_config, tmp_path: Path):
         _shutdown(manager, httpd)
 
 
-def test_dashboard_search_matches_only_exact_mr_key(tmp_config, tmp_path: Path):
-    """Operators coming from GitLab type !7 or the title. The API only
-    exact-matches project_id-iid, so those searches look empty.
-    """
+def test_dashboard_search_matches_bang_iid_and_title(tmp_config, tmp_path: Path):
+    """Operators coming from GitLab type !7 or the title, not only 42-7."""
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
         res = client.post(
@@ -518,13 +532,15 @@ def test_dashboard_search_matches_only_exact_mr_key(tmp_config, tmp_path: Path):
         hit = client.get("/api/jobs", params={"jira_id": key}).json()
         assert hit["total"] == 1
         by_iid = client.get("/api/jobs", params={"jira_id": "7"}).json()
-        assert by_iid["total"] == 0
+        assert by_iid["total"] == 1
         by_bang = client.get("/api/jobs", params={"jira_id": "!7"}).json()
-        assert by_bang["total"] == 0
+        assert by_bang["total"] == 1
         by_title = client.get("/api/jobs", params={"jira_id": "Add overflow"}).json()
-        assert by_title["total"] == 0
+        assert by_title["total"] == 1
         by_mr_key = client.get("/api/jobs", params={"mr_key": key}).json()
         assert by_mr_key["total"] == 1
+        miss = client.get("/api/jobs", params={"jira_id": "no-such-mr"}).json()
+        assert miss["total"] == 0
     finally:
         _shutdown(manager, httpd)
 

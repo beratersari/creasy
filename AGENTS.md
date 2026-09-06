@@ -36,8 +36,8 @@ These look like bugs. They are not.
    the next GitLab comment.
 4. **Comments queue FIFO per MR.** A later `/review`, `/ask`, or
    `/reset` while that MR is running is **queued**, not 409, not
-   coalesced to “latest only”. Auto `open` / `update` / `reopen` are
-   skipped if that MR already has a running or queued job.
+   coalesced to “latest only”. Auto `open` is skipped if that MR
+   already has a running or queued job.
 5. **Do not put the unified diff in the prompt.** Give merge-base,
    `git diff --stat <base>...HEAD`, and the path list. OpenCode reads
    the tree and runs git itself. Do not filter paths by extension.
@@ -60,8 +60,8 @@ These look like bugs. They are not.
   set. Missing/wrong → **401**.
 - Classify in `creasy.gitlab.events`. Do not re-parse payloads in the
   worker.
-- MR `open` / `reopen` → enqueue review. `update` only if `oldrev` is
-  present. `close` / `merge` → cancel jobs and delete the clone.
+- MR `open` → enqueue review. `update` (new commits) and `reopen` do
+  not. `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: first command token wins. `/review` → full
   review job. `/ask <question>` → follow-up. `/reset` → delete that
   MR’s notes and threads authored by the token user (no OpenCode).
@@ -172,9 +172,9 @@ note or discussion posting in `opencode/`.
 
 - `pytest` must stay runnable with no live GitLab and no `opencode`
   binary. Fake the runner for manager/webhook tests.
-- Event tests cover open / update-with-and-without-`oldrev` / close /
-  merge / `/review` / `/ask` / empty `/ask` / `/reset` / bot note /
-  first-command.
+- Event tests cover open / update-with-and-without-`oldrev` ignored /
+  reopen ignored / close / merge / `/review` / `/ask` / empty `/ask` /
+  `/reset` / bot note / first-command.
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are

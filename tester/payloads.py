@@ -27,8 +27,8 @@ REPOS = [
 
 EVENTS = [
     {"id": "open", "label": "MR open", "kind": "auto"},
-    {"id": "update", "label": "MR update (oldrev)", "kind": "auto"},
-    {"id": "reopen", "label": "MR reopen", "kind": "auto"},
+    {"id": "update", "label": "MR update (ignored)", "kind": "auto"},
+    {"id": "reopen", "label": "MR reopen (ignored)", "kind": "auto"},
     {"id": "review", "label": "/review", "kind": "note"},
     {"id": "ask", "label": "/ask", "kind": "note"},
     {"id": "reset", "label": "/reset", "kind": "note"},

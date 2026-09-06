@@ -46,6 +46,31 @@ def _mgr(request: Request):
     return request.app.state.manager
 
 
+def job_matches_query(job, query: str) -> bool:
+    """True when the jobs-list search box should show this job.
+
+    Operators type the GitLab iid (``7`` / ``!7``), the MR title, or
+    the stored ``project-iid`` key. Exact key match stays first.
+    """
+    q = (query or "").strip()
+    if not q:
+        return True
+    if job.mr_key == q:
+        return True
+    lowered = q.lower()
+    if lowered in (job.mr_key or "").lower():
+        return True
+    title = (getattr(job, "mr_title", None) or "").strip().lower()
+    if title and lowered in title:
+        return True
+    token = q[1:].strip() if q.startswith("!") else q
+    if token.isdigit():
+        number = int(token)
+        if job.mr_iid == number or job.project_id == number:
+            return True
+    return False
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
@@ -115,7 +140,7 @@ def api_jobs(
     jobs = _mgr(request).store.list_all()
     key = (mr_key or jira_id or "").strip()
     if key:
-        jobs = [j for j in jobs if j.mr_key == key]
+        jobs = [j for j in jobs if job_matches_query(j, key)]
     filt = (filter or "all").strip().lower()
     if filt == "active":
         jobs = [j for j in jobs if j.status == "running"]
@@ -215,14 +240,18 @@ def api_serve_log(job_id: str, request: Request) -> dict:
 def api_queue(request: Request, mr_key: Optional[str] = None, jira_id: Optional[str] = None) -> dict:
     _check_token(request)
     key = (mr_key or jira_id or "").strip() or None
-    raw = _mgr(request).queue.public_items(mr_key=key)
+    raw = _mgr(request).queue.public_items()
     items = []
     for row in raw:
         job = _mgr(request).store.get(row["job_id"])
+        if key and job is not None and not job_matches_query(job, key):
+            continue
+        if key and job is None and row["mr_key"] != key:
+            continue
         items.append(job.public_dict() if job else {"job_id": row["job_id"], "jira_id": row["mr_key"], "mr_key": row["mr_key"], "status": "queued", "live": False})
     running = []
     for job in _mgr(request).store.list_all():
-        if job.status == "running" and (key is None or job.mr_key == key):
+        if job.status == "running" and (key is None or job_matches_query(job, key)):
             running.append({"mr_key": job.mr_key, "job_id": job.job_id, "trigger": job.trigger})
     return {"items": items, "queued_count": len(items), "running": running}
 

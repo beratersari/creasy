@@ -22,7 +22,7 @@ GitLab webhook
     ▼
 POST /webhook  (ack immediately)
     │
-    ├─ MR open / update (new commits) / reopen
+    ├─ MR open
     │       └─ enqueue one review job for that MR
     ├─ Note on an MR whose body contains "/review"
     │       └─ enqueue a full review job (resume ses_* if we have one)
@@ -132,8 +132,8 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 
 | GitLab event | Action |
 |---|---|
-| `object_kind=merge_request`, `action` in `open`, `reopen` | Enqueue review |
-| `object_kind=merge_request`, `action=update` **and** `oldrev` is present (new commits) | Enqueue review |
+| `object_kind=merge_request`, `action=open` | Enqueue review |
+| `object_kind=merge_request`, `action` in `update`, `reopen` | Ignore (comment `/review` to run again) |
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
 | `object_kind=note`, `noteable_type=MergeRequest`, body contains `/review` | Enqueue full review (resume `ses_*` if stored) |
 | `object_kind=note`, `noteable_type=MergeRequest`, body contains `/ask` + question text | Enqueue follow-up on the same `ses_*` |
@@ -147,7 +147,8 @@ Extra guards:
 - Ignore notes authored by the token’s own user so our posted review cannot retrigger.
 - Treat `/review`, `/ask`, and `/reset` as command tokens (word-style match), not substrings of “preview” / “task”.
 - Skip draft MRs by default (`SKIP_DRAFT_MRS=true`) for auto MR events. `/review`, `/ask`, and `/reset` on a draft still run (explicit human request).
-- Title/description-only MR updates do not review (`oldrev` missing).
+- New commits on an open MR (`update` + `oldrev`) do not review.
+  Reopen and mark-as-ready do not review. Comment `/review`.
 
 Webhook HTTP response is always an immediate ack (`accepted`, `queued`, or `ignored`). A comment that arrives while that MR already has a running job is **accepted and queued**, not 409. Review work never holds the GitLab webhook socket.
 
@@ -194,7 +195,7 @@ MR !17  job_aaa  /review     running
 job_aaa ends → start job_bbb (resume ses_*) → then job_ccc
 ```
 
-Auto MR events (`open` / `update` with new commits / `reopen`) are not comments:
+Auto MR events (`open` only) are not comments:
 
 - If that MR already has a **running or queued** job, **do not** enqueue another auto-review. The queued/running work will see the latest SHA when it fetches. This is the only coalesce, and it is only for webhook noise (push storms, title-less `update` we already ignore).
 - Explicit `/review`, `/ask`, and `/reset` are **never** dropped.
@@ -469,7 +470,7 @@ On `close`/`merge`:
 
 ## Tests (v1, no live GitLab / OpenCode required)
 
-- `events.py`: open / update-with-oldrev / update-without-oldrev / close / merge / `/review` note / `/ask` note / `/ask` with empty question / `/reset` note / bot note / draft / unrelated note / both commands (first wins).
+- `events.py`: open / update-with-oldrev ignored / update-without-oldrev ignored / reopen ignored / close / merge / `/review` note / `/ask` note / `/ask` with empty question / `/reset` note / bot note / draft / unrelated note / both commands (first wins).
 - `/reset`: deletes notes and discussions authored by the token user; leaves other authors; does not start OpenCode or post a new note; clears stored `ses_*`.
 - `identity.py`: safe folder, path stays under `work_dir`.
 - `manager`: second `/ask` while `/review` is running is queued (not 409, not dropped); both jobs run in order; two different MRs both run; close cancels running + queued jobs.
@@ -518,4 +519,5 @@ Each step should leave tests passing before the next starts.
 - **RAM**: each live serve is hundreds of MB. `MAX_CONCURRENT_JOBS` is the budget.
 - **Windows locks**: delete only after serve is force-killed; retry delete like OSM.
 - **Webhook loops**: ignore our own notes; never put a bare `/review` in the posted review template.
-- **GitLab `update` noise**: require `oldrev` so assignee/label edits do not spend an OpenCode slot.
+- **GitLab `update` noise**: ignore every `update` / `reopen`. Only
+  `open` and explicit `/review` `/ask` `/reset` start work.

@@ -56,25 +56,24 @@ def test_mr_title_comes_from_webhook():
     assert ask.title == "Fix login timeout"
 
 
-def test_update_with_oldrev():
+def test_update_with_oldrev_ignored():
     got = classify_webhook(mr_payload("update", oldrev="abc123"))
-    assert isinstance(got, ReviewTrigger)
-    assert got.kind == "update"
+    assert isinstance(got, Ignore)
+    assert got.reason == "action=update"
 
 
 def test_update_without_oldrev_ignored():
     got = classify_webhook(mr_payload("update"))
     assert isinstance(got, Ignore)
-    assert "oldrev" in got.reason
+    assert got.reason == "action=update"
 
 
-def test_mark_as_ready_enqueues_review():
+def test_mark_as_ready_does_not_enqueue():
     payload = mr_payload("update", draft=False)
     payload["changes"] = {"draft": {"previous": True, "current": False}}
     got = classify_webhook(payload, skip_drafts=True)
-    assert isinstance(got, ReviewTrigger)
-    assert got.kind == "update"
-    assert got.explicit is False
+    assert isinstance(got, Ignore)
+    assert got.reason == "action=update"
 
 
 def test_close_and_merge_cleanup():
@@ -149,7 +148,42 @@ def test_first_command_wins():
     assert got3.kind == "reset"
 
 
-def test_reopen():
+def test_reopen_ignored():
     got = classify_webhook(mr_payload("reopen"))
-    assert isinstance(got, ReviewTrigger)
-    assert got.kind == "reopen"
+    assert isinstance(got, Ignore)
+    assert got.reason == "action=reopen"
+
+
+def test_trailing_punctuation_still_runs_the_command():
+    """People type /review. or /ask? at the end of a sentence."""
+    review = classify_webhook(note_payload("/review."))
+    assert isinstance(review, ReviewTrigger)
+    assert review.kind == "review"
+    assert review.comment_text == ""
+    review_notes = classify_webhook(note_payload("/review. focus on auth"))
+    assert isinstance(review_notes, ReviewTrigger)
+    assert review_notes.comment_text == "focus on auth"
+    ask = classify_webhook(note_payload("/ask? why is this nullable?"))
+    assert isinstance(ask, ReviewTrigger)
+    assert ask.kind == "ask"
+    assert "nullable" in ask.comment_text
+    assert isinstance(classify_webhook(note_payload("/ask?")), Ignore)
+    reset = classify_webhook(note_payload("/reset!"))
+    assert isinstance(reset, ReviewTrigger)
+    assert reset.kind == "reset"
+    assert first_command("please /review.") == ("review", "")
+    assert first_command("/reviews") is None
+
+
+def test_edited_note_is_ignored():
+    """GitLab 16.11+ refires the Note Hook with action=update on edit."""
+    payload = note_payload("/review focus on auth")
+    payload["object_attributes"]["action"] = "update"
+    got = classify_webhook(payload)
+    assert isinstance(got, Ignore)
+    assert "edit" in got.reason
+    created = note_payload("/review focus on auth")
+    created["object_attributes"]["action"] = "create"
+    assert isinstance(classify_webhook(created), ReviewTrigger)
+    # Older GitLab omits action — still a new comment.
+    assert isinstance(classify_webhook(note_payload("/review")), ReviewTrigger)
