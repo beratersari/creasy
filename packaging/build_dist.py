@@ -48,6 +48,7 @@ COPY_FILES = (
     "AGENTS.md",
     "plan.md",
     "VERSION",
+    "CHANGELOG.md",
     ".env.example",
     ".gitignore",
 )

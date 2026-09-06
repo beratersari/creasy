@@ -28,6 +28,24 @@ def test_parse_rejects_garbage():
         bump_version("1.0.0", "build")
 
 
+def test_changelog_has_current_version():
+    version = (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
+    log = (Path(__file__).resolve().parents[1] / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## {version}" in log
+
+
+def test_release_notes_extract():
+    import importlib.util
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "release_notes.py"
+    spec = importlib.util.spec_from_file_location("creasy_release_notes", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    text = "## 0.2.0 — x\n\nHello.\n\n## 0.1.0\n\nOld.\n"
+    assert mod.extract(text, "0.2.0") == "## 0.2.0 — x\n\nHello.\n"
+
+
 def test_write_version_roundtrip(tmp_path: Path):
     path = tmp_path / "VERSION"
     assert write_version(path, "1.4.2") == "1.4.2"

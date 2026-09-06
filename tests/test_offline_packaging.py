@@ -78,6 +78,8 @@ def test_copy_dirs_include_opencode_configs() -> None:
     mod = _load()
     assert "opencoderman" in mod.COPY_DIRS
     assert "agents" not in mod.SKIP_DIR_NAMES
+    assert "CHANGELOG.md" in mod.COPY_FILES
+    assert "VERSION" in mod.COPY_FILES
     assert ".env.example" in mod.COPY_FILES
 
 

@@ -45,13 +45,23 @@ jobs:
       - name: Read product version
         id: ver
         run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
-      - name: Assert staged packs include .env.example
+      - name: Assert staged packs include .env.example and binaries
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
           for pack in linux-x64 windows-x64 darwin windows-linux; do
             test -f "dist/stage/creasy-${v}-${pack}/.env.example"
           done
+          test -f "dist/stage/creasy-${v}-windows-x64/vendor/python/windows/python.exe"
+          test -f "dist/stage/creasy-${v}-windows-x64/vendor/bin/windows/opencode.exe"
+          test -f "dist/stage/creasy-${v}-windows-x64/vendor/bin/windows/rg.exe"
+          test -f "dist/stage/creasy-${v}-linux-x64/vendor/python/linux/bin/python3"
+          test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/opencode"
+          test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/rg"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin/bin/python3"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin/opencode"
+          test -f "dist/stage/creasy-${v}-windows-linux/vendor/python/windows/python.exe"
+          test -f "dist/stage/creasy-${v}-windows-linux/vendor/bin/linux/opencode"
       - name: Upload Linux pack
         uses: actions/upload-artifact@v4
         with:

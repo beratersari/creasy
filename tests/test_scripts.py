@@ -129,3 +129,15 @@ def test_ci_runs_vendor_install_start():
     assert "creasy-offline-zips" not in workflow
     assert "run-server.bat" in _read("scripts/start.bat")
     assert "cmd /v:on /c" not in _read("scripts/start.bat")
+
+
+def test_release_workflow_publishes_pack_zips():
+    release = _read(".github/workflows/release.yml")
+    assert "packaging/build_dist.py --out-dir dist --zip" in release
+    assert "action-gh-release" in release
+    assert "opencode.exe" in release
+    assert "python.exe" in release
+    assert "scripts/release_notes.py" in release
+    ci = _read(".github/workflows/ci.yml")
+    assert "vendor/bin/windows/opencode.exe" in ci
+    assert "vendor/python/windows/python.exe" in ci

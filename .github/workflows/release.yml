@@ -1,0 +1,73 @@
+name: release
+
+# Tag push or Actions → Run workflow. Publishes the offline packs
+# (CPython + opencode + rg) to a GitHub Release. The tag's
+# "Source code" zip is not a pack.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build offline packs as zip files
+        run: python packaging/build_dist.py --out-dir dist --zip
+      - name: Read product version
+        id: ver
+        run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Assert packs contain the executables
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          win="dist/stage/creasy-${v}-windows-x64"
+          linux="dist/stage/creasy-${v}-linux-x64"
+          dar="dist/stage/creasy-${v}-darwin"
+          both="dist/stage/creasy-${v}-windows-linux"
+          test -f "$win/vendor/python/windows/python.exe"
+          test -f "$win/vendor/bin/windows/opencode.exe"
+          test -f "$win/vendor/bin/windows/rg.exe"
+          test -f "$linux/vendor/python/linux/bin/python3"
+          test -f "$linux/vendor/bin/linux/opencode"
+          test -f "$linux/vendor/bin/linux/rg"
+          test -f "$dar/vendor/python/darwin/bin/python3"
+          test -f "$dar/vendor/bin/darwin/opencode"
+          test -f "$both/vendor/python/windows/python.exe"
+          test -f "$both/vendor/bin/linux/opencode"
+          test -f "dist/creasy-${v}-windows-x64.zip"
+          test -f "dist/creasy-${v}-linux-x64.zip"
+          test -f "dist/creasy-${v}-darwin.zip"
+          test -f "dist/creasy-${v}-windows-linux.zip"
+      - name: Write release notes
+        run: python scripts/release_notes.py --version "${{ steps.ver.outputs.version }}" --out release-notes.md
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Creasy ${{ steps.ver.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            dist/creasy-*-windows-x64.zip
+            dist/creasy-*-linux-x64.zip
+            dist/creasy-*-darwin.zip
+            dist/creasy-*-windows-linux.zip
+          fail_on_unmatched_files: true
+          make_latest: true
