@@ -6,7 +6,9 @@ from typing import Any, Literal, Optional, Union
 
 TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
 
-_CMD_RE = re.compile(r"(?:^|\s)/(review|ask|reset)(?=\s|$)", re.IGNORECASE)
+# Word-style match. Trailing . ! ? : ; ) are allowed so "/review." still runs.
+_CMD_RE = re.compile(r"(?:^|\s)/(review|ask|reset)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
+_CMD_TRAIL = ".,!?:;)"
 
 
 @dataclass(frozen=True)
@@ -46,7 +48,7 @@ def first_command(body: str) -> Optional[tuple[str, str]]:
     if not match:
         return None
     command = match.group(1).lower()
-    remainder = text[match.end() :].strip()
+    remainder = text[match.end() :].lstrip(_CMD_TRAIL).strip()
     return command, remainder
 
 
@@ -83,20 +85,6 @@ def _is_draft(payload: dict[str, Any], attrs: dict[str, Any]) -> bool:
     return False
 
 
-def _became_ready(payload: dict[str, Any]) -> bool:
-    """True when GitLab marks a draft ready (update, no oldrev)."""
-    changes = payload.get("changes")
-    if not isinstance(changes, dict):
-        return False
-    for key in ("draft", "work_in_progress"):
-        blob = changes.get(key)
-        if not isinstance(blob, dict):
-            continue
-        if blob.get("previous") is True and blob.get("current") is False:
-            return True
-    return False
-
-
 def classify_webhook(
     payload: dict[str, Any],
     *,
@@ -122,11 +110,8 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
     project_id, mr_iid = ids
     if action in {"close", "merge"}:
         return CleanupTrigger(project_id=project_id, mr_iid=mr_iid, action=action)
-    if action not in {"open", "update", "reopen"}:
+    if action != "open":
         return Ignore(f"action={action or 'missing'}")
-    if action == "update" and not str(attrs.get("oldrev") or "").strip():
-        if not _became_ready(payload):
-            return Ignore("update without oldrev")
     draft = _is_draft(payload, attrs)
     if skip_drafts and draft:
         return Ignore("draft MR")
@@ -150,6 +135,11 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
     attrs = _attrs(payload)
     if str(attrs.get("noteable_type") or "") != "MergeRequest":
         return Ignore("note not on merge request")
+    # GitLab 16.11+ also fires the Note Hook when a comment is edited.
+    # A second /review or /reset from that edit is not a new request.
+    action = str(attrs.get("action") or "").strip().lower()
+    if action == "update":
+        return Ignore("note edit")
     user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
     try:
         user_id = int(user.get("id")) if user.get("id") is not None else None

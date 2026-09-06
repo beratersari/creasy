@@ -9,6 +9,28 @@ section in the same change.
 
 ## Unreleased
 
+## 0.4.0 — 2026-09-06
+
+Auto review no longer follows every push. Opening an MR still starts
+one job; later commits, reopen, and mark-as-ready stay quiet until
+someone comments `/review`. Commands and the jobs search are less
+fussy in daily use.
+
+### Changed
+
+- Auto review runs only when an MR is opened. New commits, reopen,
+  and mark-as-ready no longer start a job. Comment `/review` to
+  review again.
+
+### Fixed
+
+- `/review.`, `/ask?`, and `/reset!` now run. Trailing punctuation
+  used to make the command look like it did nothing.
+- Editing a `/review` or `/reset` comment no longer starts a second
+  job. GitLab 16.11+ refires the Note Hook with `action=update`.
+- Jobs search matches `!30`, the iid, and the MR title, not only the
+  `project-iid` key.
+
 ## 0.3.0 — 2026-09-06
 
 Operator download on the GitHub Release is three executable zips

@@ -90,6 +90,29 @@ def test_open_accepted(tmp_config):
     manager.shutdown()
 
 
+def test_update_with_new_commits_ignored(tmp_config):
+    app, manager, runner = _app(tmp_config)
+    client = TestClient(app)
+    payload = {
+        "object_kind": "merge_request",
+        "object_attributes": {
+            "action": "update",
+            "iid": 1,
+            "target_project_id": 5,
+            "source_branch": "f",
+            "target_branch": "main",
+            "draft": False,
+            "oldrev": "abc123",
+            "title": "Fix login timeout",
+        },
+    }
+    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+    assert manager.store.list_all() == []
+    manager.shutdown()
+
+
 def test_comment_queued_while_busy(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)

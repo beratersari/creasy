@@ -87,7 +87,7 @@ export function JobsPage() {
               Find merge request
               <input
                 className="vd-input mt-1 w-52 font-mono"
-                placeholder="84969716-30"
+                placeholder="!30 or title"
                 value={jira}
                 onChange={(e) => setJira(e.target.value)}
               />

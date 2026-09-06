@@ -65,8 +65,8 @@ Point a GitLab project webhook at `/webhook` with merge request events and comme
 
 | Event | Action |
 |---|---|
-| MR open / reopen | Enqueue a review |
-| MR update with new commits (`oldrev`) | Enqueue a review unless that MR is already busy |
+| MR open | Enqueue a review |
+| MR update (new commits) / reopen | Ignored — comment `/review` to run again |
 | MR comment `/review …` | Full review job (queued FIFO if one is running) |
 | MR comment `/ask …` | Follow-up on the same `ses_*` |
 | MR comment `/reset` | Delete notes and threads authored by the token user; clear `ses_*`. No OpenCode |
