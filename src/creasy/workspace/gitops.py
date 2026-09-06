@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse, urlunparse
 
-from creasy.logging import get_logger, redact_userinfo
+from creasy.logging import get_logger, log_command, log_command_result, log_fail, log_ok, redact_userinfo
 
 logger = get_logger("gitops")
 
@@ -39,7 +39,7 @@ def isolated_git_env(token: str = "") -> dict[str, str]:
     return env
 
 
-def inject_token(url: str, token: str) -> str:
+def inject_token(url: str, token: str, *, scheme: str = "gitlab") -> str:
     if not token:
         return url
     parsed = urlparse(url)
@@ -48,7 +48,8 @@ def inject_token(url: str, token: str) -> str:
     host = parsed.hostname or ""
     if not host:
         raise GitError("repo_url has no host")
-    netloc = f"oauth2:{token}@{host}"
+    user = "pat" if scheme == "azure" else "oauth2"
+    netloc = f"{user}:{token}@{host}"
     if parsed.port:
         netloc += f":{parsed.port}"
     return urlunparse(parsed._replace(netloc=netloc))
@@ -98,7 +99,7 @@ def _run_git(
         "core.longpaths=true",
         *args,
     ]
-    logger.info("git %s cwd=%s", redact_userinfo(" ".join(str(a) for a in args)), cwd or ".")
+    log_command(logger, args, cwd=cwd or ".", timeout=timeout)
     if should_stop is None and on_pid is None:
         try:
             result = subprocess.run(
@@ -111,18 +112,36 @@ def _run_git(
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
+            log_fail(logger, "git timeout", argv=" ".join(str(a) for a in args), cwd=cwd or ".", timeout=timeout)
             raise GitError(f"git timed out after {timeout}s") from exc
         except OSError as exc:
+            log_fail(logger, "git start", argv=" ".join(str(a) for a in args), cwd=cwd or ".", err=exc)
             raise GitError(f"git failed to start: {redact_userinfo(str(exc))}") from exc
     else:
-        result = _run_git_killable(
-            cmd,
-            cwd=cwd,
-            env=env or isolated_git_env(),
-            timeout=timeout,
-            should_stop=should_stop,
-            on_pid=on_pid,
-        )
+        try:
+            result = _run_git_killable(
+                cmd,
+                cwd=cwd,
+                env=env or isolated_git_env(),
+                timeout=timeout,
+                should_stop=should_stop,
+                on_pid=on_pid,
+            )
+        except GitError as exc:
+            if str(exc) == "cancelled":
+                log_ok(logger, "git cancelled", argv=" ".join(str(a) for a in args), cwd=cwd or ".")
+            else:
+                log_fail(logger, "git", argv=" ".join(str(a) for a in args), cwd=cwd or ".", err=exc)
+            raise
+    log_command_result(
+        logger,
+        args,
+        returncode=result.returncode,
+        stdout=result.stdout,
+        stderr=result.stderr,
+        cwd=cwd or ".",
+        timeout=timeout,
+    )
     if result.returncode != 0:
         err = redact_userinfo((result.stderr or result.stdout or "").strip())
         raise GitError(f"git failed ({result.returncode}): {err[-800:]}")
@@ -189,12 +208,13 @@ def clone_repo(
     timeout: float,
     should_stop: Optional[Callable[[], bool]] = None,
     on_pid: Optional[Callable[[int], None]] = None,
+    auth_scheme: str = "gitlab",
 ) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         raise GitError(f"clone dest already exists: {dest}")
     env = isolated_git_env(token)
-    auth_url = inject_token(repo_url, token)
+    auth_url = inject_token(repo_url, token, scheme=auth_scheme)
     git_kw = {"should_stop": should_stop, "on_pid": on_pid}
     try:
         _run_git(
@@ -204,10 +224,12 @@ def clone_repo(
             **git_kw,
         )
         _scrub_origin(dest, env, timeout=min(30.0, timeout), **git_kw)
-    except Exception:
+    except Exception as exc:
+        log_fail(logger, "git clone", dest=dest, url=redact_userinfo(repo_url), auth=auth_scheme, err=exc)
         if dest.exists():
             delete_clone(dest)
         raise
+    log_ok(logger, "git clone", dest=dest, url=redact_userinfo(repo_url), auth=auth_scheme)
 
 
 def _scrub_origin(
@@ -248,11 +270,12 @@ def fetch_and_checkout(
     timeout: float,
     should_stop: Optional[Callable[[], bool]] = None,
     on_pid: Optional[Callable[[int], None]] = None,
+    auth_scheme: str = "gitlab",
 ) -> str:
     env = isolated_git_env(token)
     git_kw = {"should_stop": should_stop, "on_pid": on_pid}
     origin = _origin_url(dest, env, timeout=min(30.0, timeout), **git_kw)
-    auth = inject_token(origin, token) if token else origin
+    auth = inject_token(origin, token, scheme=auth_scheme) if token else origin
     if token and auth != origin:
         _run_git(
             ["remote", "set-url", "origin", auth],
@@ -276,13 +299,33 @@ def fetch_and_checkout(
         _run_git(["reset", "--hard", "HEAD"], cwd=dest, env=env, timeout=min(60.0, timeout), **git_kw)
         _run_git(["clean", "-fd"], cwd=dest, env=env, timeout=min(60.0, timeout), **git_kw)
         head = _run_git(["rev-parse", "HEAD"], cwd=dest, env=env, timeout=30, **git_kw)
-        return (head.stdout or "").strip()
+        sha_out = (head.stdout or "").strip()
+        log_ok(
+            logger,
+            "git checkout",
+            dest=dest,
+            sha=sha_out or "-",
+            source=source_branch or "-",
+            target=target_branch or "-",
+            auth=auth_scheme,
+        )
+        return sha_out
+    except Exception as exc:
+        log_fail(
+            logger,
+            "git checkout",
+            dest=dest,
+            source=source_branch or "-",
+            target=target_branch or "-",
+            err=exc,
+        )
+        raise
     finally:
         if token:
             try:
                 _scrub_origin(dest, env, timeout=min(30.0, timeout), **git_kw)
-            except Exception:
-                logger.warning("could not scrub origin after fetch")
+            except Exception as exc:
+                log_fail(logger, "git scrub origin", dest=dest, err=exc)
 
 
 def _origin_url(
@@ -345,6 +388,7 @@ def resolve_merge_base(
                 target_ref,
                 computed,
             )
+        log_ok(logger, "git merge-base", dest=dest, target=target_ref, sha=computed)
         return computed
     if preferred_base:
         try:
@@ -355,10 +399,12 @@ def resolve_merge_base(
                 timeout=timeout,
                 **git_kw,
             )
+            log_fail(logger, "git merge-base", dest=dest, target=target_ref, fallback=preferred_base)
             logger.warning("merge-base failed; falling back to GitLab base_sha %s", preferred_base)
             return preferred_base
         except GitError:
             pass
+    log_fail(logger, "git merge-base", dest=dest, target=target_ref)
     raise GitError(f"could not resolve merge-base against {target_ref}")
 
 
@@ -398,7 +444,9 @@ def diff_stat(
             continue
         paths.append(path)
         statuses[path] = status
-    return DiffIndex(merge_base=merge_base, stat=(stat.stdout or "").strip(), paths=paths, statuses=statuses)
+    index = DiffIndex(merge_base=merge_base, stat=(stat.stdout or "").strip(), paths=paths, statuses=statuses)
+    log_ok(logger, "git diff-stat", dest=dest, merge_base=merge_base, paths=len(index.paths))
+    return index
 
 
 def unified_diff(
@@ -433,4 +481,6 @@ def delete_clone(path: Optional[Path], retries: int = 8) -> None:
         except OSError:
             still = True
         if still and not ok:
+            log_fail(logger, "git delete clone", dest=dest)
             raise GitError(f"could not remove clone at {dest}")
+        log_ok(logger, "git delete clone", dest=dest)

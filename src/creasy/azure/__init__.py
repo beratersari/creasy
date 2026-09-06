@@ -1,0 +1,1 @@
+"""Azure DevOps Server provider. Isolated from creasy.gitlab."""

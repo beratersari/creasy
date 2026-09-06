@@ -64,6 +64,9 @@ class JobRecord(BaseModel):
     chat_snapshot: list[dict[str, Any]] = Field(default_factory=list)
     diff_stat: str = ""
     changed_paths: list[str] = Field(default_factory=list)
+    provider: str = "gitlab"
+    azure_project: str = ""
+    azure_repo: str = ""
 
     def public_dict(self) -> dict[str, Any]:
         data = self.model_dump()

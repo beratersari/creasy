@@ -24,6 +24,9 @@ class ReviewTrigger:
     title: str = ""
     draft: bool = False
     explicit: bool = False
+    provider: str = "gitlab"
+    azure_project: str = ""
+    azure_repo: str = ""
 
 
 @dataclass(frozen=True)

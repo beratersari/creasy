@@ -9,6 +9,17 @@ section in the same change.
 
 ## Unreleased
 
+### Added
+
+- Optional Azure DevOps Server 2022.2 provider. Service Hooks post to
+  `/webhook/azure`. GitLab `/webhook` is unchanged. Auto review is PR
+  created plus `/review` `/ask` `/reset`. Overview and file threads
+  use the 7.1 threads API. Comment hooks resolve the PR from links if
+  Azure omits `resource.pullRequest`. File threads send iteration
+  context. `/reset` and similar-match paginate threads. Clone URL is
+  built as HTTPS when `remoteUrl` is SSH. Azure Basic auth is
+  `AZURE_WEBHOOK_PASSWORD` only (not `WEBHOOK_SECRET`).
+
 ## 0.4.0 — 2026-09-06
 
 Auto review no longer follows every push. Opening an MR still starts

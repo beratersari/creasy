@@ -61,6 +61,8 @@ to the binary and run it. Reviews still need `opencode` on `PATH`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 
+Optional Azure DevOps Server: set `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT`, then add Service Hooks to `http://<creasy-host>:<port>/webhook/azure` (PR created + PR commented on). GitLab `/webhook` is unchanged.
+
 ## Triggers
 
 | Event | Action |

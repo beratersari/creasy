@@ -42,6 +42,15 @@ class Config:
     git_timeout: int = 600
     serve_health_timeout: int = 60
     hang_timeout: int = 300
+    azure_url: str = ""
+    azure_token: str = ""
+    azure_api_version: str = "7.1"
+    azure_webhook_user: str = ""
+    azure_webhook_password: str = ""
+
+    @property
+    def azure_enabled(self) -> bool:
+        return bool(self.azure_url and self.azure_token)
 
     @property
     def work_dir(self) -> Path:
@@ -92,6 +101,11 @@ def load_config(env_file: str | None = ".env") -> Config:
         git_timeout=max(30, _int("GIT_TIMEOUT", 600)),
         serve_health_timeout=max(5, _int("SERVE_HEALTH_TIMEOUT", 60)),
         hang_timeout=max(30, _int("HANG_TIMEOUT", 300)),
+        azure_url=(os.getenv("AZURE_DEVOPS_URL") or "").strip().rstrip("/"),
+        azure_token=(os.getenv("AZURE_DEVOPS_PAT") or os.getenv("AZURE_DEVOPS_TOKEN") or "").strip(),
+        azure_api_version=(os.getenv("AZURE_DEVOPS_API_VERSION") or "7.1").strip() or "7.1",
+        azure_webhook_user=(os.getenv("AZURE_WEBHOOK_USER") or "").strip(),
+        azure_webhook_password=(os.getenv("AZURE_WEBHOOK_PASSWORD") or "").strip(),
     )
     cfg.ensure_dirs()
     return cfg

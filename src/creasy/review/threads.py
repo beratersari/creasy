@@ -25,6 +25,7 @@ class ExistingThread:
     side: str
     resolved: bool
     last_body: str = ""
+    root_comment_id: int = 0
 
 
 def is_creasy_finding_body(body: str) -> bool:
@@ -87,6 +88,7 @@ def parse_creasy_thread(raw: dict[str, Any]) -> Optional[ExistingThread]:
     discussion_id = str(raw.get("id") or "").strip()
     if not discussion_id:
         return None
+    root_id = _as_line(first.get("id"))
     return ExistingThread(
         discussion_id=discussion_id,
         path=_norm_path(str(pos.get("new_path") or "")),
@@ -96,6 +98,7 @@ def parse_creasy_thread(raw: dict[str, Any]) -> Optional[ExistingThread]:
         side=side,
         resolved=bool(first.get("resolved") or raw.get("resolved")),
         last_body=_last_creasy_body(notes),
+        root_comment_id=root_id,
     )
 
 
