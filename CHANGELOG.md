@@ -9,6 +9,13 @@ section in the same change.
 
 ## Unreleased
 
+## 0.4.0 — 2026-09-06
+
+Auto review no longer follows every push. Opening an MR still starts
+one job; later commits, reopen, and mark-as-ready stay quiet until
+someone comments `/review`. Commands and the jobs search are less
+fussy in daily use.
+
 ### Changed
 
 - Auto review runs only when an MR is opened. New commits, reopen,
