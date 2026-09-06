@@ -9,6 +9,18 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- A trailing wrap-up on a resumed session is no longer posted as the
+  Overview note. The review from this turn is used, so findings still
+  become diff threads.
+- Inline threads still post when GitLab omits `diff_refs`; positions
+  fall back to the live merge-base.
+- Marking a draft ready now enqueues a review (update without oldrev
+  but `changes.draft` true → false).
+- Jobs list has a Refresh button and polls while the live socket is
+  down, so the page does not stay stale.
+
 ## 0.2.0 — 2026-09-06
 
 First versioned release. `VERSION` is the single product version
