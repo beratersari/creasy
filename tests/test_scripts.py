@@ -110,6 +110,7 @@ def test_install_opencode_scripts_require_configs():
 
 def test_ci_runs_vendor_install_start():
     workflow = _read(".github/workflows/ci.yml")
+    assert "branches: [main, develop]" in workflow
     assert "packaging/build_dist.py" in workflow
     assert "scripts/install.sh" in workflow
     assert "scripts/start.sh" in workflow

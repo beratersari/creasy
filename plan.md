@@ -4,6 +4,10 @@ A new GitLab-triggered code review service. It receives merge-request webhooks, 
 
 Workspace is empty. This is a greenfield Python service.
 
+Daily work is on `develop`. `main` is release-only: never push
+commits directly to `main`; open a pull request / merge request.
+Version is the `VERSION` file.
+
 ---
 
 ## What we are building

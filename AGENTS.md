@@ -214,6 +214,21 @@ Do not:
 - Commit `.env`, tokens, or `DATA_DIR` clones
 - Mix unrelated refactors with a behavior fix
 - Use `update` / `wip` / `misc` as the subject
-- Force-push `main`
+- Force-push `main` or `develop`
+- Push commits directly to `main`
 
 One logical change per commit. Run `pytest` before you push.
+
+## Branches and releases
+
+- **`develop`** is the integration branch. Daily work lands there
+  (directly or via a feature branch merged into `develop`).
+- **`main`** is release-only. Never push commits directly to `main`.
+  Open a GitHub pull request or GitLab merge request from `develop`
+  (or a release branch) into `main`.
+- Never force-push `main` or `develop`.
+- Version lives in [`VERSION`](VERSION). The app, `/health`, `/api/meta`,
+  offline packs, and GitLab notes all read that file. Bump it with
+  `python scripts/bump_version.py patch|minor|major` (or `--set X.Y.Z`).
+- A release is: bump `VERSION` on `develop`, open an MR/PR into `main`,
+  merge, then tag `vX.Y.Z` on `main`.
