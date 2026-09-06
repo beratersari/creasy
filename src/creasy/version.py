@@ -9,6 +9,15 @@ _SEMVER = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
 
 
 def version_path() -> Path | None:
+    from creasy.paths import bundled_file, executable_dir, is_frozen
+
+    if is_frozen():
+        for candidate in (
+            bundled_file("VERSION"),
+            executable_dir() / "VERSION",
+        ):
+            if candidate is not None and candidate.is_file():
+                return candidate
     here = Path(__file__).resolve().parent
     for folder in (here, *here.parents):
         candidate = folder / "VERSION"

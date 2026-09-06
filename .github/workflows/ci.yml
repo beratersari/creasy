@@ -139,6 +139,55 @@ jobs:
         if: failure()
         run: cat /tmp/creasy-start.log || true
 
+  exe:
+    name: Executable ${{ matrix.suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: windows-x64
+          - os: ubuntu-latest
+            suffix: linux-x64
+          - os: macos-latest
+            suffix: darwin-arm64
+          - os: macos-13
+            suffix: darwin-x64
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install build deps
+        run: python -m pip install -e . pyinstaller
+      - name: Build web + one-file exe zip
+        run: python packaging/build_exe.py --suffix ${{ matrix.suffix }} --zip --out-dir dist/exe
+      - name: Read product version
+        id: ver
+        shell: bash
+        run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Assert zip is exe + config only
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          zip="dist/exe/creasy-${v}-${{ matrix.suffix }}.zip"
+          test -f "$zip"
+          python -c "import zipfile,sys; names=sorted(zipfile.ZipFile(sys.argv[1]).namelist()); want='creasy.exe' if 'windows' in sys.argv[2] else 'creasy'; assert names==sorted([want,'.env.example']), names" "$zip" "${{ matrix.suffix }}"
+      - name: Upload executable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
   offline-windows:
     name: OSM-style offline (Windows)
     runs-on: windows-latest

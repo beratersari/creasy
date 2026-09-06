@@ -298,6 +298,11 @@ def api_reviews(project_id: int, mr_iid: int, request: Request) -> dict:
 def spa_dir() -> Path:
     # Served UI is the Vite build only. web/index.html is the dev entry
     # (loads /src/main.tsx) and must not be used as a fallback.
+    from creasy.paths import bundled_dir
+
+    bundled = bundled_dir("web", "dist")
+    if bundled is not None:
+        return bundled
     return Path(__file__).resolve().parents[3] / "web" / "dist"
 
 

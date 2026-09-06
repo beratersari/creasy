@@ -1,5 +1,38 @@
 # Changelog
 
+Operator-facing notes for each released version. Heading form is
+`## X.Y.Z — YYYY-MM-DD`. `scripts/release_notes.py` copies that
+section onto the GitHub Release — write what changed and why, not a
+file list. Keep an `## Unreleased` section for work that is not
+versioned yet. Bump `VERSION` and move Unreleased into a dated
+section in the same change.
+
+## Unreleased
+
+## 0.3.0 — 2026-09-06
+
+Operator download on the GitHub Release is four executable zips.
+Each zip is one `creasy` / `creasy.exe` plus `.env.example`.
+The dashboard brand line shows the product version.
+
+### Added
+
+- One-file executables built in CI (`packaging/build_exe.py`) and
+  uploaded as artifacts. Release notes list only those zips.
+- Sidebar brand shows `Creasy vX.Y.Z` at the top left.
+
+### Fixed
+
+- A trailing wrap-up on a resumed session is no longer posted as the
+  Overview note. The review from this turn is used, so findings still
+  become diff threads.
+- Inline threads still post when GitLab omits `diff_refs`; positions
+  fall back to the live merge-base.
+- Marking a draft ready now enqueues a review (update without oldrev
+  but `changes.draft` true → false).
+- Jobs list has a Refresh button and polls while the live socket is
+  down, so the page does not stay stale.
+
 ## 0.2.0 — 2026-09-06
 
 First versioned release. `VERSION` is the single product version

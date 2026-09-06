@@ -68,6 +68,15 @@ def test_update_without_oldrev_ignored():
     assert "oldrev" in got.reason
 
 
+def test_mark_as_ready_enqueues_review():
+    payload = mr_payload("update", draft=False)
+    payload["changes"] = {"draft": {"previous": True, "current": False}}
+    got = classify_webhook(payload, skip_drafts=True)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "update"
+    assert got.explicit is False
+
+
 def test_close_and_merge_cleanup():
     close = classify_webhook(mr_payload("close"))
     merge = classify_webhook(mr_payload("merge"))

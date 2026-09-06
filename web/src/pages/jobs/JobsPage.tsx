@@ -59,6 +59,14 @@ export function JobsPage() {
     void load()
   }, [load, live.generation])
 
+  useEffect(() => {
+    if (live.connected) return
+    const id = window.setInterval(() => {
+      void load()
+    }, 4000)
+    return () => window.clearInterval(id)
+  }, [live.connected, load])
+
   const rows = filter === 'queue' ? queue : payload?.jobs || []
   const tick = rows.some((j) => jobElapsedWindow(j).ticking)
   const now = useNow(tick)
@@ -74,15 +82,20 @@ export function JobsPage() {
             : `${connectionLabel(false)} — list may be stale.`
         }
         actions={
-          <label className="block text-xs text-text-muted">
-            Find merge request
-            <input
-              className="vd-input mt-1 w-52 font-mono"
-              placeholder="84969716-30"
-              value={jira}
-              onChange={(e) => setJira(e.target.value)}
-            />
-          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="block text-xs text-text-muted">
+              Find merge request
+              <input
+                className="vd-input mt-1 w-52 font-mono"
+                placeholder="84969716-30"
+                value={jira}
+                onChange={(e) => setJira(e.target.value)}
+              />
+            </label>
+            <button type="button" className="vd-btn vd-btn-secondary px-3 py-1.5 text-xs" onClick={() => void load()}>
+              Refresh
+            </button>
+          </div>
         }
       />
 

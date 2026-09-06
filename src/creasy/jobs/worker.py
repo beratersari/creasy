@@ -11,7 +11,13 @@ from creasy.jobs.models import JobRecord
 from creasy.cleanup.end import stop_job_holders
 from creasy.logging import get_logger
 from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop_serve
-from creasy.opencode.session import OpenCodeClient, OpenCodeError, last_assistant_text, snapshot_chat
+from creasy.opencode.session import (
+    OpenCodeClient,
+    OpenCodeError,
+    last_assistant_text,
+    snapshot_chat,
+    turn_assistant_text,
+)
 from creasy.jobs.store import JobStore
 from creasy.review.findings import Finding, split_findings
 from creasy.review.format import format_cancelled, format_failure, format_success
@@ -252,7 +258,11 @@ class OpenCodeRunner:
                 self.workspaces.save(workspace)
                 self._post_note(job, result)
                 return result
-            result.text = text or last_assistant_text(messages)
+            result.text = (
+                turn_assistant_text(messages, prefer_review=job.trigger != "ask")
+                or text
+                or last_assistant_text(messages)
+            )
             markdown, findings = split_findings(result.text)
             result.text = markdown
             workspace.session_id = session_id
@@ -469,8 +479,8 @@ class OpenCodeRunner:
             variants = build_position_variants(
                 finding,
                 diffmap,
-                base_sha=result.base_sha,
-                start_sha=result.start_sha or result.base_sha,
+                base_sha=result.base_sha or result.merge_base,
+                start_sha=result.start_sha or result.base_sha or result.merge_base,
                 head_sha=result.sha,
             )
             if not variants:

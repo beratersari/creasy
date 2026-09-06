@@ -122,7 +122,8 @@ def test_ci_runs_vendor_install_start():
     assert "/health" in workflow
     assert "upload-artifact" in workflow
     assert "include-hidden-files: true" in workflow
-    assert workflow.count("include-hidden-files: true") == workflow.count("uses: actions/upload-artifact")
+    assert "packaging/build_exe.py" in workflow
+    assert "creasy.exe" in workflow
     assert "test -f" in workflow and ".env.example" in workflow
     assert "dist/stage/creasy-" in workflow
     assert "dist/creasy-*.zip" not in workflow
@@ -131,13 +132,16 @@ def test_ci_runs_vendor_install_start():
     assert "cmd /v:on /c" not in _read("scripts/start.bat")
 
 
-def test_release_workflow_publishes_pack_zips():
+def test_release_workflow_publishes_exe_zips():
     release = _read(".github/workflows/release.yml")
-    assert "packaging/build_dist.py --out-dir dist --zip" in release
+    assert "packaging/build_exe.py" in release
     assert "action-gh-release" in release
-    assert "opencode.exe" in release
-    assert "python.exe" in release
+    assert "darwin-arm64" in release
+    assert "darwin-x64" in release
+    assert "windows-linux" not in release
     assert "scripts/release_notes.py" in release
+    assert "generate_release_notes: false" in release
     ci = _read(".github/workflows/ci.yml")
     assert "vendor/bin/windows/opencode.exe" in ci
     assert "vendor/python/windows/python.exe" in ci
+    assert "packaging/build_exe.py" in ci

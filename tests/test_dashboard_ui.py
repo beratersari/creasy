@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_osm_shell_branded_creasy() -> None:
     shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
     assert "Creasy" in shell
+    assert "v{version}" in shell
     assert 'vd-mark">CR' in shell
     assert "Jobs" in shell
     assert shell.count("connectionLabel(") == 1

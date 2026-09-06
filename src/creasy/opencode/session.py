@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from typing import Any, Callable, Optional
 
 import httpx
 
 from creasy.logging import get_logger
+from creasy.review.prompt import HANG_RESUME
 
 logger = get_logger("session")
+
+_REVIEW_SUMMARY = re.compile(r"^###\s+Summary\b", re.IGNORECASE | re.MULTILINE)
+_REVIEW_TITLE = re.compile(r"^####\s+\d+\.\s+`", re.MULTILINE)
+_FINDINGS_TAG = "opencoderman-findings"
 
 
 class OpenCodeError(RuntimeError):
@@ -23,28 +29,93 @@ def parse_model(model: str) -> tuple[str, str]:
     return provider, name
 
 
+def _role(message: dict[str, Any]) -> str:
+    info = message.get("info") if isinstance(message.get("info"), dict) else message
+    if not isinstance(info, dict):
+        info = message
+    return str(info.get("role") or message.get("role") or "").lower()
+
+
+def _text_parts(message: dict[str, Any]) -> list[str]:
+    info = message.get("info") if isinstance(message.get("info"), dict) else message
+    parts = message.get("parts") or (info.get("parts") if isinstance(info, dict) else None) or []
+    chunk: list[str] = []
+    if not isinstance(parts, list):
+        return chunk
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        kind = str(part.get("type") or "text").lower()
+        if kind not in {"text", "output", ""}:
+            continue
+        state = part.get("state") if isinstance(part.get("state"), dict) else {}
+        text = part.get("text") or part.get("content") or state.get("text") or ""
+        if text:
+            chunk.append(str(text))
+    return chunk
+
+
 def last_assistant_text(messages: list[dict[str, Any]]) -> str:
     texts: list[str] = []
     for message in messages:
-        info = message.get("info") if isinstance(message.get("info"), dict) else message
-        if (info.get("role") or message.get("role")) != "assistant":
+        if not isinstance(message, dict) or _role(message) != "assistant":
             continue
-        parts = message.get("parts") or info.get("parts") or []
-        chunk: list[str] = []
-        if isinstance(parts, list):
-            for part in parts:
-                if not isinstance(part, dict):
-                    continue
-                kind = str(part.get("type") or "text").lower()
-                if kind not in {"text", "output", ""}:
-                    continue
-                state = part.get("state") if isinstance(part.get("state"), dict) else {}
-                text = part.get("text") or part.get("content") or state.get("text") or ""
-                if text:
-                    chunk.append(str(text))
+        chunk = _text_parts(message)
         if chunk:
             texts = chunk
     return "\n".join(texts).strip()
+
+
+def looks_like_review(text: str) -> bool:
+    """True when the body is a review, not a trailing wrap-up."""
+    body = text or ""
+    if _FINDINGS_TAG in body:
+        return True
+    if _REVIEW_SUMMARY.search(body) or _REVIEW_TITLE.search(body):
+        return True
+    return False
+
+
+def turn_assistant_text(
+    messages: list[dict[str, Any]],
+    *,
+    prefer_review: bool = True,
+) -> str:
+    """Assistant markdown from this job turn, not the whole ``ses_*``.
+
+    A later wrap-up ("the review is complete") must not replace the
+    review that already landed in this turn. Hang-resume user messages
+    are not a new turn — they continue the prompt already posted.
+    Does not walk back into a previous job's messages.
+    """
+    if not messages:
+        return ""
+    last_user = -1
+    last_any_user = -1
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict) or _role(message) != "user":
+            continue
+        last_any_user = index
+        if "\n".join(_text_parts(message)).strip() == HANG_RESUME.strip():
+            continue
+        last_user = index
+    if last_user < 0:
+        last_user = last_any_user
+    if last_user < 0:
+        return last_assistant_text(messages)
+    texts = [
+        "\n".join(_text_parts(message)).strip()
+        for message in messages[last_user + 1 :]
+        if isinstance(message, dict) and _role(message) == "assistant" and _text_parts(message)
+    ]
+    texts = [item for item in texts if item]
+    if not texts:
+        return ""
+    if prefer_review:
+        reviews = [item for item in texts if looks_like_review(item)]
+        if reviews:
+            return reviews[-1]
+    return texts[-1]
 
 
 def session_activity(messages: list[dict[str, Any]]) -> tuple[int, int, bool]:

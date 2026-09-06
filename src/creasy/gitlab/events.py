@@ -83,6 +83,20 @@ def _is_draft(payload: dict[str, Any], attrs: dict[str, Any]) -> bool:
     return False
 
 
+def _became_ready(payload: dict[str, Any]) -> bool:
+    """True when GitLab marks a draft ready (update, no oldrev)."""
+    changes = payload.get("changes")
+    if not isinstance(changes, dict):
+        return False
+    for key in ("draft", "work_in_progress"):
+        blob = changes.get(key)
+        if not isinstance(blob, dict):
+            continue
+        if blob.get("previous") is True and blob.get("current") is False:
+            return True
+    return False
+
+
 def classify_webhook(
     payload: dict[str, Any],
     *,
@@ -111,7 +125,8 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
     if action not in {"open", "update", "reopen"}:
         return Ignore(f"action={action or 'missing'}")
     if action == "update" and not str(attrs.get("oldrev") or "").strip():
-        return Ignore("update without oldrev")
+        if not _became_ready(payload):
+            return Ignore("update without oldrev")
     draft = _is_draft(payload, attrs)
     if skip_drafts and draft:
         return Ignore("draft MR")
