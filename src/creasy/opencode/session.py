@@ -7,7 +7,7 @@ from typing import Any, Callable, Optional
 
 import httpx
 
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 from creasy.review.prompt import HANG_RESUME
 
 logger = get_logger("session")
@@ -222,14 +222,22 @@ class OpenCodeClient:
         return self.http.get(f"/session/{session_id}", headers=self.headers, timeout=15.0)
 
     def create_session(self, title: str) -> str:
-        response = self.http.post("/session", json={"title": title}, headers=self.headers, timeout=60.0)
-        response.raise_for_status()
+        try:
+            response = self.http.post("/session", json={"title": title}, headers=self.headers, timeout=60.0)
+            response.raise_for_status()
+        except Exception as exc:
+            log_fail(logger, "opencode create session", title=title, err=exc)
+            raise
         data = response.json()
         if isinstance(data, dict) and isinstance(data.get("id"), str):
+            log_ok(logger, "opencode create session", session=data["id"], http=response.status_code)
             return data["id"]
         inner = data.get("session") if isinstance(data, dict) else None
         if isinstance(inner, dict) and inner.get("id"):
-            return str(inner["id"])
+            sid = str(inner["id"])
+            log_ok(logger, "opencode create session", session=sid, http=response.status_code)
+            return sid
+        log_fail(logger, "opencode create session", title=title, reason="no id")
         raise OpenCodeError("session create returned no id")
 
     def resume_or_create(self, inbound: Optional[str], title: str) -> tuple[str, bool]:
@@ -237,9 +245,12 @@ class OpenCodeClient:
             try:
                 got = self.get_session(inbound)
                 if got.status_code == 200:
+                    log_ok(logger, "opencode resume session", session=inbound, http=200)
                     return inbound, False
+                log_fail(logger, "opencode resume session", session=inbound, http=got.status_code)
                 logger.info("session %s rejected (%s); creating new", inbound, got.status_code)
             except Exception as exc:  # noqa: BLE001
+                log_fail(logger, "opencode resume session", session=inbound, err=exc)
                 logger.info("session resume failed (%s); creating new", exc)
         sid = self.create_session(title)
         return sid, True
@@ -258,11 +269,16 @@ class OpenCodeClient:
                 timeout=30.0,
             )
         if response.status_code == 400:
+            log_fail(logger, "opencode list messages", session=session_id, http=400)
             raise OpenCodeError(
                 "messages unreadable",
                 status_code=400,
             )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except Exception as exc:
+            log_fail(logger, "opencode list messages", session=session_id, http=response.status_code, err=exc)
+            raise
         data = response.json()
         if isinstance(data, list):
             return [m for m in data if isinstance(m, dict)]
@@ -312,6 +328,7 @@ class OpenCodeClient:
                 timeout=20.0,
             )
             if response.status_code < 400:
+                log_ok(logger, "opencode prompt", session=session_id, via="prompt_async", http=response.status_code, agent=agent, model=model)
                 return
             logger.info("prompt_async HTTP %s; falling back to /message", response.status_code)
         except Exception as exc:  # noqa: BLE001
@@ -323,18 +340,28 @@ class OpenCodeClient:
             timeout=httpx.Timeout(connect=15.0, read=600.0, write=30.0, pool=15.0),
         )
         if response.status_code >= 400:
+            log_fail(
+                logger,
+                "opencode prompt",
+                session=session_id,
+                via="message",
+                http=response.status_code,
+                body=(response.text or "")[:200],
+            )
             raise OpenCodeError(
                 f"user message POST failed: HTTP {response.status_code} {response.text[:200]}",
                 status_code=response.status_code,
             )
+        log_ok(logger, "opencode prompt", session=session_id, via="message", http=response.status_code, agent=agent, model=model)
 
     def abort(self, session_id: str) -> None:
         if not session_id.startswith("ses_"):
             return
         try:
-            self.http.post(f"/session/{session_id}/abort", headers=self.headers, timeout=15.0)
+            response = self.http.post(f"/session/{session_id}/abort", headers=self.headers, timeout=15.0)
+            log_ok(logger, "opencode abort", session=session_id, http=response.status_code)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("abort failed: %s", exc)
+            log_fail(logger, "opencode abort", session=session_id, err=exc)
 
     def wait_idle(
         self,
@@ -352,8 +379,10 @@ class OpenCodeClient:
         settle = max(0.0, float(idle_settle))
         while time.time() < deadline:
             if should_stop and should_stop():
+                log_ok(logger, "opencode wait cancelled", session=session_id)
                 raise OpenCodeError("cancelled")
             if not self.health():
+                log_fail(logger, "opencode wait", session=session_id, reason="serve-dead")
                 raise OpenCodeError("serve-dead")
             try:
                 messages = self.list_messages(session_id)
@@ -371,10 +400,14 @@ class OpenCodeClient:
                 last_change = time.time()
             if not busy and (text or has_structured):
                 if saw_busy or has_structured:
+                    log_ok(logger, "opencode idle", session=session_id, chars=len(text), structured=has_structured, saw_busy=saw_busy)
                     return text
                 if time.time() - last_change > settle:
+                    log_ok(logger, "opencode idle", session=session_id, chars=len(text), structured=has_structured, settled=True)
                     return text
             if time.time() - last_change > hang_timeout:
+                log_fail(logger, "opencode wait", session=session_id, reason="hang", chars=len(text), messages=msg_n)
                 raise OpenCodeError("hang")
             time.sleep(min(1.0, max(0.05, settle if settle else 0.2)))
+        log_fail(logger, "opencode wait", session=session_id, reason="timeout", chars=len(text) if last_token else 0)
         raise OpenCodeError("timeout", timeout=True)

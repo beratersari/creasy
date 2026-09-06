@@ -20,6 +20,11 @@ section in the same change.
   built as HTTPS when `remoteUrl` is SSH. Azure Basic auth is
   `AZURE_WEBHOOK_PASSWORD` only (not `WEBHOOK_SECRET`).
 
+### Changed
+
+- Every webhook, HTTP, git, OpenCode, and job step now logs `ok` or
+  `FAIL` so a dual GitLab+Azure install can be grepped end to end.
+
 ## 0.4.0 — 2026-09-06
 
 Auto review no longer follows every push. Opening an MR still starts
