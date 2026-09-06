@@ -32,7 +32,6 @@ def downloads_body(version: str) -> str:
         f"creasy-{version}-windows-x64.zip",
         f"creasy-{version}-linux-x64.zip",
         f"creasy-{version}-darwin-arm64.zip",
-        f"creasy-{version}-darwin-x64.zip",
     ]
     lines = ["Each zip is one Creasy executable plus `.env.example`.", ""]
     lines.extend(f"- `{name}`" for name in zips)

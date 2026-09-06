@@ -54,10 +54,10 @@ Bump with `python scripts/bump_version.py minor`. What changed is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 Download **GitHub Release** executable zips
-(`creasy-<version>-windows-x64.zip` and the linux/darwin twins), not
-the tag’s “Source code” zip. Each zip is one `creasy` / `creasy.exe`
-plus `.env.example`. Copy the example to `.env` next to the binary
-and run it. Reviews still need `opencode` on `PATH`.
+(`creasy-<version>-windows-x64.zip`, `linux-x64`, `darwin-arm64`),
+not the tag’s “Source code” zip. Each zip is one `creasy` /
+`creasy.exe` plus `.env.example`. Copy the example to `.env` next
+to the binary and run it. Reviews still need `opencode` on `PATH`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 

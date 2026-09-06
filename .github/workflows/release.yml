@@ -30,8 +30,6 @@ jobs:
             suffix: linux-x64
           - os: macos-latest
             suffix: darwin-arm64
-          - os: macos-13
-            suffix: darwin-x64
     steps:
       - uses: actions/checkout@v5
         with:
@@ -78,10 +76,10 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          for suffix in windows-x64 linux-x64 darwin-arm64 darwin-x64; do
+          for suffix in windows-x64 linux-x64 darwin-arm64; do
             test -f "dist/exe/creasy-${v}-${suffix}.zip"
           done
-          test "$(ls -1 dist/exe/*.zip | wc -l)" = "4"
+          test "$(ls -1 dist/exe/*.zip | wc -l)" = "3"
       - name: Write release notes
         run: python scripts/release_notes.py --version "${{ steps.ver.outputs.version }}" --out release-notes.md
       - name: Publish GitHub Release
@@ -94,7 +92,6 @@ jobs:
             dist/exe/creasy-*-windows-x64.zip
             dist/exe/creasy-*-linux-x64.zip
             dist/exe/creasy-*-darwin-arm64.zip
-            dist/exe/creasy-*-darwin-x64.zip
           fail_on_unmatched_files: true
           make_latest: true
           generate_release_notes: false

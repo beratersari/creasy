@@ -137,7 +137,8 @@ def test_release_workflow_publishes_exe_zips():
     assert "packaging/build_exe.py" in release
     assert "action-gh-release" in release
     assert "darwin-arm64" in release
-    assert "darwin-x64" in release
+    assert "macos-13" not in release
+    assert "darwin-x64" not in release
     assert "windows-linux" not in release
     assert "scripts/release_notes.py" in release
     assert "generate_release_notes: false" in release

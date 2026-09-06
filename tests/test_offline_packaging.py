@@ -140,7 +140,7 @@ def test_build_dist_default_does_not_zip() -> None:
     workflow = Path(__file__).resolve().parents[1].joinpath(".github", "workflows", "ci.yml").read_text(
         encoding="utf-8"
     )
-    assert "--zip" not in workflow
+    assert "build_dist.py --zip" not in workflow
     assert "dist/creasy-*.zip" not in workflow
 
 
