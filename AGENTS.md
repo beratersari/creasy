@@ -230,5 +230,9 @@ One logical change per commit. Run `pytest` before you push.
 - Version lives in [`VERSION`](VERSION). The app, `/health`, `/api/meta`,
   offline packs, and GitLab notes all read that file. Bump it with
   `python scripts/bump_version.py patch|minor|major` (or `--set X.Y.Z`).
-- A release is: bump `VERSION` on `develop`, open an MR/PR into `main`,
-  merge, then tag `vX.Y.Z` on `main`.
+- A release is: bump `VERSION` on `develop`, add a `CHANGELOG.md`
+  section, open an MR/PR into `main`, merge, then tag `vX.Y.Z` on
+  `main`. The `release` workflow builds the offline packs and attaches
+  them to the GitHub Release (`python.exe`, `opencode.exe`, `rg.exe`,
+  Linux/Darwin binaries). Do not point operators at the tag’s
+  “Source code” zip — that is the git tree only.

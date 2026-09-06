@@ -50,12 +50,14 @@ Webhook: `POST /webhook`
 Health: `GET /health`
 
 The product version is the `VERSION` file (`/health` and `/api/meta` expose it).
-Bump with `python scripts/bump_version.py minor`. CI uploads one folder per
-pack (`creasy-<version>-windows-x64`, `linux-x64`, `darwin`, `windows-linux`).
-GitHub wraps each folder as a zip; the download is not a zip of a zip. Each
-pack includes bundled CPython, matching wheels, the OpenCode CLI, and the
-built dashboard (`web/dist`). No Node on the target. Unzip, `install`,
-`install-opencode`, `start`.
+Bump with `python scripts/bump_version.py minor`. What changed is in
+[`CHANGELOG.md`](CHANGELOG.md).
+
+Download **GitHub Release** assets (`creasy-<version>-windows-x64.zip` and
+friends), not the tag’s “Source code” zip. Release zips include bundled
+CPython (`python.exe` / `python3`), `opencode` / `opencode.exe`,
+`rg` / `rg.exe`, wheels, and `web/dist`. No Node on the target. Unzip,
+`install`, `install-opencode`, `start`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 
