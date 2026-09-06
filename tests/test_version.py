@@ -45,6 +45,13 @@ def test_release_notes_extract():
     spec.loader.exec_module(mod)
     text = "## 0.2.0 — x\n\nHello.\n\n## 0.1.0\n\nOld.\n"
     assert mod.extract(text, "0.2.0") == "## 0.2.0 — x\n\nHello.\n"
+    notes = mod.downloads_body("0.3.0")
+    assert "creasy-0.3.0-windows-x64.zip" in notes
+    assert "creasy-0.3.0-linux-x64.zip" in notes
+    assert "creasy-0.3.0-darwin-arm64.zip" in notes
+    assert "creasy-0.3.0-darwin-x64.zip" in notes
+    assert "windows-linux" not in notes
+    assert "Source code" not in notes
 
 
 def test_write_version_roundtrip(tmp_path: Path):

@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from creasy.paths import executable_dir, is_frozen
+
 def _bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -65,7 +67,12 @@ class Config:
 def load_config(env_file: str | None = ".env") -> Config:
     if env_file:
         load_dotenv(env_file, override=False)
-    data_dir = Path(os.getenv("DATA_DIR", "./data")).resolve()
+        if is_frozen():
+            beside = executable_dir() / Path(env_file).name
+            if beside.is_file():
+                load_dotenv(beside, override=False)
+    default_data = executable_dir() / "data" if is_frozen() else Path("./data")
+    data_dir = Path(os.getenv("DATA_DIR", str(default_data))).resolve()
     cfg = Config(
         host=os.getenv("HOST", "0.0.0.0"),
         port=_int("PORT", 9001),

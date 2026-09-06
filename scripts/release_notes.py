@@ -27,14 +27,26 @@ def extract(changelog: str, version: str) -> str:
     return body + "\n"
 
 
+def downloads_body(version: str) -> str:
+    zips = [
+        f"creasy-{version}-windows-x64.zip",
+        f"creasy-{version}-linux-x64.zip",
+        f"creasy-{version}-darwin-arm64.zip",
+        f"creasy-{version}-darwin-x64.zip",
+    ]
+    lines = ["Each zip is one Creasy executable plus `.env.example`.", ""]
+    lines.extend(f"- `{name}`" for name in zips)
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--changelog", default=str(ROOT / "CHANGELOG.md"))
     args = parser.parse_args()
-    text = Path(args.changelog).read_text(encoding="utf-8")
-    Path(args.out).write_text(extract(text, args.version), encoding="utf-8")
+    Path(args.changelog).read_text(encoding="utf-8")
+    Path(args.out).write_text(downloads_body(args.version), encoding="utf-8")
     return 0
 
 

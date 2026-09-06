@@ -1,7 +1,6 @@
 """Pins AGENTS.md / plan.md contracts that the other suites do not cover.
 
-Not included: OSM stay-up extras, draft→ready auto-review (update without
-oldrev is ignored on purpose).
+Not included: OSM stay-up extras.
 """
 
 from __future__ import annotations

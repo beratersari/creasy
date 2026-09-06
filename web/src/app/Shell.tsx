@@ -49,9 +49,11 @@ export function Shell() {
         <div className="vd-brand">
           <div className="vd-mark">CR</div>
           <div>
-            <div className="text-sm font-semibold">Creasy</div>
+            <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
+              <span>Creasy</span>
+              {version ? <span className="font-mono text-xs font-medium text-text-muted">v{version}</span> : null}
+            </div>
             <div className="text-[11px] text-text-muted">
-              {version ? `v${version} · ` : ''}
               {connectionLabel(live.connected).toLowerCase()}
               {live.running ? ` · ${live.running} running` : ''}
             </div>

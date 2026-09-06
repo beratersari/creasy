@@ -53,11 +53,11 @@ The product version is the `VERSION` file (`/health` and `/api/meta` expose it).
 Bump with `python scripts/bump_version.py minor`. What changed is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
-Download **GitHub Release** assets (`creasy-<version>-windows-x64.zip` and
-friends), not the tag’s “Source code” zip. Release zips include bundled
-CPython (`python.exe` / `python3`), `opencode` / `opencode.exe`,
-`rg` / `rg.exe`, wheels, and `web/dist`. No Node on the target. Unzip,
-`install`, `install-opencode`, `start`.
+Download **GitHub Release** executable zips
+(`creasy-<version>-windows-x64.zip` and the linux/darwin twins), not
+the tag’s “Source code” zip. Each zip is one `creasy` / `creasy.exe`
+plus `.env.example`. Copy the example to `.env` next to the binary
+and run it. Reviews still need `opencode` on `PATH`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 

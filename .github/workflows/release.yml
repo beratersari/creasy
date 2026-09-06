@@ -1,8 +1,8 @@
 name: release
 
-# Tag push or Actions → Run workflow. Publishes the offline packs
-# (CPython + opencode + rg) to a GitHub Release. The tag's
-# "Source code" zip is not a pack.
+# Tag push or Actions → Run workflow. Publishes one executable zip
+# per platform (creasy[.exe] + .env.example). The tag's
+# "Source code" zip is not an operator download.
 
 on:
   push:
@@ -10,15 +10,28 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish (v0.2.0)"
+        description: "Existing tag to publish (v0.3.0)"
         required: true
 
 permissions:
   contents: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  exe:
+    name: Executable ${{ matrix.suffix }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            suffix: windows-x64
+          - os: ubuntu-latest
+            suffix: linux-x64
+          - os: macos-latest
+            suffix: darwin-arm64
+          - os: macos-13
+            suffix: darwin-x64
     steps:
       - uses: actions/checkout@v5
         with:
@@ -29,35 +42,46 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Build offline packs as zip files
-        run: python packaging/build_dist.py --out-dir dist --zip
+      - name: Install build deps
+        run: python -m pip install -e . pyinstaller
+      - name: Build executable zip
+        run: python packaging/build_exe.py --suffix ${{ matrix.suffix }} --zip --out-dir dist/exe
+      - name: Read product version
+        id: ver
+        shell: bash
+        run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Upload zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
+          if-no-files-found: error
+
+  publish:
+    needs: exe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
       - name: Read product version
         id: ver
         run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
-      - name: Assert packs contain the executables
+      - name: Download executable zips
+        uses: actions/download-artifact@v4
+        with:
+          pattern: creasy-${{ steps.ver.outputs.version }}-*
+          path: dist/exe
+          merge-multiple: true
+      - name: Assert only exe zips
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          win="dist/stage/creasy-${v}-windows-x64"
-          linux="dist/stage/creasy-${v}-linux-x64"
-          dar="dist/stage/creasy-${v}-darwin"
-          both="dist/stage/creasy-${v}-windows-linux"
-          test -f "$win/vendor/python/windows/python.exe"
-          test -f "$win/vendor/bin/windows/opencode.exe"
-          test -f "$win/vendor/bin/windows/rg.exe"
-          test -f "$linux/vendor/python/linux/bin/python3"
-          test -f "$linux/vendor/bin/linux/opencode"
-          test -f "$linux/vendor/bin/linux/rg"
-          test -f "$dar/vendor/python/darwin-arm64/bin/python3"
-          test -f "$dar/vendor/python/darwin-x64/bin/python3"
-          test -f "$dar/vendor/bin/darwin-arm64/opencode"
-          test -f "$dar/vendor/bin/darwin-x64/opencode"
-          test -f "$both/vendor/python/windows/python.exe"
-          test -f "$both/vendor/bin/linux/opencode"
-          test -f "dist/creasy-${v}-windows-x64.zip"
-          test -f "dist/creasy-${v}-linux-x64.zip"
-          test -f "dist/creasy-${v}-darwin.zip"
-          test -f "dist/creasy-${v}-windows-linux.zip"
+          for suffix in windows-x64 linux-x64 darwin-arm64 darwin-x64; do
+            test -f "dist/exe/creasy-${v}-${suffix}.zip"
+          done
+          test "$(ls -1 dist/exe/*.zip | wc -l)" = "4"
       - name: Write release notes
         run: python scripts/release_notes.py --version "${{ steps.ver.outputs.version }}" --out release-notes.md
       - name: Publish GitHub Release
@@ -67,9 +91,10 @@ jobs:
           name: Creasy ${{ steps.ver.outputs.version }}
           body_path: release-notes.md
           files: |
-            dist/creasy-*-windows-x64.zip
-            dist/creasy-*-linux-x64.zip
-            dist/creasy-*-darwin.zip
-            dist/creasy-*-windows-linux.zip
+            dist/exe/creasy-*-windows-x64.zip
+            dist/exe/creasy-*-linux-x64.zip
+            dist/exe/creasy-*-darwin-arm64.zip
+            dist/exe/creasy-*-darwin-x64.zip
           fail_on_unmatched_files: true
           make_latest: true
+          generate_release_notes: false

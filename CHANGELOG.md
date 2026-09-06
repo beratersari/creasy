@@ -9,6 +9,18 @@ section in the same change.
 
 ## Unreleased
 
+## 0.3.0 — 2026-09-06
+
+Operator download on the GitHub Release is four executable zips.
+Each zip is one `creasy` / `creasy.exe` plus `.env.example`.
+The dashboard brand line shows the product version.
+
+### Added
+
+- One-file executables built in CI (`packaging/build_exe.py`) and
+  uploaded as artifacts. Release notes list only those zips.
+- Sidebar brand shows `Creasy vX.Y.Z` at the top left.
+
 ### Fixed
 
 - A trailing wrap-up on a resumed session is no longer posted as the
