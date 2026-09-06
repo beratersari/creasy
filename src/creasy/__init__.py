@@ -1,1 +1,4 @@
-__version__ = "0.1.0"
+from creasy.version import __version__
+
+__all__ = ["__version__"]
+

@@ -49,7 +49,13 @@ Dashboard: http://127.0.0.1:9001/jobs
 Webhook: `POST /webhook`  
 Health: `GET /health`
 
-CI uploads one folder per pack (`creasy-0.1.0-windows-x64`, `linux-x64`, `darwin`, `windows-linux`). GitHub wraps each folder as a zip; the download is not a zip of a zip. Each pack includes bundled CPython, matching wheels, the OpenCode CLI, and the built dashboard (`web/dist`). No Node on the target. Unzip, `install`, `install-opencode`, `start`.
+The product version is the `VERSION` file (`/health` and `/api/meta` expose it).
+Bump with `python scripts/bump_version.py minor`. CI uploads one folder per
+pack (`creasy-<version>-windows-x64`, `linux-x64`, `darwin`, `windows-linux`).
+GitHub wraps each folder as a zip; the download is not a zip of a zip. Each
+pack includes bundled CPython, matching wheels, the OpenCode CLI, and the
+built dashboard (`web/dist`). No Node on the target. Unzip, `install`,
+`install-opencode`, `start`.
 
 Point a GitLab project webhook at `/webhook` with merge request events and comments. Secret must match `WEBHOOK_SECRET`.
 

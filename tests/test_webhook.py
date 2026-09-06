@@ -153,5 +153,9 @@ def test_health(tmp_config):
     client = TestClient(app)
     res = client.get("/health")
     assert res.status_code == 200
-    assert res.json()["status"] == "healthy"
+    body = res.json()
+    assert body["status"] == "healthy"
+    from creasy import __version__
+
+    assert body["version"] == __version__
     manager.shutdown()
