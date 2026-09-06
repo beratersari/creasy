@@ -228,11 +228,74 @@ One logical change per commit. Run `pytest` before you push.
   (or a release branch) into `main`.
 - Never force-push `main` or `develop`.
 - Version lives in [`VERSION`](VERSION). The app, `/health`, `/api/meta`,
-  offline packs, and GitLab notes all read that file. Bump it with
-  `python scripts/bump_version.py patch|minor|major` (or `--set X.Y.Z`).
-- A release is: bump `VERSION` on `develop`, add a `CHANGELOG.md`
-  section, open an MR/PR into `main`, merge, then tag `vX.Y.Z` on
-  `main`. The `release` workflow builds the offline packs and attaches
-  them to the GitHub Release (`python.exe`, `opencode.exe`, `rg.exe`,
-  Linux/Darwin binaries). Do not point operators at the tag’s
-  “Source code” zip — that is the git tree only.
+  offline packs, and GitLab notes all read that file. Bump it **manually**
+  with `python scripts/bump_version.py patch|minor|major` (or
+  `--set X.Y.Z`). Do not auto-bump on every commit.
+
+### Changelog
+
+- [`CHANGELOG.md`](CHANGELOG.md) is the release-note source.
+  `scripts/release_notes.py` copies the `## X.Y.Z` section onto the
+  GitHub Release. A version with no section, or a section that only
+  says “bump VERSION”, is not a release.
+- Heading: `## X.Y.Z — YYYY-MM-DD`. Use `### Added` / `### Changed` /
+  `### Fixed` / `### Packs` as needed. Write for an operator: what
+  they can do now, what broke, what to download.
+- Keep `## Unreleased` at the top. Daily work appends there. The
+  version bump **moves** that text into the dated `## X.Y.Z` section
+  in the same change as `VERSION`.
+- Do not list files. Do not invent entries that are not in the
+  commits being released.
+
+### How to cut the next release
+
+Do this on `develop`, then merge to `main`. Do not push `main`
+directly. Do not treat a git tag as the product.
+
+1. `python scripts/bump_version.py patch|minor|major` (or `--set`).
+2. Move `## Unreleased` into `## X.Y.Z — YYYY-MM-DD` with real
+   explanations. Leave an empty `## Unreleased` behind.
+3. Commit `VERSION` + `CHANGELOG.md` together (plus any release-only
+   doc/CI tweak that belongs to that version).
+4. Open a PR/MR into `main`. Merge it.
+5. On the merged `main` tip: annotated tag only
+   `git tag -a vX.Y.Z -m "Creasy X.Y.Z"` then
+   `git push origin vX.Y.Z`. Tag name matches `VERSION`.
+6. The `release` workflow (`packaging/build_dist.py --zip`) must
+   publish a **GitHub Release**. The job is not done until
+   `https://github.com/beratersari/creasy/releases/tag/vX.Y.Z`
+   exists, the body is the changelog section, and these four assets
+   are attached and large enough to hold CPython + OpenCode + rg:
+   `creasy-X.Y.Z-windows-x64.zip`,
+   `creasy-X.Y.Z-linux-x64.zip`,
+   `creasy-X.Y.Z-darwin.zip`,
+   `creasy-X.Y.Z-windows-linux.zip`.
+7. Point operators at those assets. **Never** the tag “Source code”
+   zip (git tree only, no `python.exe` / `opencode`). **Never**
+   expired Actions artifacts.
+
+### Pack paths CI must assert
+
+`packaging/build_dist.py` `PACKS` dest names are the truth. Darwin
+is two triples, not a folder named `darwin`:
+
+| Pack | Must exist in the staged tree |
+|---|---|
+| windows-x64 | `vendor/python/windows/python.exe`, `vendor/bin/windows/opencode.exe`, `vendor/bin/windows/rg.exe` |
+| linux-x64 | `vendor/python/linux/bin/python3`, `vendor/bin/linux/opencode`, `vendor/bin/linux/rg` |
+| darwin | `vendor/python/darwin-arm64/bin/python3`, `vendor/python/darwin-x64/bin/python3`, `vendor/bin/darwin-arm64/opencode`, `vendor/bin/darwin-x64/opencode` |
+| windows-linux | windows `python.exe` + linux `opencode` |
+
+Do not assert `vendor/python/darwin` or `vendor/bin/darwin`. If you
+change `PACKS`, change `.github/workflows/ci.yml` and
+`release.yml` in the same commit.
+
+### If the publish job fails
+
+- Fix on `develop`, PR into `main`, wait for CI.
+- If `VERSION` did not change and the GitHub Release has **no**
+  usable pack zips, move the annotated tag to the new `main` tip and
+  force-push **only that tag**. That is the only force-push a release
+  may use.
+- Do not force-push `main` or `develop`. Do not move a tag that
+  already has good zips.

@@ -31,6 +31,7 @@ def test_parse_rejects_garbage():
 def test_changelog_has_current_version():
     version = (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
     log = (Path(__file__).resolve().parents[1] / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## Unreleased" in log
     assert f"## {version}" in log
 
 

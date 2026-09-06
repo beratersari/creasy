@@ -1,5 +1,14 @@
 # Changelog
 
+Operator-facing notes for each released version. Heading form is
+`## X.Y.Z — YYYY-MM-DD`. `scripts/release_notes.py` copies that
+section onto the GitHub Release — write what changed and why, not a
+file list. Keep an `## Unreleased` section for work that is not
+versioned yet. Bump `VERSION` and move Unreleased into a dated
+section in the same change.
+
+## Unreleased
+
 ## 0.2.0 — 2026-09-06
 
 First versioned release. `VERSION` is the single product version
