@@ -58,8 +58,10 @@ jobs:
           test -f "dist/stage/creasy-${v}-linux-x64/vendor/python/linux/bin/python3"
           test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/opencode"
           test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/rg"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin/bin/python3"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin/opencode"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin-arm64/bin/python3"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin-x64/bin/python3"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin-arm64/opencode"
+          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin-x64/opencode"
           test -f "dist/stage/creasy-${v}-windows-linux/vendor/python/windows/python.exe"
           test -f "dist/stage/creasy-${v}-windows-linux/vendor/bin/linux/opencode"
       - name: Upload Linux pack
