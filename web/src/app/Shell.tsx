@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { ApiError, fetchJobs } from '../api/client'
+import { ApiError, fetchJobs, fetchMeta } from '../api/client'
 import { readDashboardToken, writeDashboardToken } from '../api/token'
 import { ReportIssue } from '../ui/ReportIssue'
 import { connectionLabel } from '../util/jobLabels'
@@ -10,9 +10,17 @@ export function Shell() {
   const live = useLive()
   const [draft, setDraft] = useState(() => readDashboardToken())
   const [needsToken, setNeedsToken] = useState(false)
+  const [version, setVersion] = useState('')
 
   useEffect(() => {
     let gone = false
+    fetchMeta()
+      .then((meta) => {
+        if (!gone && meta.version) setVersion(meta.version)
+      })
+      .catch(() => {
+        /* version is optional */
+      })
     fetchJobs({ page: 1, pageSize: 1 })
       .then(() => {
         if (!gone) setNeedsToken(false)
@@ -43,6 +51,7 @@ export function Shell() {
           <div>
             <div className="text-sm font-semibold">Creasy</div>
             <div className="text-[11px] text-text-muted">
+              {version ? `v${version} · ` : ''}
               {connectionLabel(live.connected).toLowerCase()}
               {live.running ? ` · ${live.running} running` : ''}
             </div>
