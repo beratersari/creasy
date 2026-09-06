@@ -11,9 +11,12 @@ section in the same change.
 
 ## 0.3.0 — 2026-09-06
 
-Operator download on the GitHub Release is four executable zips.
-Each zip is one `creasy` / `creasy.exe` plus `.env.example`.
-The dashboard brand line shows the product version.
+Operator download on the GitHub Release is three executable zips
+(Windows, Linux, Apple Silicon). Each zip is one `creasy` /
+`creasy.exe` plus `.env.example`. Intel macOS is not built:
+GitHub no longer assigns `macos-13` runners, which blocked the
+0.3.0 publish job. The dashboard brand line shows the product
+version.
 
 ### Added
 

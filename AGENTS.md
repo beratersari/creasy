@@ -264,29 +264,30 @@ directly. Do not treat a git tag as the product.
 6. The `release` workflow (`packaging/build_exe.py --zip`) must
    publish a **GitHub Release**. The job is not done until
    `https://github.com/beratersari/creasy/releases/tag/vX.Y.Z`
-   exists, the body lists only these four executable zips, and
+   exists, the body lists only these three executable zips, and
    each zip holds one binary plus `.env.example`:
    `creasy-X.Y.Z-windows-x64.zip` (`creasy.exe`),
    `creasy-X.Y.Z-linux-x64.zip` (`creasy`),
-   `creasy-X.Y.Z-darwin-arm64.zip` (`creasy`),
-   `creasy-X.Y.Z-darwin-x64.zip` (`creasy`).
+   `creasy-X.Y.Z-darwin-arm64.zip` (`creasy`).
    Do not attach the offline CPython/OpenCode/rg packs or the
-   tag “Source code” zip as the operator download.
-7. Point operators at those four zips. **Never** expired Actions
+   tag “Source code” zip as the operator download. Do not wait
+   on `macos-13` / `darwin-x64` — GitHub no longer assigns that
+   runner, and a queued Intel job blocks publish.
+7. Point operators at those three zips. **Never** expired Actions
    artifacts. Offline CPython packs stay CI-only
    (`packaging/build_dist.py`).
 
 ### Release executable zips CI must assert
 
 Each GitHub Release asset is one executable and `.env.example`.
-Darwin is two zips (`darwin-arm64`, `darwin-x64`), not `darwin`.
+Darwin is `darwin-arm64` only (Apple Silicon). Do not assert
+`darwin-x64` or a `macos-13` job.
 
 | Zip | Must contain |
 |---|---|
 | windows-x64 | `creasy.exe`, `.env.example` |
 | linux-x64 | `creasy`, `.env.example` |
 | darwin-arm64 | `creasy`, `.env.example` |
-| darwin-x64 | `creasy`, `.env.example` |
 
 ### Offline pack paths CI must assert
 

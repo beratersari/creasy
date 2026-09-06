@@ -49,7 +49,7 @@ def test_release_notes_extract():
     assert "creasy-0.3.0-windows-x64.zip" in notes
     assert "creasy-0.3.0-linux-x64.zip" in notes
     assert "creasy-0.3.0-darwin-arm64.zip" in notes
-    assert "creasy-0.3.0-darwin-x64.zip" in notes
+    assert "creasy-0.3.0-darwin-x64.zip" not in notes
     assert "windows-linux" not in notes
     assert "Source code" not in notes
 
