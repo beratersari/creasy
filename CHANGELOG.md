@@ -9,6 +9,14 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- Azure git clone no longer uses `GIT_ASKPASS=echo`. TFS IIS offers
+  Windows/Negotiate, so git ignores the PAT in the URL and then
+  asked for empty credentials. Clone now sends the same Basic
+  `pat:<PAT>` header as the REST client and an askpass that returns
+  that PAT. Job logs say `extraHeader`, `askpass`, and `token_chars`.
+
 ## 0.5.1 — 2026-09-08
 
 Azure DevOps Server 2022.2 reviews were 404ing because the collection

@@ -8,10 +8,28 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import quote, urlparse, urlunparse
 
-from creasy.azure.auth import azure_basic_auth
+from creasy.azure.auth import azure_basic_auth, azure_basic_user
 from creasy.logging import get_logger, log_command, log_command_result, log_fail, log_ok, redact_userinfo
 
 logger = get_logger("gitops")
+
+_ASKPASS_CMD = """@echo off
+setlocal EnableExtensions
+set "Q=%~1"
+echo(%Q% | findstr /i /c:"Username" /c:"User name" /c:"Username for" >nul
+if %errorlevel%==0 (
+  echo(%CREASY_GIT_ASKUSER%
+  exit /b 0
+)
+echo(%CREASY_GIT_TOKEN%
+"""
+
+_ASKPASS_SH = """#!/bin/sh
+case \"$1\" in
+  *[Uu]ser*) printf '%s\\n' \"${CREASY_GIT_ASKUSER:-pat}\" ;;
+  *) printf '%s\\n' \"$CREASY_GIT_TOKEN\" ;;
+esac
+"""
 
 
 class GitError(RuntimeError):
@@ -26,10 +44,27 @@ class DiffIndex:
     statuses: dict[str, str]
 
 
+def askpass_path() -> Path:
+    if os.name == "nt":
+        root = Path(os.environ.get("LOCALAPPDATA") or os.environ.get("TEMP") or ".")
+        path = root / "creasy" / "git-askpass.cmd"
+        body = _ASKPASS_CMD
+    else:
+        root = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache"))
+        path = root / "creasy" / "git-askpass.sh"
+        body = _ASKPASS_SH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    if current != body:
+        path.write_text(body, encoding="utf-8", newline="\n")
+        if os.name != "nt":
+            path.chmod(0o755)
+    return path
+
+
 def isolated_git_env(token: str = "", *, auth_scheme: str = "gitlab") -> dict[str, str]:
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    env["GIT_ASKPASS"] = "echo"
     env["GCM_INTERACTIVE"] = "never"
     env["GCM_MODAL_PROMPT"] = "false"
     env["GCM_GUI_PROMPT"] = "false"
@@ -38,10 +73,20 @@ def isolated_git_env(token: str = "", *, auth_scheme: str = "gitlab") -> dict[st
     if token:
         env["CREASY_GIT_TOKEN"] = token
     if token and auth_scheme == "azure":
-        # TFS IIS often ignores URL userinfo and needs the Basic header.
-        env["GIT_CONFIG_COUNT"] = "1"
+        helper = askpass_path()
+        env["CREASY_AZURE_GIT"] = "1"
+        env["CREASY_GIT_ASKUSER"] = azure_basic_user()
+        env["GIT_ASKPASS"] = str(helper)
+        env["SSH_ASKPASS"] = str(helper)
+        # TFS IIS advertises Negotiate. URL userinfo is ignored; send Basic
+        # the same way the REST client does, plus ASKPASS if git prompts.
+        env["GIT_CONFIG_COUNT"] = "2"
         env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
         env["GIT_CONFIG_VALUE_0"] = f"Authorization: {azure_basic_auth(token)}"
+        env["GIT_CONFIG_KEY_1"] = "core.askPass"
+        env["GIT_CONFIG_VALUE_1"] = str(helper)
+    else:
+        env["GIT_ASKPASS"] = "echo"
     return env
 
 
@@ -96,17 +141,39 @@ def _run_git(
     should_stop: Optional[Callable[[], bool]] = None,
     on_pid: Optional[Callable[[int], None]] = None,
 ) -> subprocess.CompletedProcess[str]:
+    env = env or isolated_git_env()
     cmd = [
         "git",
+        "-c",
+        "credential.helper=",
         "-c",
         "credential.helper=",
         "-c",
         "http.sslVerify=false",
         "-c",
         "core.longpaths=true",
-        *args,
     ]
+    if env.get("CREASY_AZURE_GIT") == "1" and env.get("CREASY_GIT_TOKEN"):
+        cmd.extend(
+            [
+                "-c",
+                f"http.extraHeader=Authorization: {azure_basic_auth(env['CREASY_GIT_TOKEN'])}",
+                "-c",
+                f"core.askPass={env.get('GIT_ASKPASS') or ''}",
+            ]
+        )
+    cmd.extend(args)
     log_command(logger, args, cwd=cwd or ".", timeout=timeout)
+    if env.get("CREASY_AZURE_GIT") == "1":
+        log_ok(
+            logger,
+            "azure git auth",
+            extraHeader="yes",
+            askpass=env.get("GIT_ASKPASS") or "-",
+            askuser=env.get("CREASY_GIT_ASKUSER") or "-",
+            token_chars=len(env.get("CREASY_GIT_TOKEN") or ""),
+            helper="disabled",
+        )
     if should_stop is None and on_pid is None:
         try:
             result = subprocess.run(
@@ -151,6 +218,16 @@ def _run_git(
     )
     if result.returncode != 0:
         err = redact_userinfo((result.stderr or result.stdout or "").strip())
+        if env.get("CREASY_AZURE_GIT") == "1":
+            log_fail(
+                logger,
+                "azure git failed",
+                extraHeader="yes",
+                askpass=env.get("GIT_ASKPASS") or "-",
+                token_chars=len(env.get("CREASY_GIT_TOKEN") or ""),
+                hint="REST PAT worked if threads posted; git HTTPS may still be Windows-auth only on the TFS _git site",
+                err=err[-400:],
+            )
         raise GitError(f"git failed ({result.returncode}): {err[-800:]}")
     return result
 
@@ -222,6 +299,18 @@ def clone_repo(
         raise GitError(f"clone dest already exists: {dest}")
     env = isolated_git_env(token, auth_scheme=auth_scheme)
     auth_url = inject_token(repo_url, token, scheme=auth_scheme)
+    if auth_scheme == "azure":
+        parsed = urlparse(repo_url)
+        log_ok(
+            logger,
+            "azure clone start",
+            host=parsed.netloc or "-",
+            path=parsed.path or "-",
+            user="pat",
+            token_chars=len(token or ""),
+            askpass=env.get("GIT_ASKPASS") or "-",
+            extraHeader="yes" if token else "no",
+        )
     git_kw = {"should_stop": should_stop, "on_pid": on_pid}
     try:
         _run_git(

@@ -1,4 +1,7 @@
 import base64
+import os
+import subprocess
+from pathlib import Path
 
 from creasy.azure.auth import azure_basic_auth
 from creasy.azure.client import _is_git_http, _is_http, _ssh_to_https
@@ -28,14 +31,37 @@ def test_inject_token_encodes_pat_special_chars():
     assert "pat:ab%2Bc%2Fd%3D@" in got
 
 
-def test_azure_git_env_sends_basic_header():
+def test_azure_git_env_sends_basic_header_and_askpass(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     env = isolated_git_env("secret-pat", auth_scheme="azure")
+    assert env["CREASY_AZURE_GIT"] == "1"
     assert env["GIT_CONFIG_KEY_0"] == "http.extraHeader"
     assert env["GIT_CONFIG_VALUE_0"].startswith("Authorization: Basic ")
     decoded = base64.b64decode(env["GIT_CONFIG_VALUE_0"].split(" ", 2)[2]).decode("ascii")
     assert decoded == "pat:secret-pat"
+    assert env["GIT_ASKPASS"] != "echo"
+    assert Path(env["GIT_ASKPASS"]).is_file()
     gitlab = isolated_git_env("secret-pat")
+    assert gitlab["GIT_ASKPASS"] == "echo"
     assert "GIT_CONFIG_KEY_0" not in gitlab
+
+
+def test_azure_askpass_prints_pat_user_then_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    env = isolated_git_env("secret-pat", auth_scheme="azure")
+    path = Path(env["GIT_ASKPASS"])
+    if os.name == "nt":
+        user = subprocess.run(["cmd", "/c", str(path), "Username for 'https://tfs'"], capture_output=True, text=True, env=env)
+        password = subprocess.run(["cmd", "/c", str(path), "Password for 'https://tfs'"], capture_output=True, text=True, env=env)
+    else:
+        user = subprocess.run(["sh", str(path), "Username for 'https://tfs'"], capture_output=True, text=True, env=env)
+        password = subprocess.run(["sh", str(path), "Password for 'https://tfs'"], capture_output=True, text=True, env=env)
+    assert user.returncode == 0
+    assert password.returncode == 0
+    assert user.stdout.strip() == "pat"
+    assert password.stdout.strip() == "secret-pat"
 
 
 def test_api_url_is_not_a_git_clone_url():
