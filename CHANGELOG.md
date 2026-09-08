@@ -11,6 +11,11 @@ section in the same change.
 
 ### Added
 
+- Executable zips include `opencoderman/agents`,
+  `opencoderman/skills`, and `install-review-agent` scripts. Those
+  copy only the review agent and skills into `~/.opencode`; they do
+  not replace an existing OpenCode CLI. The zip does not include
+  git history, vendor, or the rest of the submodule.
 - Job and system diagnostics for dashboard issue reports. Each job
   stores a redacted stage snapshot (provider, collection URL, HTTP
   status, git/Azure error class, token_set/token_chars). App start

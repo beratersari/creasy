@@ -288,6 +288,43 @@ def test_install_unhooks_other_bin_and_prepends_new(tmp_path: Path) -> None:
     assert str(custom) not in raw.split(";" if os.name == "nt" else ":")
 
 
+def test_review_only_copies_agent_and_skills_without_replacing_cli(tmp_path: Path) -> None:
+    mod = _load()
+    root = _plant_root(tmp_path, vendor=True)
+    extra = root / "opencoderman" / "agents" / "planner.md"
+    extra.write_text("---\nmode: primary\n---\nplanner\n", encoding="utf-8")
+    home = tmp_path / "home"
+    oc = home / ".opencode"
+    (oc / "bin").mkdir(parents=True)
+    existing = oc / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
+    existing.write_bytes(b"KEEP-CLI")
+    (oc / "opencode.json").write_text('{"plugin":["keep"]}', encoding="utf-8")
+    keep = oc / "keep-me.txt"
+    keep.write_text("stay", encoding="utf-8")
+
+    written = mod.install_review_only(root, user_home=home)
+    assert any(path.name == "gitlab-reviewer.md" for path in written)
+    assert (oc / "agents" / "gitlab-reviewer.md").is_file()
+    assert "mode: primary" in (oc / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    assert not (oc / "agents" / "planner.md").exists()
+    assert (oc / "skills" / "cpp98" / "SKILL.md").is_file()
+    assert existing.read_bytes() == b"KEEP-CLI"
+    assert keep.read_text(encoding="utf-8") == "stay"
+    assert json.loads((oc / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
+    assert list(home.glob(".opencode_backup_*")) == []
+    assert not (home / ".config" / "opencode").exists()
+
+
+def test_review_only_does_not_require_vendor(tmp_path: Path) -> None:
+    mod = _load()
+    root = _plant_root(tmp_path, vendor=False)
+    home = tmp_path / "home"
+    written = mod.install_review_only(root, user_home=home)
+    assert written
+    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert not (home / ".opencode" / "bin").exists()
+
+
 def test_missing_configs_submodule_fails(tmp_path: Path) -> None:
     mod = _load()
     root = tmp_path / "pkg"

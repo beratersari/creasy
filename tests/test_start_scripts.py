@@ -30,4 +30,5 @@ def test_start_scripts_match_osm_backend_pattern() -> None:
     assert "load_pack_installer" in oc
     assert "latest_backup_binary" in oc
     assert "install_review_agent" in oc
+    assert "install_review_only" in oc
     assert "vendor" in oc and "bin" in oc

@@ -142,8 +142,13 @@ These look like bugs. They are not.
   into `~/.config/opencode`; leftover trees there are renamed to
   `~/.config/opencode_backup_*` so OpenCode does not load a second
   copy. Then install the vendored CLI (Creasy `vendor/bin`, else the
-  pack's, else the backup) and prepend `~/.opencode/bin`. Add a new
-  agent in that submodule, not under `scripts/`.
+  pack's, else the backup) and prepend `~/.opencode/bin`. The
+  executable zip ships only `opencoderman/agents` and
+  `opencoderman/skills` plus `install-review-agent`: that script
+  copies **only** those files into `~/.opencode` and leaves the CLI
+  and config in place. Do not pack `opencoderman/.git`, vendor,
+  tests, or installers. Add a new agent in that submodule, not
+  under `scripts/`.
 
 ### Dashboard
 
@@ -270,7 +275,9 @@ directly. Do not treat a git tag as the product.
    publish a **GitHub Release**. The job is not done until
    `https://github.com/beratersari/creasy/releases/tag/vX.Y.Z`
    exists, the body lists only these three executable zips, and
-   each zip holds one binary plus `.env.example`:
+   each zip holds the binary, `.env.example`,
+   `opencoderman/agents`, `opencoderman/skills`, and
+   `install-review-agent.bat` / `.sh`:
    `creasy-X.Y.Z-windows-x64.zip` (`creasy.exe`),
    `creasy-X.Y.Z-linux-x64.zip` (`creasy`),
    `creasy-X.Y.Z-darwin-arm64.zip` (`creasy`).
@@ -284,15 +291,18 @@ directly. Do not treat a git tag as the product.
 
 ### Release executable zips CI must assert
 
-Each GitHub Release asset is one executable and `.env.example`.
-Darwin is `darwin-arm64` only (Apple Silicon). Do not assert
-`darwin-x64` or a `macos-13` job.
+Each GitHub Release asset is one executable, `.env.example`,
+`opencoderman/agents`, `opencoderman/skills`, and the
+`install-review-agent` scripts. Darwin is `darwin-arm64` only
+(Apple Silicon). Do not assert `darwin-x64` or a `macos-13` job.
+Do not ship `opencoderman/.git`, README, vendor, tests, or a
+full `~/.opencode` replace installer in the exe zip.
 
 | Zip | Must contain |
 |---|---|
-| windows-x64 | `creasy.exe`, `.env.example` |
-| linux-x64 | `creasy`, `.env.example` |
-| darwin-arm64 | `creasy`, `.env.example` |
+| windows-x64 | `creasy.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| darwin-arm64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
 
 ### Offline pack paths CI must assert
 
