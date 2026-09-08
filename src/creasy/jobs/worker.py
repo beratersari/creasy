@@ -536,7 +536,11 @@ class OpenCodeRunner:
                 http_url = self.azure.resolve_clone_url(job.azure_project, job.azure_repo, http_url)
             token = self.config.azure_token
             auth_scheme = "azure"
-            logger.info("azure clone using %s auth=pat", http_url or "-")
+            logger.info(
+                "azure clone using %s auth=pat token_chars=%s",
+                http_url or "-",
+                len(token or ""),
+            )
         else:
             http_url = mr.http_url or self.gitlab.resolve_http_url(job.project_id, record.http_url)
             token = self.config.gitlab_token
