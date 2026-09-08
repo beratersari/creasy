@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.6.1 — 2026-09-08
+
+Reviews use a general `code-reviewer` agent. Notes are Turkish
+with English technical terms.
+
 ### Changed
 
 - The review agent is now `code-reviewer` (GitLab MRs and Azure
@@ -19,7 +24,9 @@ section in the same change.
   paths (`python`, `javascript`, `go`, `rust`, `java`, `csharp`,
   `cpp`, `php`, `ruby`, `kotlin`, `swift`, `scala`, `shell`) and
   flags only hunks with a concrete failing case. C++ dialect
-  detection lives in the `cpp` skill, not the agent.
+  detection lives in the `cpp` skill, not the agent. Explanations
+  are Turkish; API names and terms such as buffer overflow stay
+  English.
 
 ## 0.6.0 — 2026-09-08
 
