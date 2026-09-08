@@ -9,15 +9,21 @@ section in the same change.
 
 ## Unreleased
 
+## 0.5.1 — 2026-09-08
+
+Azure DevOps Server 2022.2 reviews were 404ing because the collection
+path was dropped, then failing auth because the PAT was sent the
+cloud way.
+
 ### Fixed
 
-- Azure PR fetch no longer 404s when `AZURE_DEVOPS_URL` is only the
-  TFS host. The collection (`/tfs/ExampleCollection`) is taken from
-  the Service Hook or the PR URL, and a collection-scoped git path is
-  tried after a project-GUID path returns 404.
-- Azure DevOps Server PAT auth uses Basic `pat:<PAT>` (IIS rejects the
-  cloud-style empty username). Clone URLs stay under `/tfs/<Collection>/…/_git/…`
-  and are not the REST `_apis` URL. Git also sends the same Basic header.
+- PR fetch includes `/tfs/<Collection>` even when `AZURE_DEVOPS_URL`
+  is only the host. The collection is taken from the Service Hook or
+  the PR URL and stored on the client. A collection-scoped git path
+  is tried after a project-GUID path returns 404.
+- PAT auth uses Basic `pat:<PAT>` (IIS rejects an empty username).
+  Clone URLs stay under `/tfs/<Collection>/…/_git/…` and are not the
+  REST `_apis` URL. Git also sends the same Basic header.
 
 ## 0.5.0 — 2026-09-08
 
