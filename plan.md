@@ -30,6 +30,8 @@ POST /webhook  (ack immediately)
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
     ├─ Note on an MR whose body contains "/reset"
     │       └─ enqueue a wipe of that MR’s notes/threads authored by the token user (no OpenCode)
+    ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
+    │       └─ PR created / /review /ask /reset; abandoned or merged cleans up
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │

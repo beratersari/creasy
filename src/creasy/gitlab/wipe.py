@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, Protocol
 
+from creasy.logging import get_logger, log_fail, log_ok
+
+logger = get_logger("gitlab.wipe")
+
 
 class WipeCancelled(Exception):
     """Caller asked the wipe to stop."""
@@ -89,6 +93,7 @@ def wipe_author_comments(
     """
     stats = WipeStats()
     seen: set[int] = set()
+    log_ok(logger, "gitlab wipe start", project=project_id, mr=mr_iid, author=author_id)
 
     discussions = gitlab.list_discussions(project_id, mr_iid)
     for disc in discussions:
@@ -113,11 +118,14 @@ def wipe_author_comments(
                 seen.add(first_id)
                 if disc.get("individual_note"):
                     stats.notes += 1
+                    log_ok(logger, "gitlab wipe note", project=project_id, mr=mr_iid, note=first_id)
                 else:
                     stats.threads += 1
+                    log_ok(logger, "gitlab wipe thread", project=project_id, mr=mr_iid, discussion=discussion_id)
             else:
                 stats.failed += 1
                 stats.errors.append(f"discussion {discussion_id} note {first_id}")
+                log_fail(logger, "gitlab wipe thread", project=project_id, mr=mr_iid, discussion=discussion_id, note=first_id)
             continue
         for note in notes[1:]:
             _check_stop(should_stop)
@@ -132,9 +140,11 @@ def wipe_author_comments(
             if ok:
                 seen.add(nid)
                 stats.replies += 1
+                log_ok(logger, "gitlab wipe reply", project=project_id, mr=mr_iid, note=nid)
             else:
                 stats.failed += 1
                 stats.errors.append(f"reply {nid}")
+                log_fail(logger, "gitlab wipe reply", project=project_id, mr=mr_iid, note=nid)
 
     leftover = gitlab.list_notes(project_id, mr_iid)
     for note in leftover:
@@ -146,7 +156,13 @@ def wipe_author_comments(
             continue
         if gitlab.delete_note(project_id, mr_iid, nid):
             stats.notes += 1
+            log_ok(logger, "gitlab wipe leftover note", project=project_id, mr=mr_iid, note=nid)
         else:
             stats.failed += 1
             stats.errors.append(f"note {nid}")
+            log_fail(logger, "gitlab wipe leftover note", project=project_id, mr=mr_iid, note=nid)
+    if stats.failed:
+        log_fail(logger, "gitlab wipe done", project=project_id, mr=mr_iid, summary=stats.summary())
+    else:
+        log_ok(logger, "gitlab wipe done", project=project_id, mr=mr_iid, summary=stats.summary())
     return stats

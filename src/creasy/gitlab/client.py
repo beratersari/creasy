@@ -12,9 +12,15 @@ from urllib.parse import quote
 
 import httpx
 
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 
 logger = get_logger("gitlab")
+
+
+def _http_detail(exc: Exception) -> tuple[int, str]:
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return exc.response.status_code, (exc.response.text or "")[:400]
+    return 0, str(exc)
 
 
 @dataclass
@@ -96,9 +102,17 @@ class GitLabClient:
             response.raise_for_status()
             data = response.json()
             self._user_id = int(data["id"])
+            log_ok(
+                logger,
+                "gitlab current user",
+                http=response.status_code,
+                user_id=self._user_id,
+                username=data.get("username") or "-",
+            )
             return self._user_id
         except Exception as exc:  # noqa: BLE001
-            logger.warning("could not resolve GitLab user: %s", exc)
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab current user", http=status, err=exc, body=detail)
             return None
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
@@ -107,6 +121,8 @@ class GitLabClient:
             response = self._http.get(path)
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab GET MR", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
             raise GitLabError(f"fetch MR failed: {exc}") from exc
         data = response.json()
         refs = data.get("diff_refs") or {}
@@ -142,6 +158,19 @@ class GitLabClient:
         )
         if not mr.pipeline_status:
             self._attach_latest_pipeline(mr)
+        log_ok(
+            logger,
+            "gitlab GET MR",
+            project=mr.project_id,
+            mr=mr.iid,
+            title=mr.title,
+            sha=mr.sha or "-",
+            source=mr.source_branch or "-",
+            target=mr.target_branch or "-",
+            draft=mr.draft,
+            state=mr.state or "-",
+            pipeline=mr.pipeline_status or "-",
+        )
         return mr
 
     def _attach_latest_pipeline(self, mr: MergeRequest) -> None:
@@ -150,13 +179,16 @@ class GitLabClient:
             response = self._http.get(path, params={"per_page": 1})
             response.raise_for_status()
         except Exception as exc:  # noqa: BLE001
-            logger.warning("fetch MR pipelines failed: %s", exc)
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab GET pipelines", project=mr.project_id, mr=mr.iid, http=status, err=exc, body=detail)
             return
         batch = response.json() if response.content else []
         if not isinstance(batch, list) or not batch or not isinstance(batch[0], dict):
+            log_ok(logger, "gitlab GET pipelines", project=mr.project_id, mr=mr.iid, count=0)
             return
         mr.pipeline_status = str(batch[0].get("status") or "").strip()
         mr.pipeline_url = str(batch[0].get("web_url") or "").strip()
+        log_ok(logger, "gitlab GET pipelines", project=mr.project_id, mr=mr.iid, status=mr.pipeline_status or "-")
 
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict[str, Any]:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}/notes"
@@ -164,8 +196,19 @@ class GitLabClient:
             response = self._http.post(path, json={"body": body})
             response.raise_for_status()
         except httpx.HTTPError as exc:
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab post note", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
             raise GitLabError(f"post note failed: {exc}") from exc
-        return response.json() if response.content else {}
+        data = response.json() if response.content else {}
+        log_ok(
+            logger,
+            "gitlab post note",
+            project=project_id,
+            mr=mr_iid,
+            http=response.status_code,
+            note_id=(data or {}).get("id") if isinstance(data, dict) else "-",
+        )
+        return data
 
     def post_discussion(
         self,
@@ -175,19 +218,41 @@ class GitLabClient:
         position: dict[str, Any],
     ) -> dict[str, Any]:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions"
+        file_path = (position or {}).get("new_path") or (position or {}).get("old_path") or "-"
         try:
             response = self._http.post(path, json={"body": body, "position": position})
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = (exc.response.text or "")[:400]
+            log_fail(
+                logger,
+                "gitlab post discussion",
+                project=project_id,
+                mr=mr_iid,
+                path=file_path,
+                http=exc.response.status_code,
+                err=exc,
+                body=detail,
+            )
             raise GitLabError(
                 f"post discussion failed: {exc} {detail}",
                 status_code=exc.response.status_code,
                 body=detail,
             ) from exc
         except httpx.HTTPError as exc:
+            log_fail(logger, "gitlab post discussion", project=project_id, mr=mr_iid, path=file_path, err=exc)
             raise GitLabError(f"post discussion failed: {exc}") from exc
-        return response.json() if response.content else {}
+        data = response.json() if response.content else {}
+        log_ok(
+            logger,
+            "gitlab post discussion",
+            project=project_id,
+            mr=mr_iid,
+            path=file_path,
+            http=response.status_code,
+            discussion=(data or {}).get("id") if isinstance(data, dict) else "-",
+        )
+        return data
 
     def list_discussions(self, project_id: int, mr_iid: int) -> list[dict[str, Any]]:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}/discussions"
@@ -205,6 +270,8 @@ class GitLabClient:
                 response = self._http.get(path, params={"per_page": 100, "page": page})
                 response.raise_for_status()
             except httpx.HTTPError as exc:
+                status, detail = _http_detail(exc)
+                log_fail(logger, "gitlab paginate", op=err, path=path, page=page, http=status, err=exc, body=detail)
                 raise GitLabError(f"{err}: {exc}") from exc
             batch = response.json() if response.content else []
             if not isinstance(batch, list) or not batch:
@@ -217,6 +284,7 @@ class GitLabClient:
                 page = int(nxt)
             except ValueError:
                 break
+        log_ok(logger, "gitlab paginate", op=err.replace(" failed", ""), path=path, count=len(out))
         return out
 
     def delete_note(self, project_id: int, mr_iid: int, note_id: int) -> bool:
@@ -241,11 +309,14 @@ class GitLabClient:
         try:
             response = self._http.delete(path)
             if response.status_code in {200, 202, 204, 404}:
+                log_ok(logger, "gitlab delete", op=err.replace(" failed", ""), path=path, http=response.status_code)
                 return True
             response.raise_for_status()
         except httpx.HTTPError as exc:
-            logger.warning("%s: %s", err, exc)
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab delete", op=err, path=path, http=status, err=exc, body=detail)
             return False
+        log_ok(logger, "gitlab delete", op=err.replace(" failed", ""), path=path)
         return True
 
     def reply_to_discussion(
@@ -262,23 +333,48 @@ class GitLabClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = (exc.response.text or "")[:400]
+            log_fail(
+                logger,
+                "gitlab reply discussion",
+                project=project_id,
+                mr=mr_iid,
+                discussion=discussion_id,
+                http=exc.response.status_code,
+                err=exc,
+                body=detail,
+            )
             raise GitLabError(
                 f"reply discussion failed: {exc} {detail}",
                 status_code=exc.response.status_code,
                 body=detail,
             ) from exc
         except httpx.HTTPError as exc:
+            log_fail(logger, "gitlab reply discussion", project=project_id, mr=mr_iid, discussion=discussion_id, err=exc)
             raise GitLabError(f"reply discussion failed: {exc}") from exc
-        return response.json() if response.content else {}
+        data = response.json() if response.content else {}
+        log_ok(
+            logger,
+            "gitlab reply discussion",
+            project=project_id,
+            mr=mr_iid,
+            discussion=discussion_id,
+            http=response.status_code,
+            note_id=(data or {}).get("id") if isinstance(data, dict) else "-",
+        )
+        return data
 
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:
         if fallback:
+            log_ok(logger, "gitlab resolve clone url", project=project_id, source="fallback")
             return fallback
         try:
             response = self._http.get(f"/projects/{quote(str(project_id), safe='')}")
             response.raise_for_status()
             data = response.json()
-            return str(data.get("http_url_to_repo") or "")
+            url = str(data.get("http_url_to_repo") or "")
+            log_ok(logger, "gitlab resolve clone url", project=project_id, http=response.status_code, url=url or "-")
+            return url
         except Exception as exc:  # noqa: BLE001
-            logger.warning("resolve project url failed: %s", exc)
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab resolve clone url", project=project_id, http=status, err=exc, body=detail)
             return ""

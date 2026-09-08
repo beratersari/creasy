@@ -217,6 +217,15 @@ def log_command_result(
     )
 
 
-def log_fail(logger: logging.Logger, headline: str, **fields: Any) -> None:
+def log_ok(logger: logging.Logger, headline: str, **fields: Any) -> None:
+    """Record a completed operation. Grep logs for ``ok ``."""
     bits = [f"{key}={_clip(value, 500)}" for key, value in fields.items()]
-    logger.error("%s %s", headline, " ".join(bits) if bits else "")
+    text = headline if str(headline).startswith("ok ") else f"ok {headline}"
+    logger.info("%s%s", text, f" {' '.join(bits)}" if bits else "")
+
+
+def log_fail(logger: logging.Logger, headline: str, **fields: Any) -> None:
+    """Record a failed operation. Grep logs for ``FAIL ``."""
+    bits = [f"{key}={_clip(value, 500)}" for key, value in fields.items()]
+    text = headline if str(headline).startswith("FAIL") else f"FAIL {headline}"
+    logger.error("%s%s", text, f" {' '.join(bits)}" if bits else "")

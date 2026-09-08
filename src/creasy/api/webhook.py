@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, classify_webhook
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 
 router = APIRouter()
 logger = get_logger("webhook")
@@ -29,10 +29,13 @@ def _bot_user_id(request: Request) -> Optional[int]:
 def _verify_secret(request: Request) -> None:
     secret = request.app.state.config.webhook_secret
     if not secret:
+        log_ok(logger, "webhook secret", check="skipped", reason="WEBHOOK_SECRET unset")
         return
     got = request.headers.get("X-Gitlab-Token", "")
     if got != secret:
+        log_fail(logger, "webhook secret", reason="mismatch")
         raise HTTPException(status_code=401, detail="Invalid secret")
+    log_ok(logger, "webhook secret", check="matched")
 
 
 @router.post("/webhook")
@@ -40,9 +43,11 @@ async def webhook(request: Request) -> JSONResponse:
     _verify_secret(request)
     try:
         payload = await request.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+    except Exception as exc:
+        log_fail(logger, "webhook JSON", err=exc)
+        raise HTTPException(status_code=400, detail="Invalid JSON") from exc
     if not isinstance(payload, dict):
+        log_fail(logger, "webhook JSON", reason="not an object")
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
     config = request.app.state.config
@@ -50,11 +55,12 @@ async def webhook(request: Request) -> JSONResponse:
     bot_id = _bot_user_id(request)
     kind = str(payload.get("object_kind") or "").strip().lower()
     if kind == "note" and bot_id is None:
+        log_fail(logger, "webhook bot user", reason="GITLAB_TOKEN user unknown")
         return JSONResponse({"status": "ignored", "reason": "bot user unknown"})
     classified = classify_webhook(payload, skip_drafts=config.skip_draft_mrs, bot_user_id=bot_id)
-    logger.info("webhook classified=%s", type(classified).__name__)
 
     if isinstance(classified, Ignore):
+        log_ok(logger, "webhook ignored", object_kind=kind or "missing", reason=classified.reason)
         return JSONResponse({"status": "ignored", "reason": classified.reason})
 
     if isinstance(classified, CleanupTrigger):
@@ -64,6 +70,13 @@ async def webhook(request: Request) -> JSONResponse:
             name=f"cleanup-{classified.project_id}-{classified.mr_iid}",
             daemon=True,
         ).start()
+        log_ok(
+            logger,
+            "webhook cleanup started",
+            action=classified.action,
+            project=classified.project_id,
+            mr=classified.mr_iid,
+        )
         return JSONResponse(
             {
                 "status": "accepted",
@@ -79,6 +92,19 @@ async def webhook(request: Request) -> JSONResponse:
         if job:
             body["job_id"] = job.job_id
             body["mr_key"] = job.mr_key
+        fields = {
+            "ack": ack,
+            "kind": classified.kind,
+            "project": classified.project_id,
+            "mr": classified.mr_iid,
+            "job": job.job_id if job else "-",
+            "message": message,
+        }
+        if ack == "ignored":
+            log_fail(logger, "webhook submit", **fields)
+        else:
+            log_ok(logger, "webhook submit", **fields)
         return JSONResponse(body)
 
+    log_ok(logger, "webhook ignored", object_kind=kind or "missing", reason="unhandled")
     return JSONResponse({"status": "ignored", "reason": "unhandled"})

@@ -71,6 +71,11 @@ These look like bugs. They are not.
   `/review`, `/ask`, and `/reset` still run.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
+- Azure DevOps Server is optional and isolated. `POST /webhook` stays
+  GitLab-only. Azure uses `POST /webhook/azure`, `creasy.azure`, and
+  `job.provider=azure`. Empty `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT`
+  means Azure is off. Do not fold Azure classify into
+  `creasy.gitlab.events`.
 
 ### Jobs and concurrency
 

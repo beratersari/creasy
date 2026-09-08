@@ -4,6 +4,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union
 
+from creasy.logging import get_logger, log_ok
+
+logger = get_logger("gitlab.events")
+
 TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
 
 # Word-style match. Trailing . ! ? : ; ) are allowed so "/review." still runs.
@@ -24,6 +28,9 @@ class ReviewTrigger:
     title: str = ""
     draft: bool = False
     explicit: bool = False
+    provider: str = "gitlab"
+    azure_project: str = ""
+    azure_repo: str = ""
 
 
 @dataclass(frozen=True)
@@ -92,13 +99,46 @@ def classify_webhook(
     bot_user_id: Optional[int] = None,
 ) -> Classified:
     if not isinstance(payload, dict):
-        return Ignore("invalid payload")
-    kind = str(payload.get("object_kind") or "").strip().lower()
-    if kind == "merge_request":
-        return _classify_merge_request(payload, skip_drafts=skip_drafts)
-    if kind == "note":
-        return _classify_note(payload, bot_user_id=bot_user_id)
-    return Ignore(f"object_kind={kind or 'missing'}")
+        result: Classified = Ignore("invalid payload")
+    else:
+        kind = str(payload.get("object_kind") or "").strip().lower()
+        if kind == "merge_request":
+            result = _classify_merge_request(payload, skip_drafts=skip_drafts)
+        elif kind == "note":
+            result = _classify_note(payload, bot_user_id=bot_user_id)
+        else:
+            result = Ignore(f"object_kind={kind or 'missing'}")
+    _log_classified(result, payload if isinstance(payload, dict) else {})
+    return result
+
+
+def _log_classified(result: Classified, payload: dict[str, Any]) -> None:
+    kind = str(payload.get("object_kind") or "").strip().lower() or "missing"
+    if isinstance(result, Ignore):
+        log_ok(logger, "gitlab classify Ignore", object_kind=kind, reason=result.reason)
+        return
+    if isinstance(result, CleanupTrigger):
+        log_ok(
+            logger,
+            "gitlab classify Cleanup",
+            object_kind=kind,
+            action=result.action,
+            project=result.project_id,
+            mr=result.mr_iid,
+        )
+        return
+    log_ok(
+        logger,
+        "gitlab classify ReviewTrigger",
+        object_kind=kind,
+        kind=result.kind,
+        project=result.project_id,
+        mr=result.mr_iid,
+        explicit=result.explicit,
+        draft=result.draft,
+        title=result.title or "-",
+        sha=result.sha or "-",
+    )
 
 
 def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Classified:

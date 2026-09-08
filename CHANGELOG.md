@@ -9,6 +9,31 @@ section in the same change.
 
 ## Unreleased
 
+## 0.5.0 — 2026-09-08
+
+Optional Azure DevOps Server reviews on the same Creasy process.
+GitLab `/webhook` is unchanged. The README now has the click-path
+for creating both webhooks.
+
+### Added
+
+- Optional Azure DevOps Server 2022.2 provider. Service Hooks post to
+  `/webhook/azure`. Auto review is PR created plus `/review` `/ask`
+  `/reset`. Overview and file threads use the 7.1 threads API.
+  Comment hooks resolve the PR from links if Azure omits
+  `resource.pullRequest`. File threads send iteration context.
+  `/reset` and similar-match paginate threads. Clone URL is built as
+  HTTPS when `remoteUrl` is SSH. Azure Basic auth is
+  `AZURE_WEBHOOK_PASSWORD` only (not `WEBHOOK_SECRET`).
+- README webhook setup for GitLab (MR events + comments,
+  `X-Gitlab-Token`) and Azure Service Hooks (created, commented,
+  updated, merge attempted, Basic auth).
+
+### Changed
+
+- Every webhook, HTTP, git, OpenCode, and job step now logs `ok` or
+  `FAIL` so a dual GitLab+Azure install can be grepped end to end.
+
 ## 0.4.0 — 2026-09-06
 
 Auto review no longer follows every push. Opening an MR still starts

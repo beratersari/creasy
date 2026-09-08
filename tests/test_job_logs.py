@@ -9,8 +9,23 @@ from creasy.api.dashboard import router as dashboard_router
 from creasy.jobs.manager import Manager
 from creasy.jobs.models import JobRecord, mint_job_id
 from creasy.log_context import bound
-from creasy.logging import get_logger, read_job_log_lines, setup_logging
+from creasy.logging import get_logger, log_fail, log_ok, read_job_log_lines, setup_logging
 from conftest import FakeRunner
+
+
+def test_log_ok_and_fail_are_greppable(tmp_config):
+    setup_logging("INFO", tmp_config.log_dir)
+    log = get_logger("ops")
+    job_id = mint_job_id()
+    with bound(job_id, "1-1", f"1-1-{job_id}.log"):
+        log_ok(log, "gitlab GET MR", project=1, mr=12)
+        log_fail(log, "azure POST thread", pr=44, http=400)
+    rows = read_job_log_lines(
+        tmp_config.log_dir, job_id, mr_key="1-1", log_file=f"1-1-{job_id}.log"
+    )
+    text = "\n".join(row["message"] for row in rows)
+    assert "ok gitlab GET MR project=1 mr=12" in text
+    assert "FAIL azure POST thread pr=44 http=400" in text
 
 
 def test_read_job_log_lines_filters_by_job_id(tmp_config):

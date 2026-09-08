@@ -14,7 +14,7 @@ from creasy.jobs.worker import JobRunner, RunResult
 from creasy.cleanup.end import delete_clone_path, protect_pids, stop_job_holders
 from creasy.cleanup.kill import kill_job_tree, reap_work_dir
 from creasy.log_context import bound
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 from creasy.workspace.identity import clone_path_for, mr_key
 from creasy.workspace.store import WorkspaceStore
 
@@ -69,7 +69,9 @@ class Manager:
                 self.queue.enqueue(job.mr_key, job.job_id)
         # queued leftovers stay in the persisted queue and will dispatch
         self.ready = True
-        logger.info("boot finished leftover_running_failed=%s", len([j for j in leftover if j.status == "running"]))
+        failed = len([j for j in leftover if j.status == "running"])
+        queued = len([j for j in leftover if j.status == "queued"])
+        log_ok(logger, "manager boot", leftover_running_failed=failed, leftover_queued=queued)
         self._dispatch()
 
     def shutdown(self) -> None:
@@ -96,20 +98,22 @@ class Manager:
         leftover = [j for j in self.store.list_all() if j.status == "running"]
         for job in leftover:
             self._finish(job, RunResult(error="manager shutting down", cancelled=True), status="cancelled")
+        log_ok(logger, "manager shutdown")
 
     def submit(self, trigger: ReviewTrigger) -> tuple[str, JobRecord | None, str]:
         """Return (ack, job, message). ack is accepted|queued|ignored."""
         if not self.ready or self.stopping:
+            log_fail(logger, "job submit", reason="manager is not accepting jobs", kind=trigger.kind)
             return "ignored", None, "manager is not accepting jobs"
         key = mr_key(trigger.project_id, trigger.mr_iid)
         with self._lock:
             if key in self._draining_mr:
-                logger.info("skip %s for %s (MR is closing)", trigger.kind, key)
+                log_fail(logger, "job submit", reason="MR is closing", mr=key, kind=trigger.kind)
                 return "ignored", None, "MR is closing"
             running = self.store.running_for_mr(key)
             queued_ids = self.queue.queued_ids(key)
             if not trigger.explicit and (running or queued_ids):
-                logger.info("skip auto %s for %s (already busy)", trigger.kind, key)
+                log_ok(logger, "job submit skipped", reason="already busy", mr=key, kind=trigger.kind)
                 return "ignored", None, "MR already has a running or queued job"
             job = JobRecord(
                 job_id=mint_job_id(),
@@ -126,6 +130,9 @@ class Manager:
                 sha=trigger.sha,
                 web_url=trigger.web_url,
                 mr_title=(trigger.title or "").strip(),
+                provider=getattr(trigger, "provider", None) or "gitlab",
+                azure_project=getattr(trigger, "azure_project", None) or "",
+                azure_repo=getattr(trigger, "azure_repo", None) or "",
                 model=self.config.opencode_model,
                 agent=self.config.opencode_agent,
                 accepted_at=utc_now(),
@@ -138,32 +145,44 @@ class Manager:
             started = self._try_start_locked(key)
         ack = "accepted" if started else "queued"
         with bound(job.job_id, job.mr_key, job.log_file):
-            logger.info("%s %s job=%s trigger=%s", ack, key, job.job_id, trigger.kind)
+            log_ok(
+                logger,
+                "job submit",
+                ack=ack,
+                mr=key,
+                job=job.job_id,
+                trigger=trigger.kind,
+                provider=job.provider or "gitlab",
+            )
         return ack, job, f"{ack} {job.job_id}"
 
     def cleanup_mr(self, trigger: CleanupTrigger) -> None:
         key = mr_key(trigger.project_id, trigger.mr_iid)
-        logger.info("cleanup %s action=%s", key, trigger.action)
+        log_ok(logger, "cleanup start", mr=key, action=trigger.action)
         # OSM cascade. Trigger is MR close/merge, not job end.
-        self.cancel_mr(
+        cancelled, _ = self.cancel_mr(
             trigger.project_id,
             trigger.mr_iid,
             delete_clone_dir=True,
             delete_reason=f"mr-{trigger.action}",
         )
+        log_ok(logger, "cleanup done", mr=key, action=trigger.action, cancelled=cancelled)
 
     def cancel_job(self, job_id: str) -> tuple[bool, str]:
         to_stop: JobRecord | None = None
         with self._lock:
             job = self.store.get(job_id)
             if not job:
+                log_fail(logger, "cancel job", job=job_id, reason="not found")
                 return False, "not found"
             if job.status not in {"queued", "running"}:
+                log_fail(logger, "cancel job", job=job_id, reason=f"job is {job.status}")
                 return False, f"job is {job.status}"
             if job.status == "queued":
                 self.queue.remove(job.mr_key, job.job_id)
                 with bound(job.job_id, job.mr_key, job.log_file):
                     self._finish(job, RunResult(cancelled=True, error="cancelled"), status="cancelled")
+                log_ok(logger, "cancel job", job=job_id, status="queued")
                 return True, "cancelled queued job"
             event = self._cancel.get(job.job_id)
             if event:
@@ -176,6 +195,7 @@ class Manager:
             except Exception:  # noqa: BLE001
                 logger.exception("cancel stop_job_holders failed job=%s", job_id)
                 kill_job_tree([to_stop.serve_pid, *list(to_stop.extra_pids or [])])
+        log_ok(logger, "cancel job", job=job_id, status="running")
         return True, "cancel requested"
 
     def cancel_mr(
@@ -230,9 +250,11 @@ class Manager:
                     logger.exception("stop_job_holders failed %s", key)
                 try:
                     delete_clone_path(path, reason=delete_reason)
+                    log_ok(logger, "delete clone", mr=key, reason=delete_reason)
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning("delete clone failed %s: %s", key, exc)
+                    log_fail(logger, "delete clone", mr=key, reason=delete_reason, err=exc)
                 self.workspaces.delete(key)
+            log_ok(logger, "cancel MR", mr=key, cancelled=cancelled, delete_clone=delete_clone_dir)
             return cancelled, key
         finally:
             if delete_clone_dir:
@@ -297,11 +319,12 @@ class Manager:
             self._after_job(None)
             return
         with bound(job.job_id, job.mr_key, job.log_file):
-            logger.info("pipeline start log_file=%s", job.log_file)
+            log_ok(logger, "pipeline start", job=job.job_id, mr=job.mr_key, trigger=job.trigger, provider=job.provider or "gitlab")
             try:
                 result = self.runner.run(job, event.is_set)
             except Exception as exc:  # noqa: BLE001
                 logger.exception("runner crashed job=%s", job_id)
+                log_fail(logger, "pipeline crash", job=job_id, err=exc)
                 result = RunResult(error=f"worker crashed: {exc}")
             job = self.store.get(job_id) or job
             if event.is_set() or result.cancelled:
@@ -353,7 +376,12 @@ class Manager:
             job.serve_port = result.serve_port
         self.store.save(job)
         self._cancel.pop(job.job_id, None)
-        logger.info("job %s finished status=%s", job.job_id, status)
+        if status == "success":
+            log_ok(logger, "job finished", job=job.job_id, status=status, posted=result.posted)
+        elif status == "cancelled":
+            log_ok(logger, "job finished", job=job.job_id, status=status)
+        else:
+            log_fail(logger, "job finished", job=job.job_id, status=status, err=result.error or "")
 
     def health(self) -> dict:
         jobs = self.store.list_all()

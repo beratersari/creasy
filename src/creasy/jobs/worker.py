@@ -4,12 +4,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
+from creasy.azure.client import AzureClient, AzureError
+from creasy.azure.threads import azure_thread_context, parse_azure_threads
+from creasy.azure.wipe import wipe_azure_comments
 from creasy.config import Config
 from creasy.gitlab.client import GitLabClient, GitLabError, MergeRequest
 from creasy.gitlab.wipe import WipeCancelled, wipe_author_comments
 from creasy.jobs.models import JobRecord
 from creasy.cleanup.end import stop_job_holders
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop_serve
 from creasy.opencode.session import (
     OpenCodeClient,
@@ -73,11 +76,16 @@ class OpenCodeRunner:
         workspaces: WorkspaceStore,
         gitlab: Optional[GitLabClient] = None,
         store: Optional[JobStore] = None,
+        azure: Optional[AzureClient] = None,
     ) -> None:
         self.config = config
         self.workspaces = workspaces
         self.gitlab = gitlab or GitLabClient(config.gitlab_url, config.gitlab_token)
+        self.azure = azure
         self.store = store
+
+    def _is_azure(self, job: JobRecord) -> bool:
+        return (job.provider or "gitlab") == "azure"
 
     def _remember_title(self, job: JobRecord, title: str) -> None:
         text = (title or "").strip()
@@ -88,8 +96,8 @@ class OpenCodeRunner:
             return
         try:
             self.store.save(job)
-        except Exception:  # noqa: BLE001
-            logger.warning("could not persist mr_title job=%s", job.job_id)
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "persist mr_title", job=job.job_id, err=exc)
 
     def _append_job_log(self, job: JobRecord, line: str) -> None:
         if not job.log_file:
@@ -100,22 +108,22 @@ class OpenCodeRunner:
             with path.open("a", encoding="utf-8") as handle:
                 handle.write(line.rstrip() + "\n")
         except OSError as exc:
-            logger.warning("job log write failed job=%s err=%s", job.job_id, exc)
+            log_fail(logger, "job log write", job=job.job_id, err=exc)
 
     def _persist_job(self, job: JobRecord, what: str) -> None:
         if self.store is None:
             return
         try:
             self.store.save(job)
-        except Exception:  # noqa: BLE001
-            logger.warning("could not persist %s job=%s", what, job.job_id)
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "persist job", what=what, job=job.job_id, err=exc)
 
     def _record_spawn(self, job: JobRecord, handle: ServeHandle) -> None:
         job.serve_pid = handle.pid
         job.serve_port = handle.port
         job.serve_base_url = handle.base_url
         self._persist_job(job, "serve pid")
-        logger.info("serve started pid=%s port=%s", handle.pid, handle.port)
+        log_ok(logger, "serve started", pid=handle.pid, port=handle.port)
         self._append_job_log(job, f"serve started pid={handle.pid} port={handle.port}")
 
     def _track_git_pid(self, job: JobRecord, pid: int) -> None:
@@ -134,12 +142,30 @@ class OpenCodeRunner:
         try:
             if should_stop():
                 result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="start")
                 return result
             prior = self.workspaces.get(job.mr_key)
             previous_sha = prior.last_sha if prior else ""
-            mr = self.gitlab.get_merge_request(job.project_id, job.mr_iid)
+            logger.info(
+                "pipeline provider=%s trigger=%s azure_project=%s azure_repo=%s",
+                job.provider or "gitlab",
+                job.trigger,
+                job.azure_project or "-",
+                job.azure_repo or "-",
+            )
+            mr = self._load_change(job)
+            log_ok(
+                logger,
+                "load change",
+                provider=job.provider or "gitlab",
+                title=mr.title or "-",
+                sha=mr.sha or "-",
+                source=mr.source_branch or "-",
+                target=mr.target_branch or "-",
+            )
             self._remember_title(job, mr.title)
             workspace = self._ensure_workspace(job, mr, should_stop)
+            log_ok(logger, "workspace ready", path=workspace.clone_path, sha=workspace.last_sha or mr.sha or "-")
             result.clone_path = workspace.clone_path
             result.sha = workspace.last_sha or mr.sha
             result.base_sha = mr.base_sha
@@ -164,6 +190,7 @@ class OpenCodeRunner:
             result.changed_paths = list(index.paths)
             job.clone_path = workspace.clone_path
             self._persist_job(job, "clone path")
+            log_ok(logger, "diff stat", mr=job.mr_key, paths=len(index.paths), merge_base=merge_base)
             logger.info("diff stat for %s:\n%s", job.mr_key, index.stat)
 
             created_new = False
@@ -191,7 +218,7 @@ class OpenCodeRunner:
                 client.list_messages(session_id)
             except OpenCodeError as exc:
                 if exc.status_code == 400:
-                    logger.warning("session %s unreadable; creating new", session_id)
+                    log_fail(logger, "opencode session unreadable", session=session_id, http=400)
                     session_id = client.create_session(title=f"creasy {job.mr_key}")
                     created_new = True
                 else:
@@ -199,6 +226,7 @@ class OpenCodeRunner:
             result.session_id = session_id
             job.session_id = session_id
             self._persist_job(job, "session id")
+            log_ok(logger, "opencode session", session=session_id, created_new=created_new)
             if created_new and job.trigger == "ask":
                 prompt = self._prompt(
                     job, mr, index, workspace, created_new=True, previous_sha=previous_sha
@@ -238,12 +266,13 @@ class OpenCodeRunner:
                 except OpenCodeError as exc:
                     last_error = str(exc)
                     result.timeout = exc.timeout
-                    logger.warning("attempt %s ended: %s", attempt, exc)
+                    log_fail(logger, "opencode turn", attempt=attempt, session=session_id, err=exc)
                     self._append_job_log(job, f"attempt {attempt} ended: {exc}")
                     if should_stop() or attempt >= self.config.opencode_retry_count:
                         break
             if should_stop():
                 result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="opencode")
                 return result
             try:
                 messages = client.list_messages(session_id)
@@ -256,6 +285,7 @@ class OpenCodeRunner:
                 workspace.session_id = session_id
                 workspace.last_job_id = job.job_id
                 self.workspaces.save(workspace)
+                log_fail(logger, "opencode turn exhausted", session=session_id, err=last_error)
                 self._post_note(job, result)
                 return result
             result.text = (
@@ -268,21 +298,35 @@ class OpenCodeRunner:
             workspace.session_id = session_id
             workspace.last_job_id = job.job_id
             self.workspaces.save(workspace)
+            log_ok(logger, "opencode turn", session=session_id, chars=len(result.text), findings=len(findings))
             self._post_note(job, result, findings=findings)
             return result
         except GitError as exc:
             if should_stop() or str(exc) == "cancelled":
                 result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="git")
             else:
                 result.error = f"git failed: {exc}"
+                log_fail(logger, "git pipeline", job=job.job_id, err=exc)
+                self._post_note(job, result)
+            return result
+        except AzureError as exc:
+            if should_stop():
+                result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="azure")
+            else:
+                result.error = f"azure failed: {exc}"
+                log_fail(logger, "azure pipeline", job=job.job_id, err=exc)
                 self._post_note(job, result)
             return result
         except Exception as exc:  # noqa: BLE001
             if should_stop():
                 result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="pipeline")
                 return result
             logger.exception("worker failed job=%s", job.job_id)
             result.error = f"pipeline failed: {exc}"
+            log_fail(logger, "pipeline", job=job.job_id, err=exc)
             self._post_note(job, result)
             return result
         finally:
@@ -307,15 +351,28 @@ class OpenCodeRunner:
             stop_serve(handle)
             # Keep the clone. OSM deletes here; Creasy waits for MR close/merge.
 
+    def _load_change(self, job: JobRecord) -> MergeRequest:
+        if self._is_azure(job):
+            if self.azure is None:
+                raise AzureError("azure not configured")
+            if not job.azure_project or not job.azure_repo:
+                raise AzureError("azure job is missing project or repo id")
+            return self.azure.get_pull_request(job.azure_project, job.azure_repo, job.mr_iid)
+        return self.gitlab.get_merge_request(job.project_id, job.mr_iid)
+
     def _run_reset(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
         """Delete PAT-authored notes/threads. No OpenCode, no clone, no MR note."""
         result = RunResult()
         if should_stop():
             result.cancelled = True
+            log_ok(logger, "reset cancelled", job=job.job_id, stage="start")
             return result
+        if self._is_azure(job):
+            return self._run_azure_reset(job, should_stop, result)
         author_id = self.gitlab.current_user_id()
         if author_id is None:
             result.error = "reset failed: could not resolve GITLAB_TOKEN user"
+            log_fail(logger, "reset", provider="gitlab", err=result.error)
             return result
         try:
             stats = wipe_author_comments(
@@ -327,13 +384,16 @@ class OpenCodeRunner:
             )
         except WipeCancelled:
             result.cancelled = True
+            log_ok(logger, "reset cancelled", job=job.job_id, stage="wipe")
             return result
         except GitLabError as exc:
             result.error = f"reset failed: {exc}"
+            log_fail(logger, "reset", provider="gitlab", err=exc)
             return result
         except Exception as exc:  # noqa: BLE001
             logger.exception("reset wipe failed job=%s", job.job_id)
             result.error = f"reset failed: {exc}"
+            log_fail(logger, "reset", provider="gitlab", err=exc)
             return result
         workspace = self.workspaces.get(job.mr_key)
         if workspace is not None and workspace.session_id:
@@ -343,9 +403,65 @@ class OpenCodeRunner:
         result.text = stats.summary()
         result.posted = True
         if stats.failed:
-            logger.warning("reset partial job=%s %s", job.job_id, stats.summary())
+            log_fail(logger, "reset partial", provider="gitlab", job=job.job_id, summary=stats.summary())
+        else:
+            log_ok(logger, "reset", provider="gitlab", mr=job.mr_key, summary=stats.summary())
         self._append_job_log(job, stats.summary())
-        logger.info("reset %s %s", job.mr_key, stats.summary())
+        return result
+
+    def _run_azure_reset(
+        self,
+        job: JobRecord,
+        should_stop: Callable[[], bool],
+        result: RunResult,
+    ) -> RunResult:
+        if self.azure is None:
+            result.error = "reset failed: azure not configured"
+            log_fail(logger, "reset", provider="azure", err=result.error)
+            return result
+        author_id = self.azure.current_user_id()
+        if not author_id:
+            result.error = "reset failed: could not resolve AZURE_DEVOPS_PAT user"
+            log_fail(logger, "reset", provider="azure", err=result.error)
+            return result
+        if not job.azure_project or not job.azure_repo:
+            result.error = "reset failed: azure job is missing project or repo id"
+            log_fail(logger, "reset", provider="azure", err=result.error)
+            return result
+        try:
+            stats = wipe_azure_comments(
+                self.azure,
+                job.azure_project,
+                job.azure_repo,
+                job.mr_iid,
+                author_id,
+                should_stop=should_stop,
+            )
+        except WipeCancelled:
+            result.cancelled = True
+            log_ok(logger, "reset cancelled", job=job.job_id, stage="azure wipe")
+            return result
+        except AzureError as exc:
+            result.error = f"reset failed: {exc}"
+            log_fail(logger, "reset", provider="azure", err=exc)
+            return result
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("azure reset wipe failed job=%s", job.job_id)
+            result.error = f"reset failed: {exc}"
+            log_fail(logger, "reset", provider="azure", err=exc)
+            return result
+        workspace = self.workspaces.get(job.mr_key)
+        if workspace is not None and workspace.session_id:
+            workspace.session_id = ""
+            self.workspaces.save(workspace)
+        result.session_id = ""
+        result.text = stats.summary()
+        result.posted = True
+        if stats.failed:
+            log_fail(logger, "reset partial", provider="azure", job=job.job_id, summary=stats.summary())
+        else:
+            log_ok(logger, "reset", provider="azure", mr=job.mr_key, summary=stats.summary())
+        self._append_job_log(job, stats.summary())
         return result
 
     def _prompt(
@@ -385,7 +501,17 @@ class OpenCodeRunner:
             project_id=job.project_id,
             mr_iid=job.mr_iid,
         )
-        http_url = mr.http_url or self.gitlab.resolve_http_url(job.project_id, record.http_url)
+        if self._is_azure(job):
+            http_url = mr.http_url or record.http_url
+            if self.azure is not None and (not http_url or not str(http_url).lower().startswith("http")):
+                http_url = self.azure.resolve_clone_url(job.azure_project, job.azure_repo, http_url)
+            token = self.config.azure_token
+            auth_scheme = "azure"
+            logger.info("azure clone using %s auth=pat", http_url or "-")
+        else:
+            http_url = mr.http_url or self.gitlab.resolve_http_url(job.project_id, record.http_url)
+            token = self.config.gitlab_token
+            auth_scheme = "gitlab"
         if not http_url:
             raise GitError("no http repo url for project")
         git_kw = self._git_kw(job, should_stop)
@@ -395,8 +521,9 @@ class OpenCodeRunner:
             clone_repo(
                 http_url,
                 dest,
-                self.config.gitlab_token,
+                token,
                 timeout=self.config.git_timeout,
+                auth_scheme=auth_scheme,
                 **git_kw,
             )
         sha = fetch_and_checkout(
@@ -404,8 +531,9 @@ class OpenCodeRunner:
             source_branch=mr.source_branch,
             target_branch=mr.target_branch,
             sha=mr.sha,
-            token=self.config.gitlab_token,
+            token=token,
             timeout=self.config.git_timeout,
+            auth_scheme=auth_scheme,
             **git_kw,
         )
         record.clone_path = str(dest)
@@ -438,10 +566,24 @@ class OpenCodeRunner:
         else:
             body = format_success(shadow)
         try:
-            self.gitlab.post_note(job.project_id, job.mr_iid, body)
+            if self._is_azure(job):
+                if self.azure is None:
+                    raise AzureError("azure not configured")
+                self.azure.post_overview(job.azure_project, job.azure_repo, job.mr_iid, body)
+            else:
+                self.gitlab.post_note(job.project_id, job.mr_iid, body)
             result.posted = True
+            log_ok(
+                logger,
+                "post overview",
+                provider=job.provider or "gitlab",
+                job=job.job_id,
+                mr=job.mr_iid,
+                cancelled=result.cancelled,
+                error=bool(result.error),
+            )
         except Exception as exc:  # noqa: BLE001
-            logger.error("post note failed: %s", exc)
+            log_fail(logger, "post overview", provider=job.provider or "gitlab", job=job.job_id, mr=job.mr_iid, err=exc)
             if not result.error:
                 result.error = f"post note failed: {exc}"
             return
@@ -456,19 +598,30 @@ class OpenCodeRunner:
         result: RunResult,
         findings: list[Finding],
     ) -> None:
+        azure_job = self._is_azure(job)
         poster = getattr(self.gitlab, "post_discussion", None)
-        if not callable(poster):
+        if not azure_job and not callable(poster):
             return
+        first_iter, second_iter = 1, 1
+        if azure_job and self.azure is not None:
+            first_iter, second_iter, _sha = self.azure.iteration_span(
+                job.azure_project, job.azure_repo, job.mr_iid
+            )
+            logger.info(
+                "azure file threads will use iterations %s..%s",
+                first_iter,
+                second_iter,
+            )
         clone = Path(result.clone_path) if result.clone_path else None
         if clone is None or not result.merge_base:
-            logger.warning("skip discussions job=%s: no clone or merge-base", job.job_id)
+            log_fail(logger, "post discussions", job=job.job_id, reason="no clone or merge-base")
             return
         try:
             diffmap = parse_unified_diff(
                 unified_diff(clone, result.merge_base, timeout=min(60.0, self.config.git_timeout))
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("skip discussions job=%s: diff failed: %s", job.job_id, exc)
+            log_fail(logger, "post discussions", job=job.job_id, reason="diff failed", err=exc)
             return
         existing = self._existing_creasy_threads(job)
         used: set[str] = set()
@@ -476,22 +629,35 @@ class OpenCodeRunner:
         replies = 0
         skipped = 0
         for finding in findings:
-            variants = build_position_variants(
-                finding,
-                diffmap,
-                base_sha=result.base_sha or result.merge_base,
-                start_sha=result.start_sha or result.base_sha or result.merge_base,
-                head_sha=result.sha,
-            )
-            if not variants:
-                logger.warning(
-                    "skip finding job=%s path=%s lines=%s-%s: no GitLab position",
-                    job.job_id,
-                    finding.path,
-                    finding.start_line,
-                    finding.end_line,
+            if azure_job:
+                context = azure_thread_context(finding, diffmap)
+                if not context:
+                    logger.warning(
+                        "skip finding job=%s path=%s lines=%s-%s: no Azure position",
+                        job.job_id,
+                        finding.path,
+                        finding.start_line,
+                        finding.end_line,
+                    )
+                    continue
+                variants = [context]
+            else:
+                variants = build_position_variants(
+                    finding,
+                    diffmap,
+                    base_sha=result.base_sha or result.merge_base,
+                    start_sha=result.start_sha or result.base_sha or result.merge_base,
+                    head_sha=result.sha,
                 )
-                continue
+                if not variants:
+                    logger.warning(
+                        "skip finding job=%s path=%s lines=%s-%s: no GitLab position",
+                        job.job_id,
+                        finding.path,
+                        finding.start_line,
+                        finding.end_line,
+                    )
+                    continue
             body = format_discussion(finding)
             matched = match_creasy_thread(finding, existing, used)
             if matched and should_skip_similar_reply(body, matched.last_body):
@@ -504,7 +670,12 @@ class OpenCodeRunner:
                     finding.path,
                 )
                 continue
-            if matched and self._reply_finding(job, matched.discussion_id, body):
+            if matched and self._reply_finding(
+                job,
+                matched.discussion_id,
+                body,
+                parent_comment_id=matched.root_comment_id,
+            ):
                 used.add(matched.discussion_id)
                 posted += 1
                 replies += 1
@@ -512,30 +683,44 @@ class OpenCodeRunner:
             last_error = ""
             for position in variants:
                 try:
-                    poster(job.project_id, job.mr_iid, body, position)
+                    if azure_job:
+                        assert self.azure is not None
+                        self.azure.post_file_thread(
+                            job.azure_project,
+                            job.azure_repo,
+                            job.mr_iid,
+                            body,
+                            position,
+                            first_iteration=first_iter,
+                            second_iteration=second_iter,
+                        )
+                    else:
+                        poster(job.project_id, job.mr_iid, body, position)
                     posted += 1
                     last_error = ""
                     break
-                except GitLabError as exc:
+                except (GitLabError, AzureError) as exc:
                     last_error = str(exc)
                 except Exception as exc:  # noqa: BLE001
                     last_error = str(exc)
                     break
             if last_error:
-                logger.warning(
-                    "discussion failed job=%s path=%s:%s: %s",
-                    job.job_id,
-                    finding.path,
-                    finding.start_line,
-                    last_error,
+                log_fail(
+                    logger,
+                    "post discussion",
+                    job=job.job_id,
+                    path=finding.path,
+                    line=finding.start_line,
+                    err=last_error,
                 )
         result.findings_posted = posted
         if posted or skipped:
-            logger.info(
-                "posted %s diff thread(s) replies=%s skipped_similar=%s",
-                posted,
-                replies,
-                skipped,
+            log_ok(
+                logger,
+                "post discussions",
+                posted=posted,
+                replies=replies,
+                skipped_similar=skipped,
             )
             self._append_job_log(
                 job,
@@ -543,27 +728,72 @@ class OpenCodeRunner:
             )
 
     def _existing_creasy_threads(self, job: JobRecord):
+        if self._is_azure(job):
+            if self.azure is None:
+                return []
+            try:
+                return parse_azure_threads(
+                    self.azure.list_threads(job.azure_project, job.azure_repo, job.mr_iid)
+                )
+            except Exception as exc:  # noqa: BLE001
+                log_fail(logger, "list Azure threads", job=job.job_id, err=exc)
+                return []
         lister = getattr(self.gitlab, "list_discussions", None)
         if not callable(lister):
             return []
         try:
             return parse_creasy_threads(lister(job.project_id, job.mr_iid))
         except Exception as exc:  # noqa: BLE001
-            logger.warning("list discussions failed job=%s: %s", job.job_id, exc)
+            log_fail(logger, "list GitLab discussions", job=job.job_id, err=exc)
             return []
 
-    def _reply_finding(self, job: JobRecord, discussion_id: str, body: str) -> bool:
+    def _reply_finding(
+        self,
+        job: JobRecord,
+        discussion_id: str,
+        body: str,
+        *,
+        parent_comment_id: int = 0,
+    ) -> bool:
+        if self._is_azure(job):
+            if self.azure is None:
+                return False
+            try:
+                self.azure.reply_to_thread(
+                    job.azure_project,
+                    job.azure_repo,
+                    job.mr_iid,
+                    discussion_id,
+                    body,
+                    parent_comment_id=parent_comment_id or 0,
+                )
+                log_ok(logger, "reply discussion", provider="azure", job=job.job_id, discussion=discussion_id)
+                return True
+            except Exception as exc:  # noqa: BLE001
+                log_fail(
+                    logger,
+                    "reply discussion",
+                    provider="azure",
+                    job=job.job_id,
+                    discussion=discussion_id,
+                    parent=parent_comment_id,
+                    err=exc,
+                )
+                return False
         replier = getattr(self.gitlab, "reply_to_discussion", None)
         if not callable(replier):
             return False
         try:
             replier(job.project_id, job.mr_iid, discussion_id, body)
+            log_ok(logger, "reply discussion", provider="gitlab", job=job.job_id, discussion=discussion_id)
             return True
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "reply failed job=%s discussion=%s: %s",
-                job.job_id,
-                discussion_id,
-                exc,
+            log_fail(
+                logger,
+                "reply discussion",
+                provider="gitlab",
+                job=job.job_id,
+                discussion=discussion_id,
+                err=exc,
             )
             return False

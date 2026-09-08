@@ -14,7 +14,7 @@ from typing import Callable, Optional
 
 import httpx
 
-from creasy.logging import get_logger
+from creasy.logging import get_logger, log_fail, log_ok
 from creasy.opencode.kill import kill_pid
 
 logger = get_logger("serve")
@@ -149,8 +149,9 @@ def start_serve(
             env=env,
             start_new_session=True,
         )
-    except OSError:
+    except OSError as exc:
         log_f.close()
+        log_fail(logger, "opencode serve spawn", bin=binary, cwd=cwd, err=exc)
         raise
     handle = ServeHandle(
         pid=int(proc.pid),
@@ -170,10 +171,11 @@ def start_serve(
             should_stop=should_stop,
             proc=handle.proc,
         )
-    except Exception:
+    except Exception as exc:
+        log_fail(logger, "opencode serve health", pid=handle.pid, port=handle.port, url=handle.base_url, err=exc)
         stop_serve(handle)
         raise
-    logger.info("opencode serve up pid=%s port=%s", handle.pid, handle.port)
+    log_ok(logger, "opencode serve", pid=handle.pid, port=handle.port, url=handle.base_url)
     return handle
 
 
@@ -222,8 +224,10 @@ def stop_serve(handle: Optional[ServeHandle]) -> None:
     kill_pid(handle.pid)
     try:
         handle.proc.wait(timeout=5)
-    except Exception:
+        log_ok(logger, "opencode serve stop", pid=handle.pid, port=handle.port)
+    except Exception as exc:
         kill_pid(handle.pid)
+        log_fail(logger, "opencode serve stop", pid=handle.pid, port=handle.port, err=exc)
     log_f = getattr(handle.proc, "_creasy_log_f", None)
     if log_f is not None:
         try:
