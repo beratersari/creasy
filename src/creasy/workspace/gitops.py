@@ -6,8 +6,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 
+from creasy.azure.auth import azure_basic_auth
 from creasy.logging import get_logger, log_command, log_command_result, log_fail, log_ok, redact_userinfo
 
 logger = get_logger("gitops")
@@ -25,7 +26,7 @@ class DiffIndex:
     statuses: dict[str, str]
 
 
-def isolated_git_env(token: str = "") -> dict[str, str]:
+def isolated_git_env(token: str = "", *, auth_scheme: str = "gitlab") -> dict[str, str]:
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
     env["GIT_ASKPASS"] = "echo"
@@ -36,6 +37,11 @@ def isolated_git_env(token: str = "") -> dict[str, str]:
     env["GIT_SSL_NO_VERIFY"] = "1"
     if token:
         env["CREASY_GIT_TOKEN"] = token
+    if token and auth_scheme == "azure":
+        # TFS IIS often ignores URL userinfo and needs the Basic header.
+        env["GIT_CONFIG_COUNT"] = "1"
+        env["GIT_CONFIG_KEY_0"] = "http.extraHeader"
+        env["GIT_CONFIG_VALUE_0"] = f"Authorization: {azure_basic_auth(token)}"
     return env
 
 
@@ -48,8 +54,9 @@ def inject_token(url: str, token: str, *, scheme: str = "gitlab") -> str:
     host = parsed.hostname or ""
     if not host:
         raise GitError("repo_url has no host")
-    user = "pat" if scheme == "azure" else "oauth2"
-    netloc = f"{user}:{token}@{host}"
+    user = quote("pat" if scheme == "azure" else "oauth2", safe="")
+    password = quote(token, safe="")
+    netloc = f"{user}:{password}@{host}"
     if parsed.port:
         netloc += f":{parsed.port}"
     return urlunparse(parsed._replace(netloc=netloc))
@@ -213,7 +220,7 @@ def clone_repo(
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists():
         raise GitError(f"clone dest already exists: {dest}")
-    env = isolated_git_env(token)
+    env = isolated_git_env(token, auth_scheme=auth_scheme)
     auth_url = inject_token(repo_url, token, scheme=auth_scheme)
     git_kw = {"should_stop": should_stop, "on_pid": on_pid}
     try:
@@ -272,7 +279,7 @@ def fetch_and_checkout(
     on_pid: Optional[Callable[[int], None]] = None,
     auth_scheme: str = "gitlab",
 ) -> str:
-    env = isolated_git_env(token)
+    env = isolated_git_env(token, auth_scheme=auth_scheme)
     git_kw = {"should_stop": should_stop, "on_pid": on_pid}
     origin = _origin_url(dest, env, timeout=min(30.0, timeout), **git_kw)
     auth = inject_token(origin, token, scheme=auth_scheme) if token else origin

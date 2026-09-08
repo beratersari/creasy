@@ -46,6 +46,20 @@ def test_pr_created_enqueues_open():
     assert azure_mr_key(PROJECT, REPO, 12) == f"{got.project_id}-12"
 
 
+def test_pr_created_stores_collection_from_containers() -> None:
+    got = classify_azure_webhook(
+        {
+            "eventType": "git.pullrequest.created",
+            "resourceContainers": {
+                "collection": {"baseUrl": "https://tfs02.company.com.tr/tfs/ExampleCollection/"}
+            },
+            "resource": _pr(),
+        }
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.azure_collection == "https://tfs02.company.com.tr/tfs/ExampleCollection"
+
+
 def test_pr_updated_is_ignored():
     got = classify_azure_webhook({"eventType": "git.pullrequest.updated", "resource": _pr()})
     assert isinstance(got, Ignore)

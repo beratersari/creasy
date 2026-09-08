@@ -88,12 +88,15 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
 1. In `.env` set the collection URL and a PAT, then restart Creasy:
 
    ```env
-   AZURE_DEVOPS_URL=https://ado.example/tfs/DefaultCollection
+   AZURE_DEVOPS_URL=https://tfs02.company.com.tr/tfs/ExampleCollection
    AZURE_DEVOPS_PAT=<pat>
    AZURE_WEBHOOK_USER=creasy
    AZURE_WEBHOOK_PASSWORD=<independent-of-WEBHOOK_SECRET>
    ```
 
+   Use the collection root (`https://<server>/tfs/<Collection>`), not the
+   server host alone and not a project or `_git` URL. A missing collection
+   makes PR fetch return 404.  
    The PAT needs **Code (Read)** and **Pull Request Threads (Read & write)**.  
    `AZURE_WEBHOOK_PASSWORD` is not `WEBHOOK_SECRET`; the two providers can run together.
 2. In the Azure project: **Project settings → Service hooks → Create subscription**.

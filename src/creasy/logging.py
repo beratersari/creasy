@@ -12,13 +12,15 @@ from creasy import log_context
 
 # https://oauth2:TOKEN@host → https://host  (also user:pass@)
 _USERINFO_RE = re.compile(r"(https?://)[^/\s\"'<>]+@", re.IGNORECASE)
+_BASIC_RE = re.compile(r"(Authorization:\s*Basic)\s+\S+", re.IGNORECASE)
 
 
 def redact_userinfo(text: str) -> str:
     """Strip URL userinfo so clone tokens never appear in logs or notes."""
     if not text:
         return ""
-    return _USERINFO_RE.sub(r"\1", str(text))
+    cleaned = _USERINFO_RE.sub(r"\1", str(text))
+    return _BASIC_RE.sub(r"\1 ***", cleaned)
 
 
 class _Formatter(logging.Formatter):

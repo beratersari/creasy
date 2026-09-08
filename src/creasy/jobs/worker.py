@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from creasy.azure.client import AzureClient, AzureError
 from creasy.azure.threads import azure_thread_context, parse_azure_threads
@@ -87,6 +88,15 @@ class OpenCodeRunner:
     def _is_azure(self, job: JobRecord) -> bool:
         return (job.provider or "gitlab") == "azure"
 
+    def _bind_azure(self, job: JobRecord) -> Any:
+        azure = self.azure
+        if not self._is_azure(job) or azure is None:
+            return nullcontext()
+        bind = getattr(azure, "bind", None)
+        if not callable(bind):
+            return nullcontext()
+        return bind(getattr(job, "azure_collection", "") or "", job.web_url or "")
+
     def _remember_title(self, job: JobRecord, title: str) -> None:
         text = (title or "").strip()
         if not text or job.mr_title == text:
@@ -139,6 +149,8 @@ class OpenCodeRunner:
         result = RunResult()
         handle: Optional[ServeHandle] = None
         client: Optional[OpenCodeClient] = None
+        azure_cm = self._bind_azure(job)
+        azure_cm.__enter__()
         try:
             if should_stop():
                 result.cancelled = True
@@ -330,6 +342,10 @@ class OpenCodeRunner:
             self._post_note(job, result)
             return result
         finally:
+            try:
+                azure_cm.__exit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                logger.exception("azure unbind failed job=%s", job.job_id)
             if result.cancelled:
                 self._post_note(job, result)
             if client is not None and result.session_id:
@@ -357,6 +373,9 @@ class OpenCodeRunner:
                 raise AzureError("azure not configured")
             if not job.azure_project or not job.azure_repo:
                 raise AzureError("azure job is missing project or repo id")
+            apply = getattr(self.azure, "apply_collection", None)
+            if callable(apply):
+                apply(getattr(job, "azure_collection", "") or "", job.web_url or "")
             return self.azure.get_pull_request(job.azure_project, job.azure_repo, job.mr_iid)
         return self.gitlab.get_merge_request(job.project_id, job.mr_iid)
 
@@ -419,6 +438,16 @@ class OpenCodeRunner:
             result.error = "reset failed: azure not configured"
             log_fail(logger, "reset", provider="azure", err=result.error)
             return result
+        with self._bind_azure(job):
+            return self._wipe_azure(job, should_stop, result)
+
+    def _wipe_azure(
+        self,
+        job: JobRecord,
+        should_stop: Callable[[], bool],
+        result: RunResult,
+    ) -> RunResult:
+        assert self.azure is not None
         author_id = self.azure.current_user_id()
         if not author_id:
             result.error = "reset failed: could not resolve AZURE_DEVOPS_PAT user"

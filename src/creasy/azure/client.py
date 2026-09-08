@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
-import base64
-from typing import Any, Optional
-from urllib.parse import quote
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Optional
+from urllib.parse import quote, urlparse
 
 import httpx
 
+from creasy.azure.auth import azure_basic_auth
+from creasy.azure.urls import resolve_collection_url
 from creasy.gitlab.client import MergeRequest
 from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
 
 logger = get_logger("azure")
+
+_request_root: ContextVar[str] = ContextVar("azure_request_root", default="")
 
 
 class AzureError(RuntimeError):
@@ -19,11 +24,6 @@ class AzureError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
-
-
-def _basic_pat(token: str) -> str:
-    raw = (":" + (token or "")).encode("utf-8")
-    return "Basic " + base64.b64encode(raw).decode("ascii")
 
 
 def _seg(value: str) -> str:
@@ -44,12 +44,88 @@ class AzureClient:
             pass
         headers = {"Accept": "application/json"}
         if token:
-            headers["Authorization"] = _basic_pat(token)
+            headers["Authorization"] = azure_basic_auth(token)
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
+        parsed = urlparse(self.base_url)
+        if self.base_url and not (parsed.path or "").strip("/"):
+            log_fail(
+                logger,
+                "azure collection missing",
+                url=self.base_url,
+                reason="AZURE_DEVOPS_URL is only the host; need /tfs/<Collection>",
+            )
 
     def close(self) -> None:
         self._http.close()
+
+    def apply_collection(self, collection: str = "", web_url: str = "") -> str:
+        """Permanently rebase onto /tfs/<Collection> from the webhook or PR URL."""
+        url = resolve_collection_url(configured=self.base_url, collection=collection, web_url=web_url)
+        if not url:
+            return self.base_url
+        url = url.rstrip("/")
+        if url == (self.base_url or "").rstrip("/"):
+            return self.base_url
+        old = self.base_url
+        self.base_url = url
+        log_ok(logger, "azure rebase collection", previous=old or "-", collection=url)
+        return self.base_url
+
+    def _root(self) -> str:
+        return (_request_root.get() or self.base_url or "").rstrip("/")
+
+    def _abs(self, path: str) -> str:
+        text = path if str(path).startswith("/") else f"/{path}"
+        return f"{self._root()}{text}"
+
+    @contextmanager
+    def bind(self, collection: str = "", web_url: str = "") -> Iterator["AzureClient"]:
+        """Use the collection root from the webhook/PR when AZURE_DEVOPS_URL is only the host."""
+        self.apply_collection(collection, web_url)
+        token = _request_root.set(self.base_url)
+        try:
+            yield self
+        finally:
+            _request_root.reset(token)
+
+    def _git_paths(self, project: str, repo: str, extra: str = "") -> list[str]:
+        extra = extra if not extra or extra.startswith("/") else f"/{extra}"
+        repo_s = _seg(repo)
+        paths: list[str] = []
+        if str(project or "").strip():
+            paths.append(f"/{_seg(project)}/_apis/git/repositories/{repo_s}{extra}")
+        paths.append(f"/_apis/git/repositories/{repo_s}{extra}")
+        return list(dict.fromkeys(paths))
+
+    def _send(self, method: str, paths: list[str], **kwargs: Any) -> httpx.Response:
+        last_error: Optional[BaseException] = None
+        last_404: Optional[httpx.Response] = None
+        for index, path in enumerate(paths):
+            url = self._abs(path)
+            try:
+                logger.info("azure HTTP %s %s", method, redact_userinfo(url))
+                response = self._http.request(method, url, **kwargs)
+                if response.status_code == 404 and index < len(paths) - 1:
+                    last_404 = response
+                    log_ok(logger, "azure retry path", method=method, path=path, http=404)
+                    continue
+                response.raise_for_status()
+                return response
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+                if exc.response is not None and exc.response.status_code == 404 and index < len(paths) - 1:
+                    last_404 = exc.response
+                    continue
+                raise
+            except httpx.HTTPError as exc:
+                last_error = exc
+                raise
+        if last_404 is not None:
+            last_404.raise_for_status()
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("azure request had no paths")
 
     def current_user_id(self) -> Optional[str]:
         if self._user_id is not None:
@@ -57,7 +133,7 @@ class AzureClient:
         if not self.token:
             return None
         try:
-            response = self._http.get("/_apis/connectionData", params={"api-version": self.api_version})
+            response = self._http.get(self._abs("/_apis/connectionData"), params={"api-version": self.api_version})
             response.raise_for_status()
             data = response.json()
             user = data.get("authenticatedUser") if isinstance(data, dict) else None
@@ -77,10 +153,12 @@ class AzureClient:
         return None
 
     def get_pull_request(self, project: str, repo: str, pr_id: int) -> MergeRequest:
-        path = f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}/pullRequests/{int(pr_id)}"
         try:
-            response = self._http.get(path, params={"api-version": self.api_version})
-            response.raise_for_status()
+            response = self._send(
+                "GET",
+                self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}"),
+                params={"api-version": self.api_version},
+            )
         except httpx.HTTPError as exc:
             detail = (getattr(exc, "response", None).text or "")[:400] if getattr(exc, "response", None) else ""
             log_fail(logger, "azure GET PR", project=project, repo=repo, pr=pr_id, err=exc, body=detail)
@@ -92,9 +170,15 @@ class AzureClient:
             if sha:
                 logger.info("azure PR %s sha empty on GET; using iteration commit %s", pr_id, sha)
                 mr.sha = sha
-        if not _is_http(mr.http_url):
+        if not _is_git_http(mr.http_url):
             built = self.resolve_clone_url(project, repo, mr.http_url)
-            logger.info("azure PR %s clone url %s -> %s", pr_id, redact_userinfo(mr.http_url) or "-", redact_userinfo(built) or "-")
+            logger.info(
+                "azure PR %s clone url %s -> %s (collection %s)",
+                pr_id,
+                redact_userinfo(mr.http_url) or "-",
+                redact_userinfo(built) or "-",
+                self._root() or "-",
+            )
             mr.http_url = built
         log_ok(
             logger,
@@ -113,19 +197,21 @@ class AzureClient:
         return mr
 
     def resolve_clone_url(self, project: str, repo: str, fallback: str = "") -> str:
-        if _is_http(fallback):
+        if _is_git_http(fallback):
             return fallback
-        path = f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}"
         try:
-            response = self._http.get(path, params={"api-version": self.api_version})
-            response.raise_for_status()
+            response = self._send(
+                "GET",
+                self._git_paths(project, repo, ""),
+                params={"api-version": self.api_version},
+            )
             data = response.json() if response.content else {}
             log_ok(logger, "azure GET repo", project=project, repo=repo, http=response.status_code)
         except Exception as exc:  # noqa: BLE001
             log_fail(logger, "azure GET repo", project=project, repo=repo, err=exc)
             data = {}
         remote = str((data or {}).get("remoteUrl") or (data or {}).get("webUrl") or "")
-        if _is_http(remote):
+        if _is_git_http(remote):
             log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="remoteUrl", url=redact_userinfo(remote))
             return remote
         converted = _ssh_to_https(remote)
@@ -135,9 +221,10 @@ class AzureClient:
         proj = data.get("project") if isinstance((data or {}).get("project"), dict) else {}
         proj_name = str((proj or {}).get("name") or project or "").strip()
         repo_name = str((data or {}).get("name") or repo or "").strip()
-        if self.base_url and proj_name and repo_name:
-            built = f"{self.base_url}/{_seg(proj_name)}/_git/{_seg(repo_name)}"
-            log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="built", url=redact_userinfo(built))
+        root = self._root()
+        if root and proj_name and repo_name:
+            built = f"{root}/{_seg(proj_name)}/_git/{_seg(repo_name)}"
+            log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="built", url=redact_userinfo(built), collection=root)
             return built
         leftover = fallback or remote
         if leftover:
@@ -148,10 +235,12 @@ class AzureClient:
 
     def iteration_span(self, project: str, repo: str, pr_id: int) -> tuple[int, int, str]:
         """(firstComparingIteration, secondComparingIteration, latest source sha)."""
-        path = f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}/pullRequests/{int(pr_id)}/iterations"
         try:
-            response = self._http.get(path, params={"api-version": self.api_version})
-            response.raise_for_status()
+            response = self._send(
+                "GET",
+                self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}/iterations"),
+                params={"api-version": self.api_version},
+            )
         except httpx.HTTPError as exc:
             log_fail(logger, "azure GET iterations", pr=pr_id, err=exc)
             return 1, 1, ""
@@ -210,7 +299,6 @@ class AzureClient:
         thread_context: Optional[dict[str, Any]],
         extra: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        path = f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}/pullRequests/{int(pr_id)}/threads"
         payload: dict[str, Any] = {
             "comments": [{"parentCommentId": 0, "content": body, "commentType": 1}],
             "status": 1,
@@ -228,8 +316,12 @@ class AzureClient:
         kind = "file" if thread_context else "overview"
         file_path = (thread_context or {}).get("filePath") or "-"
         try:
-            response = self._http.post(path, params={"api-version": self.api_version}, json=payload)
-            response.raise_for_status()
+            response = self._send(
+                "POST",
+                self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}/threads"),
+                params={"api-version": self.api_version},
+                json=payload,
+            )
         except httpx.HTTPStatusError as exc:
             detail = (exc.response.text or "")[:400]
             log_fail(logger, "azure POST thread", kind=kind, pr=pr_id, path=file_path, http=exc.response.status_code, err=exc, body=detail)
@@ -254,7 +346,7 @@ class AzureClient:
         return data
 
     def list_threads(self, project: str, repo: str, pr_id: int) -> list[dict[str, Any]]:
-        path = f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}/pullRequests/{int(pr_id)}/threads"
+        paths = self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}/threads")
         out: list[dict[str, Any]] = []
         token = ""
         skip = 0
@@ -265,8 +357,7 @@ class AzureClient:
             elif skip:
                 params["$skip"] = skip
             try:
-                response = self._http.get(path, params=params)
-                response.raise_for_status()
+                response = self._send("GET", paths, params=params)
             except httpx.HTTPError as exc:
                 log_fail(logger, "azure GET threads", pr=pr_id, page=page, err=exc)
                 raise AzureError(f"list threads failed: {exc}") from exc
@@ -302,18 +393,18 @@ class AzureClient:
         *,
         parent_comment_id: int = 0,
     ) -> dict[str, Any]:
-        path = (
-            f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}"
-            f"/pullRequests/{int(pr_id)}/threads/{_seg(thread_id)}/comments"
-        )
         parent = int(parent_comment_id or 1)
         try:
-            response = self._http.post(
-                path,
+            response = self._send(
+                "POST",
+                self._git_paths(
+                    project,
+                    repo,
+                    f"/pullRequests/{int(pr_id)}/threads/{_seg(thread_id)}/comments",
+                ),
                 params={"api-version": self.api_version},
                 json={"content": body, "parentCommentId": parent, "commentType": 1},
             )
-            response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             detail = (exc.response.text or "")[:400]
             log_fail(
@@ -347,12 +438,16 @@ class AzureClient:
         return data
 
     def delete_comment(self, project: str, repo: str, pr_id: int, thread_id: str, comment_id: int) -> bool:
-        path = (
-            f"/{_seg(project)}/_apis/git/repositories/{_seg(repo)}"
-            f"/pullRequests/{int(pr_id)}/threads/{_seg(thread_id)}/comments/{int(comment_id)}"
-        )
         try:
-            response = self._http.delete(path, params={"api-version": self.api_version})
+            response = self._send(
+                "DELETE",
+                self._git_paths(
+                    project,
+                    repo,
+                    f"/pullRequests/{int(pr_id)}/threads/{_seg(thread_id)}/comments/{int(comment_id)}",
+                ),
+                params={"api-version": self.api_version},
+            )
             if response.status_code in {200, 202, 204, 404}:
                 log_ok(
                     logger,
@@ -364,6 +459,12 @@ class AzureClient:
                 )
                 return True
             response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response is not None and exc.response.status_code == 404:
+                log_ok(logger, "azure DELETE comment", pr=pr_id, thread=thread_id, comment=comment_id, http=404)
+                return True
+            log_fail(logger, "azure DELETE comment", pr=pr_id, thread=thread_id, comment=comment_id, err=exc)
+            return False
         except httpx.HTTPError as exc:
             log_fail(logger, "azure DELETE comment", pr=pr_id, thread=thread_id, comment=comment_id, err=exc)
             return False
@@ -373,6 +474,13 @@ class AzureClient:
 
 def _is_http(url: str) -> bool:
     return str(url or "").lower().startswith(("http://", "https://"))
+
+
+def _is_git_http(url: str) -> bool:
+    text = str(url or "")
+    if not _is_http(text):
+        return False
+    return "/_apis/" not in text.lower()
 
 
 def _ssh_to_https(url: str) -> str:
@@ -405,7 +513,9 @@ def _pr_to_merge_request(data: dict[str, Any]) -> MergeRequest:
     last = data.get("lastMergeSourceCommit") if isinstance(data.get("lastMergeSourceCommit"), dict) else {}
     merge = data.get("lastMergeCommit") if isinstance(data.get("lastMergeCommit"), dict) else {}
     sha = str(last.get("commitId") or merge.get("commitId") or "")
-    http_url = str(repo.get("remoteUrl") or repo.get("url") or "")
+    http_url = str(repo.get("remoteUrl") or "")
+    if not _is_git_http(http_url):
+        http_url = ""
     links = data.get("_links") if isinstance(data.get("_links"), dict) else {}
     web = links.get("web") if isinstance(links.get("web"), dict) else {}
     author = data.get("createdBy") if isinstance(data.get("createdBy"), dict) else {}

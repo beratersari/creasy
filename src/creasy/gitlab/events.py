@@ -31,6 +31,7 @@ class ReviewTrigger:
     provider: str = "gitlab"
     azure_project: str = ""
     azure_repo: str = ""
+    azure_collection: str = ""
 
 
 @dataclass(frozen=True)

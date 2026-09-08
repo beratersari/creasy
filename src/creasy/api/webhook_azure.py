@@ -114,6 +114,10 @@ async def webhook_azure(request: Request) -> JSONResponse:
         )
 
     if isinstance(classified, ReviewTrigger):
+        azure = getattr(request.app.state, "azure", None)
+        apply = getattr(azure, "apply_collection", None) if azure is not None else None
+        if callable(apply):
+            apply(classified.azure_collection, classified.web_url)
         ack, job, message = manager.submit(classified)
         body = {"status": ack, "message": message}
         if job:

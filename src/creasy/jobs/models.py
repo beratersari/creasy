@@ -67,6 +67,7 @@ class JobRecord(BaseModel):
     provider: str = "gitlab"
     azure_project: str = ""
     azure_repo: str = ""
+    azure_collection: str = ""
 
     def public_dict(self) -> dict[str, Any]:
         data = self.model_dump()
