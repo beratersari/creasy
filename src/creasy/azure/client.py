@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterator, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -47,9 +47,30 @@ class AzureClient:
             headers["Authorization"] = azure_basic_auth(token)
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
+        parsed = urlparse(self.base_url)
+        if self.base_url and not (parsed.path or "").strip("/"):
+            log_fail(
+                logger,
+                "azure collection missing",
+                url=self.base_url,
+                reason="AZURE_DEVOPS_URL is only the host; need /tfs/<Collection>",
+            )
 
     def close(self) -> None:
         self._http.close()
+
+    def apply_collection(self, collection: str = "", web_url: str = "") -> str:
+        """Permanently rebase onto /tfs/<Collection> from the webhook or PR URL."""
+        url = resolve_collection_url(configured=self.base_url, collection=collection, web_url=web_url)
+        if not url:
+            return self.base_url
+        url = url.rstrip("/")
+        if url == (self.base_url or "").rstrip("/"):
+            return self.base_url
+        old = self.base_url
+        self.base_url = url
+        log_ok(logger, "azure rebase collection", previous=old or "-", collection=url)
+        return self.base_url
 
     def _root(self) -> str:
         return (_request_root.get() or self.base_url or "").rstrip("/")
@@ -61,11 +82,9 @@ class AzureClient:
     @contextmanager
     def bind(self, collection: str = "", web_url: str = "") -> Iterator["AzureClient"]:
         """Use the collection root from the webhook/PR when AZURE_DEVOPS_URL is only the host."""
-        url = resolve_collection_url(configured=self.base_url, collection=collection, web_url=web_url)
-        token = _request_root.set(url or self.base_url)
+        self.apply_collection(collection, web_url)
+        token = _request_root.set(self.base_url)
         try:
-            if url and url.rstrip("/") != (self.base_url or "").rstrip("/"):
-                logger.info("azure bind collection %s (configured %s)", url, self.base_url or "-")
             yield self
         finally:
             _request_root.reset(token)

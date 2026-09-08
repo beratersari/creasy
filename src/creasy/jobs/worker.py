@@ -373,6 +373,9 @@ class OpenCodeRunner:
                 raise AzureError("azure not configured")
             if not job.azure_project or not job.azure_repo:
                 raise AzureError("azure job is missing project or repo id")
+            apply = getattr(self.azure, "apply_collection", None)
+            if callable(apply):
+                apply(getattr(job, "azure_collection", "") or "", job.web_url or "")
             return self.azure.get_pull_request(job.azure_project, job.azure_repo, job.mr_iid)
         return self.gitlab.get_merge_request(job.project_id, job.mr_iid)
 

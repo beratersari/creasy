@@ -130,13 +130,14 @@ def test_get_pr_retries_collection_scoped_path_on_404() -> None:
             "https://tfs02.company.com.tr/tfs/ExampleCollection/"
             "Example%20Projeleri/_git/ProjectX/pullrequest/26509"
         )
-        with client.bind(web_url=web):
-            mr = client.get_pull_request("f0941a9f-c740-4e13-9f9b-55ac3efc4938", "240c25cd-5cbf-4485-b91f-6d58bd8e9c68", 26509)
-            clone = client.resolve_clone_url(
-                "f0941a9f-c740-4e13-9f9b-55ac3efc4938",
-                "240c25cd-5cbf-4485-b91f-6d58bd8e9c68",
-                "https://tfs02.company.com.tr/_apis/git/repositories/x",
-            )
+        client.apply_collection(web_url=web)
+        assert client.base_url == "https://tfs02.company.com.tr/tfs/ExampleCollection"
+        mr = client.get_pull_request("f0941a9f-c740-4e13-9f9b-55ac3efc4938", "240c25cd-5cbf-4485-b91f-6d58bd8e9c68", 26509)
+        clone = client.resolve_clone_url(
+            "f0941a9f-c740-4e13-9f9b-55ac3efc4938",
+            "240c25cd-5cbf-4485-b91f-6d58bd8e9c68",
+            "https://tfs02.company.com.tr/_apis/git/repositories/x",
+        )
         assert mr.iid == 26509
         assert mr.title == "Added sacmalilkarr"
         assert any(path.startswith("/tfs/ExampleCollection/") for path in seen)
