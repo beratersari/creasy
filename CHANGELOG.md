@@ -9,13 +9,16 @@ section in the same change.
 
 ## Unreleased
 
+## 0.5.2 — 2026-09-08
+
+Azure REST already accepted the PAT. Git clone still failed because
+TFS offers Windows auth and Creasy’s askpass was `echo`.
+
 ### Fixed
 
-- Azure git clone no longer uses `GIT_ASKPASS=echo`. TFS IIS offers
-  Windows/Negotiate, so git ignores the PAT in the URL and then
-  asked for empty credentials. Clone now sends the same Basic
-  `pat:<PAT>` header as the REST client and an askpass that returns
-  that PAT. Job logs say `extraHeader`, `askpass`, and `token_chars`.
+- Azure git clone sends Basic `pat:<PAT>` on the git command (same
+  as REST) and uses an askpass that returns that PAT. Job logs now
+  include `extraHeader`, `askpass`, and `token_chars`.
 
 ## 0.5.1 — 2026-09-08
 
