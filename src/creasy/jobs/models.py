@@ -68,6 +68,7 @@ class JobRecord(BaseModel):
     azure_project: str = ""
     azure_repo: str = ""
     azure_collection: str = ""
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     def public_dict(self) -> dict[str, Any]:
         data = self.model_dump()

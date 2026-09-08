@@ -25,6 +25,7 @@ describe('job report zip', () => {
     wrapper_exit_log: { text: 'exit 1\n', missing: false },
     opencode_logs: [{ name: 'dev.log', text: 'opencode boot\n', missing: false }],
     serve_logs_present: ['job_aaa.log'],
+    diagnostics: { azure_enabled: false, recent_fails: [] },
   }
 
   it('requires a 20-character note', () => {
@@ -77,12 +78,14 @@ describe('job report zip', () => {
     expect(files['job/result.txt']).toContain('last assistant answer')
     expect(files['logs.txt']).toBe('line one\n')
     expect(files['job/system.log']).toBe('line one\n')
+    expect(files['job/diagnostics.json']).toBe('{}\n')
     expect(files['opencode-serve.log']).toBe('opencode serve listening\n')
     expect(files['job/git.txt']).toContain('C:/osm/.temp/PROJ-1')
     expect(files['job/git.txt']).toContain('keeps the clone with the MR')
     expect(files['runtime.json']).toContain('3.12')
     expect(files['settings.json']).toContain('opencode')
     expect(files['queue.json']).toContain('job_q')
+    expect(files['system/diagnostics.json']).toContain('azure_enabled')
     expect(files['system/app.log']).toContain('app started')
     expect(files['system/crash.log']).toContain('no crash.log')
     expect(files['system/wrapper-exit.log']).toContain('exit 1')
@@ -97,6 +100,7 @@ describe('job report zip', () => {
       exportedAt: '2026-08-30T12:00:00.000Z',
     })
     expect(files['NOTE.txt']).toContain('kind: general')
+    expect(files['system/diagnostics.json']).toContain('azure_enabled')
     expect(files['system/app.log']).toContain('app started')
     expect(files['job/record.json']).toBeUndefined()
     expect(files['job.json']).toBeUndefined()

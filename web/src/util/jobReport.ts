@@ -153,6 +153,7 @@ function processFiles(input: JobReportInput): Record<string, string> {
     'runtime.json': jsonFile(ctx?.runtime || { error: input.contextError || 'report-context not loaded' }),
     'settings.json': jsonFile(ctx?.settings || { error: input.contextError || 'report-context not loaded' }),
     'queue.json': jsonFile(ctx?.queue || { items: [], queued_count: 0 }),
+    'system/diagnostics.json': jsonFile(ctx?.diagnostics || { error: input.contextError || 'report-context not loaded' }),
     'system/app.log': logText(ctx?.app_log, '(no app.log — process log was never created or was removed)'),
     'system/crash.log': logText(ctx?.crash_log, '(no crash.log)'),
     'system/wrapper-exit.log': logText(
@@ -185,6 +186,7 @@ function readme(kind: 'job' | 'general', job?: JobItem | null): string {
     'runtime.json                  Host, Python, git/opencode versions, live counts',
     'settings.json                 Safe settings (no secrets, no callback_url)',
     'queue.json                    Queued tickets (public fields only)',
+    'system/diagnostics.json       Host snapshot (no tokens): Azure/GitLab flags, recent FAILs',
     'system/app.log                Process app.log (redacted, may be truncated)',
     'system/crash.log              Uncaught / abrupt-exit log',
     'system/wrapper-exit.log       start-backend wrapper exit codes (if any)',
@@ -205,6 +207,7 @@ function readme(kind: 'job' | 'general', job?: JobItem | null): string {
       'job/chat.json               Transcript snapshot or live serve copy',
       'job/chat.md                 Same transcript, readable',
       'job/result.txt              Last assistant text (the job product)',
+      'job/diagnostics.json        Safe per-job stage snapshot (no tokens)',
       'job/system.log              Per-job manager log (filtered by job_id)',
       'job/opencode-serve.log      stdout/stderr from this job\'s opencode serve',
       'job/git.txt                 Clone path / repo (kept until MR close/merge)',
@@ -245,6 +248,7 @@ export function buildJobReportFiles(input: JobReportInput): Record<string, strin
     files['job/chat.json'] = jsonFile({ job_id: job.job_id, messages })
     files['job/chat.md'] = chatMarkdown(job.job_id, messages)
     files['job/result.txt'] = job.text ? (job.text.endsWith('\n') ? job.text : `${job.text}\n`) : ''
+    files['job/diagnostics.json'] = jsonFile(job.diagnostics || {})
     files['job/system.log'] = jobLog
     files['job/opencode-serve.log'] = serveLogText(input.serveLog, input.serveLogMissing)
     files['job/git.txt'] = gitExplanation(job)

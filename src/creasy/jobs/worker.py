@@ -13,7 +13,8 @@ from creasy.gitlab.client import GitLabClient, GitLabError, MergeRequest
 from creasy.gitlab.wipe import WipeCancelled, wipe_author_comments
 from creasy.jobs.models import JobRecord
 from creasy.cleanup.end import stop_job_holders
-from creasy.logging import get_logger, log_fail, log_ok
+from creasy.diag import log_diag, merge_job_diag
+from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
 from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop_serve
 from creasy.opencode.session import (
     OpenCodeClient,
@@ -120,6 +121,17 @@ class OpenCodeRunner:
         except OSError as exc:
             log_fail(logger, "job log write", job=job.job_id, err=exc)
 
+    def _note_diag(self, job: JobRecord, stage: str, **fields: Any) -> None:
+        blob = merge_job_diag(
+            job,
+            stage=stage,
+            provider=job.provider or "gitlab",
+            trigger=job.trigger,
+            **fields,
+        )
+        log_diag("job", stage, job=job.job_id, mr=job.mr_key, **{k: v for k, v in blob.items() if k not in {"stage"}})
+        self._persist_job(job, f"diag {stage}")
+
     def _persist_job(self, job: JobRecord, what: str) -> None:
         if self.store is None:
             return
@@ -158,12 +170,16 @@ class OpenCodeRunner:
                 return result
             prior = self.workspaces.get(job.mr_key)
             previous_sha = prior.last_sha if prior else ""
-            logger.info(
-                "pipeline provider=%s trigger=%s azure_project=%s azure_repo=%s",
-                job.provider or "gitlab",
-                job.trigger,
-                job.azure_project or "-",
-                job.azure_repo or "-",
+            azure = self.azure if self._is_azure(job) else None
+            self._note_diag(
+                job,
+                "start",
+                azure_project=job.azure_project or "",
+                azure_repo=job.azure_repo or "",
+                collection=getattr(azure, "base_url", "") or job.azure_collection or "",
+                web_url=job.web_url or "",
+                token_set=bool(self.config.azure_token if self._is_azure(job) else self.config.gitlab_token),
+                token_chars=len((self.config.azure_token if self._is_azure(job) else self.config.gitlab_token) or ""),
             )
             mr = self._load_change(job)
             log_ok(
@@ -176,9 +192,19 @@ class OpenCodeRunner:
                 target=mr.target_branch or "-",
             )
             self._remember_title(job, mr.title)
+            self._note_diag(
+                job,
+                "load",
+                title=mr.title or "",
+                sha=mr.sha or "",
+                source=mr.source_branch or "",
+                target=mr.target_branch or "",
+                clone_url=mr.http_url or "",
+            )
             workspace = self._ensure_workspace(job, mr, should_stop)
             log_ok(logger, "workspace ready", path=workspace.clone_path, sha=workspace.last_sha or mr.sha or "-")
             result.clone_path = workspace.clone_path
+            self._note_diag(job, "workspace", clone_path=workspace.clone_path, sha=workspace.last_sha or mr.sha or "")
             result.sha = workspace.last_sha or mr.sha
             result.base_sha = mr.base_sha
             result.start_sha = mr.start_sha or mr.base_sha
@@ -221,6 +247,7 @@ class OpenCodeRunner:
             )
             result.serve_pid = handle.pid
             result.serve_port = handle.port
+            self._note_diag(job, "serve", serve_pid=handle.pid, serve_port=handle.port)
             client = OpenCodeClient(handle.base_url, str(clone))
             session_id, created_new = client.resume_or_create(
                 workspace.session_id or None,
@@ -318,8 +345,9 @@ class OpenCodeRunner:
                 result.cancelled = True
                 log_ok(logger, "job cancelled", job=job.job_id, stage="git")
             else:
-                result.error = f"git failed: {exc}"
-                log_fail(logger, "git pipeline", job=job.job_id, err=exc)
+                result.error = f"git failed: {redact_userinfo(str(exc))}"
+                self._note_diag(job, "git_fail", error=result.error, error_class=type(exc).__name__)
+                log_fail(logger, "git pipeline", job=job.job_id, err=result.error)
                 self._post_note(job, result)
             return result
         except AzureError as exc:
@@ -327,8 +355,15 @@ class OpenCodeRunner:
                 result.cancelled = True
                 log_ok(logger, "job cancelled", job=job.job_id, stage="azure")
             else:
-                result.error = f"azure failed: {exc}"
-                log_fail(logger, "azure pipeline", job=job.job_id, err=exc)
+                result.error = f"azure failed: {redact_userinfo(str(exc))}"
+                self._note_diag(
+                    job,
+                    "azure_fail",
+                    error=result.error,
+                    error_class=type(exc).__name__,
+                    http=getattr(exc, "status_code", 0) or "",
+                )
+                log_fail(logger, "azure pipeline", job=job.job_id, err=result.error)
                 self._post_note(job, result)
             return result
         except Exception as exc:  # noqa: BLE001
@@ -337,8 +372,9 @@ class OpenCodeRunner:
                 log_ok(logger, "job cancelled", job=job.job_id, stage="pipeline")
                 return result
             logger.exception("worker failed job=%s", job.job_id)
-            result.error = f"pipeline failed: {exc}"
-            log_fail(logger, "pipeline", job=job.job_id, err=exc)
+            result.error = f"pipeline failed: {redact_userinfo(str(exc))}"
+            self._note_diag(job, "pipeline_fail", error=result.error, error_class=type(exc).__name__)
+            log_fail(logger, "pipeline", job=job.job_id, err=result.error)
             self._post_note(job, result)
             return result
         finally:

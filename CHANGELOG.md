@@ -9,6 +9,15 @@ section in the same change.
 
 ## Unreleased
 
+### Added
+
+- Job and system diagnostics for dashboard issue reports. Each job
+  stores a redacted stage snapshot (provider, collection URL, HTTP
+  status, git/Azure error class, token_set/token_chars). App start
+  logs the same flags. Report zips include `job/diagnostics.json`
+  and `system/diagnostics.json` plus recent FAIL lines. Tokens,
+  Basic/Bearer headers, and URL userinfo are stripped.
+
 ## 0.5.2 — 2026-09-08
 
 Azure REST already accepted the PAT. Git clone still failed because

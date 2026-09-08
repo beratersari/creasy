@@ -918,6 +918,10 @@ def test_redact_userinfo_strips_oauth_token():
     basic = redact_userinfo("http.extraHeader=Authorization: Basic dG9rZW4=")
     assert "dG9rZW4=" not in basic
     assert "Authorization: Basic ***" in basic
+    env = redact_userinfo("AZURE_DEVOPS_PAT=supersecretpatvalue GITLAB_TOKEN=glpat-leak")
+    assert "supersecretpatvalue" not in env
+    assert "glpat-leak" not in env
+    assert "token=abcdefghijklmnopqrstuvwxyz" not in redact_userinfo("token=abcdefghijklmnopqrstuvwxyz")
 
 
 def test_run_git_does_not_log_or_raise_oauth_token():

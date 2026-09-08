@@ -14,6 +14,7 @@ from creasy.config import Config, load_config
 from creasy.gitlab.client import GitLabClient
 from creasy.jobs.manager import Manager
 from creasy.jobs.worker import OpenCodeRunner
+from creasy.diag import log_diag
 from creasy.logging import setup_logging
 from creasy.workspace.store import WorkspaceStore
 
@@ -48,6 +49,24 @@ def create_app(config: Config | None = None) -> FastAPI:
             "set" if cfg.gitlab_token else "unset",
             cfg.azure_url or "-",
             cfg.azure_enabled,
+        )
+        log_diag(
+            "system",
+            "start",
+            version=__version__,
+            host=cfg.host,
+            port=cfg.port,
+            gitlab_url=cfg.gitlab_url,
+            gitlab_token_set=bool(cfg.gitlab_token),
+            azure_enabled=cfg.azure_enabled,
+            azure_url=cfg.azure_url or "",
+            azure_token_set=bool(cfg.azure_token),
+            azure_api_version=cfg.azure_api_version,
+            data_dir=str(cfg.data_dir),
+            max_concurrent_jobs=cfg.max_concurrent_jobs,
+            opencode_bin=cfg.opencode_bin,
+            opencode_model=cfg.opencode_model,
+            log_level=cfg.log_level,
         )
         manager.boot()
         yield

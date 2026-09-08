@@ -14,6 +14,8 @@ def _client(tmp_config, token: str = "") -> TestClient:
     tmp_config.dashboard_token = token
     tmp_config.gitlab_token = "glpat-SHOULD-NOT-LEAK"
     tmp_config.webhook_secret = "hook-secret"
+    tmp_config.azure_url = "https://tfs.example/tfs/ExampleCollection"
+    tmp_config.azure_token = "azure-pat-SHOULD-NOT-LEAK"
     tmp_config.log_dir.mkdir(parents=True, exist_ok=True)
     (tmp_config.log_dir / "app.log").write_text(
         "https://oauth2:glpat-SHOULD-NOT-LEAK@gitlab.example/g/r.git\nready\n",
@@ -33,10 +35,15 @@ def test_report_context_is_safe_and_includes_logs(tmp_config) -> None:
     body = client.get("/api/report-context").json()
     assert body["meta"]["app_name"] == "creasy"
     assert "glpat-SHOULD-NOT-LEAK" not in str(body)
+    assert "azure-pat-SHOULD-NOT-LEAK" not in str(body)
     assert "hook-secret" not in str(body)
     assert body["settings"]["gitlab_token_set"] is True
     assert body["settings"]["webhook_secret_set"] is True
+    assert body["settings"]["azure_token_set"] is True
+    assert body["settings"]["azure_enabled"] is True
     assert "gitlab_token" not in body["settings"]
+    assert "azure_token" not in body["settings"]
+    assert body["diagnostics"]["azure_url"].endswith("/tfs/ExampleCollection")
     assert body["app_log"]["missing"] is False
     assert "gitlab.example" in body["app_log"]["text"]
     assert "oauth2:" not in body["app_log"]["text"]
