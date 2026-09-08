@@ -108,6 +108,15 @@ def test_get_pr_retries_collection_scoped_path_on_404() -> None:
                     },
                 },
             )
+        if "/repositories/" in request.url.path and "/pullRequests/" not in request.url.path:
+            return httpx.Response(
+                200,
+                json={
+                    "name": "ProjectX",
+                    "remoteUrl": "https://tfs02.company.com.tr/tfs/ExampleCollection/Example Projeleri/_git/ProjectX",
+                    "project": {"name": "Example Projeleri"},
+                },
+            )
         return httpx.Response(404, json={"message": request.url.path})
 
     client = AzureClient("https://tfs02.company.com.tr", "pat")
@@ -123,9 +132,17 @@ def test_get_pr_retries_collection_scoped_path_on_404() -> None:
         )
         with client.bind(web_url=web):
             mr = client.get_pull_request("f0941a9f-c740-4e13-9f9b-55ac3efc4938", "240c25cd-5cbf-4485-b91f-6d58bd8e9c68", 26509)
+            clone = client.resolve_clone_url(
+                "f0941a9f-c740-4e13-9f9b-55ac3efc4938",
+                "240c25cd-5cbf-4485-b91f-6d58bd8e9c68",
+                "https://tfs02.company.com.tr/_apis/git/repositories/x",
+            )
         assert mr.iid == 26509
         assert mr.title == "Added sacmalilkarr"
         assert any(path.startswith("/tfs/ExampleCollection/") for path in seen)
         assert any(path.endswith("/_apis/git/repositories/240c25cd-5cbf-4485-b91f-6d58bd8e9c68/pullRequests/26509") for path in seen)
+        assert clone.startswith("https://tfs02.company.com.tr/tfs/ExampleCollection/")
+        assert "/_git/" in clone
+        assert "/_apis/" not in clone
     finally:
         client.close()

@@ -15,6 +15,9 @@ section in the same change.
   TFS host. The collection (`/tfs/ExampleCollection`) is taken from
   the Service Hook or the PR URL, and a collection-scoped git path is
   tried after a project-GUID path returns 404.
+- Azure DevOps Server PAT auth uses Basic `pat:<PAT>` (IIS rejects the
+  cloud-style empty username). Clone URLs stay under `/tfs/<Collection>/…/_git/…`
+  and are not the REST `_apis` URL. Git also sends the same Basic header.
 
 ## 0.5.0 — 2026-09-08
 

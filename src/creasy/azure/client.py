@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterator, Optional
@@ -10,6 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
+from creasy.azure.auth import azure_basic_auth
 from creasy.azure.urls import resolve_collection_url
 from creasy.gitlab.client import MergeRequest
 from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
@@ -24,11 +24,6 @@ class AzureError(RuntimeError):
         super().__init__(message)
         self.status_code = status_code
         self.body = body
-
-
-def _basic_pat(token: str) -> str:
-    raw = (":" + (token or "")).encode("utf-8")
-    return "Basic " + base64.b64encode(raw).decode("ascii")
 
 
 def _seg(value: str) -> str:
@@ -49,7 +44,7 @@ class AzureClient:
             pass
         headers = {"Accept": "application/json"}
         if token:
-            headers["Authorization"] = _basic_pat(token)
+            headers["Authorization"] = azure_basic_auth(token)
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
 
@@ -90,6 +85,7 @@ class AzureClient:
         for index, path in enumerate(paths):
             url = self._abs(path)
             try:
+                logger.info("azure HTTP %s %s", method, redact_userinfo(url))
                 response = self._http.request(method, url, **kwargs)
                 if response.status_code == 404 and index < len(paths) - 1:
                     last_404 = response
@@ -155,9 +151,15 @@ class AzureClient:
             if sha:
                 logger.info("azure PR %s sha empty on GET; using iteration commit %s", pr_id, sha)
                 mr.sha = sha
-        if not _is_http(mr.http_url):
+        if not _is_git_http(mr.http_url):
             built = self.resolve_clone_url(project, repo, mr.http_url)
-            logger.info("azure PR %s clone url %s -> %s", pr_id, redact_userinfo(mr.http_url) or "-", redact_userinfo(built) or "-")
+            logger.info(
+                "azure PR %s clone url %s -> %s (collection %s)",
+                pr_id,
+                redact_userinfo(mr.http_url) or "-",
+                redact_userinfo(built) or "-",
+                self._root() or "-",
+            )
             mr.http_url = built
         log_ok(
             logger,
@@ -176,7 +178,7 @@ class AzureClient:
         return mr
 
     def resolve_clone_url(self, project: str, repo: str, fallback: str = "") -> str:
-        if _is_http(fallback):
+        if _is_git_http(fallback):
             return fallback
         try:
             response = self._send(
@@ -190,7 +192,7 @@ class AzureClient:
             log_fail(logger, "azure GET repo", project=project, repo=repo, err=exc)
             data = {}
         remote = str((data or {}).get("remoteUrl") or (data or {}).get("webUrl") or "")
-        if _is_http(remote):
+        if _is_git_http(remote):
             log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="remoteUrl", url=redact_userinfo(remote))
             return remote
         converted = _ssh_to_https(remote)
@@ -200,9 +202,10 @@ class AzureClient:
         proj = data.get("project") if isinstance((data or {}).get("project"), dict) else {}
         proj_name = str((proj or {}).get("name") or project or "").strip()
         repo_name = str((data or {}).get("name") or repo or "").strip()
-        if self.base_url and proj_name and repo_name:
-            built = f"{self.base_url}/{_seg(proj_name)}/_git/{_seg(repo_name)}"
-            log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="built", url=redact_userinfo(built))
+        root = self._root()
+        if root and proj_name and repo_name:
+            built = f"{root}/{_seg(proj_name)}/_git/{_seg(repo_name)}"
+            log_ok(logger, "azure resolve clone url", project=project, repo=repo, source="built", url=redact_userinfo(built), collection=root)
             return built
         leftover = fallback or remote
         if leftover:
@@ -454,6 +457,13 @@ def _is_http(url: str) -> bool:
     return str(url or "").lower().startswith(("http://", "https://"))
 
 
+def _is_git_http(url: str) -> bool:
+    text = str(url or "")
+    if not _is_http(text):
+        return False
+    return "/_apis/" not in text.lower()
+
+
 def _ssh_to_https(url: str) -> str:
     text = str(url or "").strip()
     if text.startswith("git@"):
@@ -484,7 +494,9 @@ def _pr_to_merge_request(data: dict[str, Any]) -> MergeRequest:
     last = data.get("lastMergeSourceCommit") if isinstance(data.get("lastMergeSourceCommit"), dict) else {}
     merge = data.get("lastMergeCommit") if isinstance(data.get("lastMergeCommit"), dict) else {}
     sha = str(last.get("commitId") or merge.get("commitId") or "")
-    http_url = str(repo.get("remoteUrl") or repo.get("url") or "")
+    http_url = str(repo.get("remoteUrl") or "")
+    if not _is_git_http(http_url):
+        http_url = ""
     links = data.get("_links") if isinstance(data.get("_links"), dict) else {}
     web = links.get("web") if isinstance(links.get("web"), dict) else {}
     author = data.get("createdBy") if isinstance(data.get("createdBy"), dict) else {}

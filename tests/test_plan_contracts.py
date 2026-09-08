@@ -915,6 +915,9 @@ def test_redact_userinfo_strips_oauth_token():
     assert token not in got
     assert "oauth2:" not in got
     assert "https://gitlab.example/repo.git/" in got
+    basic = redact_userinfo("http.extraHeader=Authorization: Basic dG9rZW4=")
+    assert "dG9rZW4=" not in basic
+    assert "Authorization: Basic ***" in basic
 
 
 def test_run_git_does_not_log_or_raise_oauth_token():
