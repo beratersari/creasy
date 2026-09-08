@@ -105,8 +105,8 @@ def test_bat_files_avoid_osm_cmd_bugs():
 def test_install_opencode_scripts_require_configs():
     bat = _read("scripts/install-opencode.bat")
     sh = _read("scripts/install-opencode.sh")
-    assert r"opencoderman\agents\gitlab-reviewer.md" in bat
-    assert "opencoderman/agents/gitlab-reviewer.md" in sh
+    assert r"opencoderman\agents\code-reviewer.md" in bat
+    assert "opencoderman/agents/code-reviewer.md" in sh
     assert "submodule update --init" in bat
     assert "submodule update --init" in sh
 
@@ -115,9 +115,9 @@ def test_install_review_agent_scripts_copy_only_review_pack():
     bat = _read("scripts/install-review-agent.bat")
     sh = _read("scripts/install-review-agent.sh")
     assert "xcopy" in bat
-    assert "gitlab-reviewer.md" in bat
+    assert "code-reviewer.md" in bat
     assert r"%USERPROFILE%\.opencode" in bat
-    assert "gitlab-reviewer.md" in sh
+    assert "code-reviewer.md" in sh
     assert "skills" in sh
     assert ".opencode" in sh
     for body in (bat, sh):

@@ -26,7 +26,7 @@ def _plant_root(tmp_path: Path) -> Path:
     agents.mkdir(parents=True)
     skills.mkdir(parents=True)
     scripts.mkdir(parents=True)
-    (agents / "gitlab-reviewer.md").write_text("agent\n", encoding="utf-8")
+    (agents / "code-reviewer.md").write_text("agent\n", encoding="utf-8")
     (agents / "planner.md").write_text("planner\n", encoding="utf-8")
     (skills / "SKILL.md").write_text("skill\n", encoding="utf-8")
     (root / "opencoderman" / "README.md").write_text("pack\n", encoding="utf-8")
@@ -55,7 +55,7 @@ def test_zip_contains_exe_config_opencoderman_and_scripts(tmp_path: Path) -> Non
     assert ".env.example" in names
     assert "install-review-agent.bat" in names
     assert "install-review-agent.sh" in names
-    assert "opencoderman/agents/gitlab-reviewer.md" in names
+    assert "opencoderman/agents/code-reviewer.md" in names
     assert "opencoderman/agents/planner.md" in names
     assert "opencoderman/skills/secrets/SKILL.md" in names
     assert "opencoderman/README.md" not in names
@@ -86,7 +86,7 @@ def test_assert_rejects_extra_files(tmp_path: Path) -> None:
         zf.writestr(".env.example", "y")
         zf.writestr("install-review-agent.bat", "b")
         zf.writestr("install-review-agent.sh", "s")
-        zf.writestr("opencoderman/agents/gitlab-reviewer.md", "a")
+        zf.writestr("opencoderman/agents/code-reviewer.md", "a")
         zf.writestr("opencoderman/skills/secrets/SKILL.md", "k")
         zf.writestr("README.txt", "no")
     try:
@@ -104,7 +104,7 @@ def test_assert_requires_review_agent(tmp_path: Path) -> None:
     try:
         _load().assert_exe_zip(dest, expect_exe="creasy")
     except SystemExit as exc:
-        assert "gitlab-reviewer.md" in str(exc)
+        assert "code-reviewer.md" in str(exc)
         return
     raise AssertionError("expected SystemExit")
 
@@ -112,7 +112,7 @@ def test_assert_requires_review_agent(tmp_path: Path) -> None:
 def test_repo_opencoderman_entries_skip_git() -> None:
     entries = _load().opencoderman_zip_entries(REPO / "opencoderman")
     names = [arc for _path, arc in entries]
-    assert "opencoderman/agents/gitlab-reviewer.md" in names
+    assert "opencoderman/agents/code-reviewer.md" in names
     assert any(name.startswith("opencoderman/skills/") and name.endswith("/SKILL.md") for name in names)
     assert "opencoderman/README.md" not in names
     assert not any(".git" in name.split("/") for name in names)

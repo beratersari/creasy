@@ -129,8 +129,9 @@ These look like bugs. They are not.
   updated `--stat`. If the session is new/rejected, prepend short MR
   context (including draft, labels, pipeline, and a clipped description).
 - OpenCode only. No Codex.
-- Jobs use the `gitlab-reviewer` agent (`OPENCODE_AGENT`, default
-  `gitlab-reviewer`).
+- Jobs use the `code-reviewer` agent (`OPENCODE_AGENT`, default
+  `code-reviewer`). `gitlab-reviewer` is still installed as a copy
+  so old `.env` values keep working.
   Agent and skill files live in the OpenCoderman pack
   (`opencoderman` submodule: `agents/*.md`, `skills/*/SKILL.md`).
   That pack also vendors the
@@ -304,9 +305,9 @@ full `~/.opencode` replace installer in the exe zip.
 
 | Zip | Must contain |
 |---|---|
-| windows-x64 | `creasy.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| darwin-arm64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/gitlab-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| windows-x64 | `creasy.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| darwin-arm64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
 
 ### Offline pack paths CI must assert
 

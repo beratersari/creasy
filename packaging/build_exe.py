@@ -67,10 +67,10 @@ REVIEW_AGENT_SCRIPTS = (
 def opencoderman_zip_entries(opencoderman: Path) -> list[tuple[Path, str]]:
     """Only agents/*.md and skills/*/SKILL.md. Never .git or the rest."""
     src = Path(opencoderman)
-    agent = src / "agents" / "gitlab-reviewer.md"
+    agent = src / "agents" / "code-reviewer.md"
     if not agent.is_file():
         raise SystemExit(
-            "opencoderman/agents/gitlab-reviewer.md missing. "
+            "opencoderman/agents/code-reviewer.md missing. "
             "git submodule update --init --recursive"
         )
     skills = src / "skills"
@@ -134,7 +134,7 @@ def assert_exe_zip(dest_zip: Path, *, expect_exe: str) -> None:
         expect_exe,
         ".env.example",
         *REVIEW_AGENT_SCRIPTS,
-        "opencoderman/agents/gitlab-reviewer.md",
+        "opencoderman/agents/code-reviewer.md",
     }
     missing = sorted(required.difference(names))
     if missing:

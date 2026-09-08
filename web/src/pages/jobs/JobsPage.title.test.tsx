@@ -23,7 +23,7 @@ describe('JobsPage MR title', () => {
           mr_title: 'Fix login timeout',
           status: 'success',
           live: false,
-          agent_mode: 'gitlab-reviewer',
+          agent_mode: 'code-reviewer',
           model: 'opencode/x',
         },
       ],

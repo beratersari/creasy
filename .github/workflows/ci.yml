@@ -106,6 +106,7 @@ jobs:
           mkdir -p "$HOME/.config/opencode/agents"
           echo leftover > "$HOME/.config/opencode/agents/stale.md"
           (cd "$root" && scripts/install-opencode.sh)
+          test -f "$HOME/.opencode/agents/code-reviewer.md"
           test -f "$HOME/.opencode/agents/gitlab-reviewer.md"
           test -f "$HOME/.opencode/skills/cpp98/SKILL.md"
           test ! -e "$HOME/.config/opencode"
@@ -214,6 +215,7 @@ jobs:
           echo leftover> "%USERPROFILE%\.config\opencode\agents\stale.md"
           call scripts\install-opencode.bat
           if errorlevel 1 exit /b 1
+          if not exist "%USERPROFILE%\.opencode\agents\code-reviewer.md" exit /b 1
           if not exist "%USERPROFILE%\.opencode\agents\gitlab-reviewer.md" exit /b 1
           if not exist "%USERPROFILE%\.opencode\skills\cpp98\SKILL.md" exit /b 1
           if exist "%USERPROFILE%\.config\opencode" exit /b 1
