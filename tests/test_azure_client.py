@@ -147,3 +147,54 @@ def test_get_pr_retries_collection_scoped_path_on_404() -> None:
         assert "/_apis/" not in clone
     finally:
         client.close()
+
+
+def test_current_user_id_on_host_only_url_hits_root_apis_not_collection() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(404, json={"message": request.url.path})
+
+    client = AzureClient("https://tfs02.company.com.tr", "pat")
+    client._http.close()
+    client._http = httpx.Client(
+        base_url="https://tfs02.company.com.tr",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        assert client.current_user_id() is None
+        assert seen == ["/_apis/connectionData"]
+        assert not any("/tfs/" in path for path in seen)
+    finally:
+        client.close()
+
+
+def test_current_user_id_after_apply_collection_uses_tfs_collection() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.path.endswith("/_apis/connectionData"):
+            return httpx.Response(
+                200,
+                json={"authenticatedUser": {"id": "bot-guid", "displayName": "Creasy"}},
+            )
+        return httpx.Response(404, json={"message": request.url.path})
+
+    client = AzureClient("https://tfs02.company.com.tr", "pat")
+    client._http.close()
+    client._http = httpx.Client(
+        base_url="https://tfs02.company.com.tr",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        web = (
+            "https://tfs02.company.com.tr/tfs/ExampleCollection/"
+            "ExampleProjeler/_git/ExampleProject/pullrequest/1"
+        )
+        client.apply_collection(web_url=web)
+        assert client.current_user_id() == "bot-guid"
+        assert any(path == "/tfs/ExampleCollection/_apis/connectionData" for path in seen)
+    finally:
+        client.close()

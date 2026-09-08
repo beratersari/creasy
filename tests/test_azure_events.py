@@ -116,6 +116,7 @@ def test_bot_comment_and_edit_and_empty_ask_ignored():
         },
     }
     assert isinstance(classify_azure_webhook(bot, bot_user_id="bot-id"), Ignore)
+    assert isinstance(classify_azure_webhook(bot, bot_user_id=None), ReviewTrigger)
     created_with_updated = {
         "eventType": "ms.vss-code.git-pullrequest-comment-event",
         "message": {"text": "Jamal Hartnett commented"},

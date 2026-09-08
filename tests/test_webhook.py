@@ -46,8 +46,10 @@ def test_note_ignored_until_bot_user_resolves(tmp_config):
         "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers)
+    assert first.status_code == 200
     assert first.json()["status"] == "ignored"
     assert first.json()["reason"] == "bot user unknown"
+    assert manager.store.list_all() == []
     second = client.post("/webhook", json=note, headers=headers)
     assert second.json()["status"] == "accepted"
     assert app.state.bot_user_id == 7
