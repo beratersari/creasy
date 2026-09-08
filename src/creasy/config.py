@@ -38,6 +38,8 @@ class Config:
     data_dir: Path = field(default_factory=lambda: Path("./data"))
     skip_draft_mrs: bool = True
     dashboard_token: str = ""
+    dashboard_user: str = ""
+    dashboard_password: str = ""
     log_level: str = "INFO"
     git_timeout: int = 600
     serve_health_timeout: int = 60
@@ -97,6 +99,8 @@ def load_config(env_file: str | None = ".env") -> Config:
         data_dir=data_dir,
         skip_draft_mrs=_bool("SKIP_DRAFT_MRS", True),
         dashboard_token=(os.getenv("DASHBOARD_TOKEN") or "").strip(),
+        dashboard_user=(os.getenv("DASHBOARD_USER") or "").strip(),
+        dashboard_password=(os.getenv("DASHBOARD_PASSWORD") or "").strip(),
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         git_timeout=max(30, _int("GIT_TIMEOUT", 600)),
         serve_health_timeout=max(5, _int("SERVE_HEALTH_TIMEOUT", 60)),

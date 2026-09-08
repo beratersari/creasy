@@ -49,6 +49,9 @@ def test_default_ports_do_not_collide_with_virtual_developer():
     assert "127.0.0.1:8000" not in vite
     assert "127.0.0.1:8080" not in vite
     assert "PORT=9001" in _read(".env.example")
+    env_example = _read(".env.example")
+    assert "DASHBOARD_USER=" in env_example
+    assert "DASHBOARD_PASSWORD=" in env_example
     ci = _read(".github/workflows/ci.yml")
     assert "127.0.0.1:9001" in ci
     assert "127.0.0.1:8000" not in ci

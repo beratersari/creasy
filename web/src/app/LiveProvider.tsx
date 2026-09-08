@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { AUTH_EVENT } from '../api/auth'
 import { dashboardWsUrl } from '../api/client'
-import { TOKEN_EVENT } from '../api/token'
 import { LiveContext } from './live'
 
 export function LiveProvider({ children }: { children: ReactNode }) {
@@ -13,9 +13,9 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [authTick, setAuthTick] = useState(0)
 
   useEffect(() => {
-    const onToken = () => setAuthTick((n) => n + 1)
-    window.addEventListener(TOKEN_EVENT, onToken)
-    return () => window.removeEventListener(TOKEN_EVENT, onToken)
+    const onAuth = () => setAuthTick((n) => n + 1)
+    window.addEventListener(AUTH_EVENT, onAuth)
+    return () => window.removeEventListener(AUTH_EVENT, onAuth)
   }, [])
 
   useEffect(() => {

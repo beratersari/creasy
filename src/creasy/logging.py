@@ -15,7 +15,7 @@ _USERINFO_RE = re.compile(r"(https?://)[^/\s\"'<>]+@", re.IGNORECASE)
 _AUTH_RE = re.compile(r"(Authorization:\s*(?:Basic|Bearer))\s+\S+", re.IGNORECASE)
 _ENV_SECRET_RE = re.compile(
     r"(?i)\b(CREASY_GIT_TOKEN|AZURE_DEVOPS_PAT|AZURE_DEVOPS_TOKEN|GITLAB_TOKEN|"
-    r"WEBHOOK_SECRET|DASHBOARD_TOKEN|AZURE_WEBHOOK_PASSWORD)\s*[=:]\s*\S+"
+    r"WEBHOOK_SECRET|DASHBOARD_TOKEN|DASHBOARD_PASSWORD|AZURE_WEBHOOK_PASSWORD)\s*[=:]\s*\S+"
 )
 _ASSIGN_SECRET_RE = re.compile(
     r"(?i)\b(password|secret|pat|api[_-]?key)\s*[=:]\s*([^\s,;]+)"

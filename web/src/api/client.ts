@@ -1,5 +1,5 @@
+import { notifyAuthChanged } from './auth'
 import type { JobChatPayload, JobItem, JobsPayload, LogLine, PromptRow, ReportContext } from './types'
-import { authHeaders, readDashboardToken } from './token'
 
 export class ApiError extends Error {
   status: number
@@ -10,8 +10,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: authHeaders() })
+  const res = await fetch(path)
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) notifyAuthChanged()
   if (!res.ok) {
     throw new ApiError((body as { detail?: string }).detail || `HTTP ${res.status}`, res.status)
   }
@@ -71,9 +72,9 @@ export function fetchReportContext() {
 export async function cancelJob(jobId: string) {
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, {
     method: 'POST',
-    headers: authHeaders(),
   })
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) notifyAuthChanged()
   if (!res.ok) throw new ApiError((body as { detail?: string }).detail || `HTTP ${res.status}`, res.status)
   return body
 }
@@ -81,16 +82,14 @@ export async function cancelJob(jobId: string) {
 export async function cancelMr(projectId: number, mrIid: number) {
   const res = await fetch(`/api/mrs/${projectId}/${mrIid}/cancel`, {
     method: 'POST',
-    headers: authHeaders(),
   })
   const body = await res.json().catch(() => ({}))
+  if (res.status === 401) notifyAuthChanged()
   if (!res.ok) throw new ApiError((body as { detail?: string }).detail || `HTTP ${res.status}`, res.status)
   return body
 }
 
 export function dashboardWsUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const token = readDashboardToken()
-  const query = token ? `?token=${encodeURIComponent(token)}` : ''
-  return `${proto}://${window.location.host}/ws${query}`
+  return `${proto}://${window.location.host}/ws`
 }

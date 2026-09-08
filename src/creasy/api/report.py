@@ -99,6 +99,8 @@ def public_settings(cfg: Config) -> dict[str, Any]:
         "gitlab_token_set": bool(cfg.gitlab_token),
         "webhook_secret_set": bool(cfg.webhook_secret),
         "dashboard_token_set": bool(cfg.dashboard_token),
+        "dashboard_user_set": bool(cfg.dashboard_user),
+        "dashboard_password_set": bool(cfg.dashboard_password),
         "opencode_model": cfg.opencode_model,
         "opencode_timeout": cfg.opencode_timeout,
         "opencode_retry_count": cfg.opencode_retry_count,

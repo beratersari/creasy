@@ -159,8 +159,12 @@ These look like bugs. They are not.
   note, start the next queued job for that MR.
 - Cancel queued: mark `cancelled`, leave the runner alone.
 - Cancel-all-for-MR: cancel running + queued, **keep** the clone.
-- When `DASHBOARD_TOKEN` is set, require it on dashboard routes.
-  Do not send `GITLAB_TOKEN` to the browser.
+- When `DASHBOARD_USER` + `DASHBOARD_PASSWORD` are set (or
+  `DASHBOARD_TOKEN` alone), require login on dashboard routes.
+  The SPA shows a login page. A successful login sets an httpOnly
+  session cookie. Do not put the password in the URL or localStorage.
+  `DASHBOARD_TOKEN` remains an optional `X-Creasy-Token` / Bearer
+  header for scripts. Do not send `GITLAB_TOKEN` to the browser.
 
 ### Code layout
 

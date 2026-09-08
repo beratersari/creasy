@@ -46,6 +46,8 @@ python -m creasy
 ```
 
 Dashboard: http://127.0.0.1:9001/jobs  
+Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` in `.env` so the
+dashboard shows a login page. Webhooks do not use those values.  
 GitLab webhook: `POST /webhook`  
 Azure webhook: `POST /webhook/azure`  
 Health: `GET /health`

@@ -22,6 +22,7 @@ _DROP_KEYS = frozenset(
         "azure_token",
         "webhook_secret",
         "dashboard_token",
+        "dashboard_password",
         "azure_webhook_password",
         "creasy_git_token",
     }

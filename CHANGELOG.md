@@ -11,6 +11,11 @@ section in the same change.
 
 ### Added
 
+- Dashboard login page. Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD`
+  in `.env`. Opening `/jobs` asks for those credentials; the password
+  is not put in the URL or shown in the sidebar. A session cookie
+  unlocks job APIs. `DASHBOARD_TOKEN` still works as an API header
+  for scripts. Webhooks are unchanged.
 - Executable zips include `opencoderman/agents`,
   `opencoderman/skills`, and `install-review-agent` scripts. Those
   copy only the review agent and skills into `~/.opencode`; they do

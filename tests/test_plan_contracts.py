@@ -861,6 +861,9 @@ def test_dashboard_token_required_when_set(tmp_config):
     assert ok.status_code == 200
     bearer = client.get("/api/jobs", headers={"Authorization": "Bearer dash-secret"})
     assert bearer.status_code == 200
+    login = client.post("/api/login", json={"username": "", "password": "dash-secret"})
+    assert login.status_code == 200
+    assert client.get("/api/jobs").status_code == 200
     manager.shutdown()
 
 
@@ -893,7 +896,7 @@ def test_dashboard_ws_requires_token_when_set(tmp_config):
             raise AssertionError("unauthenticated websocket should not connect")
     except WebSocketDisconnect as exc:
         assert exc.code == 1008
-    with client.websocket_connect("/ws?token=dash-secret") as ws:
+    with client.websocket_connect("/ws", headers={"X-Creasy-Token": "dash-secret"}) as ws:
         payload = ws.receive_json()
         assert "running" in payload
     manager.shutdown()

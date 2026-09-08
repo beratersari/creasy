@@ -10,6 +10,15 @@ from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSock
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from creasy.api.dashboard_auth import (
+    SESSION_COOKIE,
+    SESSION_MAX_AGE,
+    dashboard_auth_required,
+    credentials_ok,
+    has_username,
+    make_session,
+    request_authenticated,
+)
 from creasy.api.report import build_report_context
 from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
 from creasy.jobs.models import ERROR_STATUSES
@@ -22,24 +31,69 @@ router = APIRouter()
 logger = get_logger("dashboard")
 
 
-def _provided_dashboard_token(headers, query_token: str = "") -> str:
-    header = (headers.get("x-creasy-token") or headers.get("X-Creasy-Token") or "").strip()
-    auth = headers.get("authorization") or headers.get("Authorization") or ""
-    bearer = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
-    return (query_token or header or bearer).strip()
-
-
-def _token_matches(expected: str, got: str) -> bool:
-    return not expected or got == expected
-
-
 def _check_token(request: Request) -> None:
-    token = request.app.state.config.dashboard_token
-    if not token:
+    cfg = request.app.state.config
+    if request_authenticated(
+        cfg,
+        cookie=request.cookies.get(SESSION_COOKIE) or "",
+        headers=request.headers,
+    ):
         return
-    got = _provided_dashboard_token(request.headers)
-    if not _token_matches(token, got):
-        raise HTTPException(status_code=401, detail="dashboard token required")
+    raise HTTPException(status_code=401, detail="dashboard login required")
+
+
+def _cookie_secure(request: Request) -> bool:
+    return request.url.scheme == "https"
+
+
+@router.get("/api/auth")
+def api_auth(request: Request) -> dict:
+    cfg = request.app.state.config
+    required = dashboard_auth_required(cfg)
+    return {
+        "required": required,
+        "authenticated": request_authenticated(
+            cfg,
+            cookie=request.cookies.get(SESSION_COOKIE) or "",
+            headers=request.headers,
+        ),
+        "has_username": has_username(cfg),
+    }
+
+
+@router.post("/api/login")
+async def api_login(request: Request) -> JSONResponse:
+    cfg = request.app.state.config
+    if not dashboard_auth_required(cfg):
+        return JSONResponse({"ok": True, "required": False})
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    username = str(body.get("username") or "")
+    password = str(body.get("password") or "")
+    if not credentials_ok(cfg, username, password):
+        raise HTTPException(status_code=401, detail="invalid username or password")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        SESSION_COOKIE,
+        value=make_session(cfg),
+        httponly=True,
+        samesite="lax",
+        secure=_cookie_secure(request),
+        max_age=SESSION_MAX_AGE,
+        path="/",
+    )
+    return response
+
+
+@router.post("/api/logout")
+def api_logout() -> JSONResponse:
+    response = JSONResponse({"ok": True})
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
 
 
 def _mgr(request: Request):
@@ -271,9 +325,12 @@ def api_report_context(request: Request) -> dict:
 
 @router.websocket("/ws")
 async def dashboard_ws(ws: WebSocket) -> None:
-    expected = ws.app.state.config.dashboard_token
-    got = _provided_dashboard_token(ws.headers, ws.query_params.get("token") or "")
-    if not _token_matches(expected, got):
+    cfg = ws.app.state.config
+    if not request_authenticated(
+        cfg,
+        cookie=ws.cookies.get(SESSION_COOKIE) or "",
+        headers=ws.headers,
+    ):
         await ws.close(code=1008)
         return
     await ws.accept()
@@ -379,6 +436,10 @@ def attach_spa(app) -> None:
         if index.is_file():
             return _index()
         return JSONResponse({"service": "creasy", "docs": "/jobs"})
+
+    @app.get("/login")
+    def login_page() -> FileResponse:
+        return _index()
 
     @app.get("/jobs")
     def jobs_page() -> FileResponse:
