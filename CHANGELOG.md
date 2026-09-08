@@ -9,6 +9,13 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- Azure PR fetch no longer 404s when `AZURE_DEVOPS_URL` is only the
+  TFS host. The collection (`/tfs/ExampleCollection`) is taken from
+  the Service Hook or the PR URL, and a collection-scoped git path is
+  tried after a project-GUID path returns 404.
+
 ## 0.5.0 — 2026-09-08
 
 Optional Azure DevOps Server reviews on the same Creasy process.

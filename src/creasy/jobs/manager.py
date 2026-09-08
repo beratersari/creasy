@@ -133,6 +133,7 @@ class Manager:
                 provider=getattr(trigger, "provider", None) or "gitlab",
                 azure_project=getattr(trigger, "azure_project", None) or "",
                 azure_repo=getattr(trigger, "azure_repo", None) or "",
+                azure_collection=getattr(trigger, "azure_collection", None) or "",
                 model=self.config.opencode_model,
                 agent=self.config.opencode_agent,
                 accepted_at=utc_now(),

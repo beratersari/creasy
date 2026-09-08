@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from creasy.azure.identity import azure_project_num
+from creasy.azure.urls import looks_like_azure_resource, normalize_collection_url
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, first_command
 from creasy.logging import get_logger, log_fail, log_ok
 
@@ -160,6 +161,30 @@ def _sha(pr: dict[str, Any]) -> str:
     return str(pr.get("lastMergeSourceCommitId") or "").strip()
 
 
+def _collection_url(pr: dict[str, Any], payload: dict[str, Any]) -> str:
+    containers = _as_dict(payload.get("resourceContainers"))
+    for key in ("collection", "account"):
+        box = _as_dict(containers.get(key))
+        raw = str(box.get("baseUrl") or box.get("base_url") or "").strip()
+        got = normalize_collection_url(raw)
+        if got:
+            return got
+    repo = _as_dict(pr.get("repository"))
+    for candidate in (
+        _web_url(pr, payload),
+        pr.get("url"),
+        repo.get("remoteUrl"),
+        repo.get("url"),
+        payload.get("resourceUrl"),
+    ):
+        text = str(candidate or "").strip()
+        if looks_like_azure_resource(text):
+            got = normalize_collection_url(text)
+            if got:
+                return got
+    return ""
+
+
 def _web_url(pr: dict[str, Any], payload: dict[str, Any]) -> str:
     links = _as_dict(pr.get("_links"))
     web = _as_dict(links.get("web"))
@@ -298,6 +323,7 @@ def _review_from_pr(
         provider="azure",
         azure_project=project_id,
         azure_repo=repo_id,
+        azure_collection=_collection_url(pr, payload),
     )
     log_ok(
         logger,
