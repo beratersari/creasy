@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.6.0 — 2026-09-08
+
+The dashboard can require a login. Executable zips now include the
+review agent pack. Job issue reports include redacted diagnostics.
+
 ### Added
 
 - Dashboard login page. Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD`
