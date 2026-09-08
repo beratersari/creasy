@@ -27,7 +27,7 @@ STOCK_CONFIG = """{
 """
 
 PACK_REL = Path("opencoderman")
-REVIEW_AGENT_REL = PACK_REL / "agents" / "gitlab-reviewer.md"
+REVIEW_AGENT_REL = PACK_REL / "agents" / "code-reviewer.md"
 REVIEW_SKILLS_REL = PACK_REL / "skills"
 
 
@@ -100,7 +100,8 @@ def agent_dests(name: str, user_home: Path | None = None) -> list[Path]:
 
 
 def review_agent_dests(user_home: Path | None = None) -> list[Path]:
-    return agent_dests("gitlab-reviewer", user_home)
+    # code-reviewer is the name. Also write gitlab-reviewer so old .env still works.
+    return agent_dests("code-reviewer", user_home) + agent_dests("gitlab-reviewer", user_home)
 
 
 def vendor_ripgrep(root: Path) -> Path | None:
@@ -210,7 +211,7 @@ def _keep_existing_config(path: Path) -> None:
 
 
 def install_review_agent(root: Path, user_home: Path | None = None) -> list[Path]:
-    """Copy only gitlab-reviewer.md. Other agents stay in the pack."""
+    """Copy only code-reviewer.md. Other agents stay in the pack."""
     src = review_agent_source(root)
     if not src.is_file():
         raise FileNotFoundError(
@@ -222,7 +223,7 @@ def install_review_agent(root: Path, user_home: Path | None = None) -> list[Path
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(text, encoding="utf-8")
         written.append(dest)
-        print(f"[OK] Agent gitlab-reviewer written: {dest}")
+        print(f"[OK] Agent {dest.stem} written: {dest}")
     return written
 
 
@@ -244,7 +245,7 @@ def install_review_skills(root: Path, user_home: Path | None = None) -> list[Pat
 
 
 def install_review_only(root: Path, *, user_home: Path | None = None) -> list[Path]:
-    """Copy gitlab-reviewer and skills into ~/.opencode. Leave the CLI alone."""
+    """Copy code-reviewer and skills into ~/.opencode. Leave the CLI alone."""
     root = Path(root).expanduser().resolve()
     written = install_review_agent(root, user_home)
     written.extend(install_review_skills(root, user_home))
@@ -333,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--review-only",
         action="store_true",
-        help="Copy only gitlab-reviewer and skills into ~/.opencode. Do not replace the CLI.",
+        help="Copy only code-reviewer and skills into ~/.opencode. Do not replace the CLI.",
     )
     args = p.parse_args(argv)
     root = Path(args.root).expanduser().resolve()
@@ -341,7 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.review_only:
             written = install_review_only(root)
             print(f"[OK] Review agent ready: {written[0]}")
-            print("Jobs use OPENCODE_AGENT=gitlab-reviewer (see .env.example).")
+            print("Jobs use OPENCODE_AGENT=code-reviewer (see .env.example).")
             return 0
         target = install(root)
     except FileNotFoundError as e:
@@ -352,7 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
     print(f"[OK] OpenCode ready: {target}")
-    print("Jobs use OPENCODE_AGENT=gitlab-reviewer (see .env.example).")
+    print("Jobs use OPENCODE_AGENT=code-reviewer (see .env.example).")
     return 0
 
 

@@ -416,7 +416,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `OPENCODE_MODEL` | `opencode/big-pickle` | `provider/id` |
 | `OPENCODE_TIMEOUT` | `1800` | One attempt, seconds |
 | `OPENCODE_RETRY_COUNT` | `2` | Attempts, first included |
-| `OPENCODE_AGENT` | `gitlab-reviewer` | OpenCode agent id. Installer writes the read-only `gitlab-reviewer` agent under `~/.opencode` only |
+| `OPENCODE_AGENT` | `code-reviewer` | OpenCode agent id. Installer writes the read-only `code-reviewer` agent under `~/.opencode` only |
 | `MAX_CONCURRENT_JOBS` | `2` | Live serves |
 | `DATA_DIR` | `./data` | clones, logs, job/workspace JSON |
 | `SKIP_DRAFT_MRS` | `true` | |

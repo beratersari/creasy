@@ -39,7 +39,7 @@ def _plant_root(tmp_path: Path, *, vendor: bool) -> Path:
 
 
 def test_review_agent_source_is_primary_readonly() -> None:
-    text = (REPO / "opencoderman" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    text = (REPO / "opencoderman" / "agents" / "code-reviewer.md").read_text(encoding="utf-8")
     assert text.startswith("---")
     assert "mode: primary" in text
     assert "edit: deny" in text
@@ -49,16 +49,21 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "agent/rules/CODE_REVIEW.md" in text
     assert ".creasy/CODE_REVIEW.md" not in text
     assert "Before you review, read project rules" in text
-    assert "detect the C++ dialect" in text
-    assert "CMAKE_CXX_STANDARD" in text
-    assert "do not assume modern C++" in text
-    assert 'skill({ name: "cpp98" })' in text
-    assert 'skill({ name: "modern-cpp" })' in text
-    assert 'skill({ name: "cpp-memory-safety" })' in text or "cpp-memory-safety" in text
+    assert "general code reviewer" in text
+    assert 'skill({ name: "python" })' in text
+    assert "| `cpp` |" in text or "`cpp`" in text
+    assert "detect the C++ dialect" not in text
+    assert "CMAKE_CXX_STANDARD" not in text
     assert "typically 0–3" in text or "typically 0-3" in text
+    assert "Default Improvements = none" in text
+    assert "refactoring: deny" in text
+    assert "If you cannot quote" in text or "If you cannot, do not flag" in text
+    assert "Do not write “assuming" in text or 'Do not write "assuming' in text
     assert "git-commits" in text
     assert "implementer-only" in text
     assert "GitLab MR comment" in text
+    assert "Turkish" in text or "Türkçe" in text
+    assert "technical terms in English" in text
     assert "Never start a line with `#`" in text
     assert "opencoderman-findings" in text
     assert '"findings"' in text
@@ -93,7 +98,7 @@ def test_fresh_install_writes_binary_config_and_agent(tmp_path: Path) -> None:
     assert (home / ".cache" / "opencode" / "bin" / rg_name).read_bytes() == b"RG"
     cfg = json.loads((home / ".opencode" / "opencode.json").read_text(encoding="utf-8"))
     assert cfg.get("plugin") == []
-    agent = (home / ".opencode" / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    agent = (home / ".opencode" / "agents" / "code-reviewer.md").read_text(encoding="utf-8")
     assert "mode: primary" in agent
     assert not (home / ".config" / "opencode").exists()
     for name in (
@@ -136,7 +141,7 @@ def test_existing_install_is_backed_up_and_replaced(tmp_path: Path) -> None:
     ]
     fresh = json.loads((oc / "opencode.json").read_text(encoding="utf-8"))
     assert fresh.get("plugin") == []
-    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "agents" / "code-reviewer.md").is_file()
     assert (home / ".opencode" / "skills" / "cpp98" / "SKILL.md").is_file()
     assert not (home / ".config" / "opencode").exists()
 
@@ -153,7 +158,7 @@ def test_existing_home_without_vendor_copies_binary_from_backup(tmp_path: Path) 
     dest = mod.install(root, user_home=home)
     assert dest.is_file()
     assert dest.read_bytes() == b"OLD-BINARY"
-    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "agents" / "code-reviewer.md").is_file()
     assert not (home / ".config" / "opencode").exists()
     assert json.loads((oc / "opencode.json").read_text(encoding="utf-8")).get("plugin") == []
 
@@ -204,11 +209,42 @@ def test_config_only_home_is_backed_up_and_new_home_created(tmp_path: Path) -> N
     assert dest.is_file()
     assert dest == home / ".opencode" / "bin" / ("opencode.exe" if os.name == "nt" else "opencode")
     assert dest.read_bytes() == b"NEW"
-    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "agents" / "code-reviewer.md").is_file()
     backups = list((home / ".config").glob("opencode_backup_*"))
     assert len(backups) == 1
     assert json.loads((backups[0] / "opencode.json").read_text(encoding="utf-8"))["plugin"] == ["keep"]
     assert not (home / ".config" / "opencode").exists()
+
+
+def test_language_review_skills_exist() -> None:
+    root = REPO / "opencoderman" / "skills"
+    for name in (
+        "python",
+        "javascript",
+        "go",
+        "rust",
+        "java",
+        "csharp",
+        "cpp",
+        "php",
+        "ruby",
+        "kotlin",
+        "swift",
+        "scala",
+        "shell",
+        "sql",
+    ):
+        body = (root / name / "SKILL.md").read_text(encoding="utf-8")
+        assert body.startswith("---"), name
+        assert f"name: {name}" in body, name
+        assert "Load when" in body or "Load only" in body, name
+    cpp = (root / "cpp" / "SKILL.md").read_text(encoding="utf-8")
+    assert "detect the dialect" in cpp.lower() or "Detect the dialect" in cpp
+    assert "CMAKE_CXX_STANDARD" in cpp
+    assert "do not assume modern C++" in cpp
+    assert 'skill({ name: "cpp98" })' in cpp
+    assert 'skill({ name: "modern-cpp" })' in cpp
+    assert "cpp-memory-safety" in cpp
 
 
 def test_cpp_skills_state_when_to_load() -> None:
@@ -249,7 +285,7 @@ def test_extra_skills_state_when_to_load() -> None:
 def test_default_agent_is_gitlab_reviewer() -> None:
     from creasy.config import Config
 
-    assert Config().opencode_agent == "gitlab-reviewer"
+    assert Config().opencode_agent == "code-reviewer"
 
 
 def test_install_copies_every_agent_and_skill(tmp_path: Path) -> None:
@@ -303,9 +339,10 @@ def test_review_only_copies_agent_and_skills_without_replacing_cli(tmp_path: Pat
     keep.write_text("stay", encoding="utf-8")
 
     written = mod.install_review_only(root, user_home=home)
-    assert any(path.name == "gitlab-reviewer.md" for path in written)
+    assert any(path.name == "code-reviewer.md" for path in written)
+    assert (oc / "agents" / "code-reviewer.md").is_file()
     assert (oc / "agents" / "gitlab-reviewer.md").is_file()
-    assert "mode: primary" in (oc / "agents" / "gitlab-reviewer.md").read_text(encoding="utf-8")
+    assert "mode: primary" in (oc / "agents" / "code-reviewer.md").read_text(encoding="utf-8")
     assert not (oc / "agents" / "planner.md").exists()
     assert (oc / "skills" / "cpp98" / "SKILL.md").is_file()
     assert existing.read_bytes() == b"KEEP-CLI"
@@ -321,7 +358,7 @@ def test_review_only_does_not_require_vendor(tmp_path: Path) -> None:
     home = tmp_path / "home"
     written = mod.install_review_only(root, user_home=home)
     assert written
-    assert (home / ".opencode" / "agents" / "gitlab-reviewer.md").is_file()
+    assert (home / ".opencode" / "agents" / "code-reviewer.md").is_file()
     assert not (home / ".opencode" / "bin").exists()
 
 
