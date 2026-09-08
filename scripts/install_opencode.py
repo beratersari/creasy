@@ -210,14 +210,19 @@ def _keep_existing_config(path: Path) -> None:
 
 
 def install_review_agent(root: Path, user_home: Path | None = None) -> list[Path]:
+    """Copy only gitlab-reviewer.md. Other agents stay in the pack."""
+    src = review_agent_source(root)
+    if not src.is_file():
+        raise FileNotFoundError(
+            f"OpenCoderman missing: {src} (git submodule update --init)"
+        )
+    text = src.read_text(encoding="utf-8")
     written: list[Path] = []
-    for src in list_agent_files(root):
-        text = src.read_text(encoding="utf-8")
-        for dest in agent_dests(src.stem, user_home):
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(text, encoding="utf-8")
-            written.append(dest)
-            print(f"[OK] Agent {src.stem} written: {dest}")
+    for dest in review_agent_dests(user_home):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        written.append(dest)
+        print(f"[OK] Agent gitlab-reviewer written: {dest}")
     return written
 
 
@@ -235,6 +240,15 @@ def install_review_skills(root: Path, user_home: Path | None = None) -> list[Pat
             dest.write_text(text, encoding="utf-8")
             written.append(dest)
             print(f"[OK] Skill {skill_dir.name} written: {dest}")
+    return written
+
+
+def install_review_only(root: Path, *, user_home: Path | None = None) -> list[Path]:
+    """Copy gitlab-reviewer and skills into ~/.opencode. Leave the CLI alone."""
+    root = Path(root).expanduser().resolve()
+    written = install_review_agent(root, user_home)
+    written.extend(install_review_skills(root, user_home))
+    print(f"OpenCode home: {opencode_home(user_home)}")
     return written
 
 
@@ -315,10 +329,20 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="Backup ~/.opencode, unhook other installs from PATH, then install the vendored CLI and agents/skills."
     )
-    p.add_argument("--root", required=True, help="Repo / zip root that contains vendor/bin")
+    p.add_argument("--root", required=True, help="Repo / zip root that contains opencoderman/")
+    p.add_argument(
+        "--review-only",
+        action="store_true",
+        help="Copy only gitlab-reviewer and skills into ~/.opencode. Do not replace the CLI.",
+    )
     args = p.parse_args(argv)
     root = Path(args.root).expanduser().resolve()
     try:
+        if args.review_only:
+            written = install_review_only(root)
+            print(f"[OK] Review agent ready: {written[0]}")
+            print("Jobs use OPENCODE_AGENT=gitlab-reviewer (see .env.example).")
+            return 0
         target = install(root)
     except FileNotFoundError as e:
         print(f"[ERROR] {e}", file=sys.stderr)

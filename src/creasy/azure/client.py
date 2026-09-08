@@ -117,9 +117,21 @@ class AzureClient:
                 if exc.response is not None and exc.response.status_code == 404 and index < len(paths) - 1:
                     last_404 = exc.response
                     continue
+                body = ""
+                if exc.response is not None:
+                    body = (exc.response.text or "")[:300]
+                log_fail(
+                    logger,
+                    "azure HTTP",
+                    method=method,
+                    url=redact_userinfo(url),
+                    http=exc.response.status_code if exc.response is not None else 0,
+                    body=redact_userinfo(body),
+                )
                 raise
             except httpx.HTTPError as exc:
                 last_error = exc
+                log_fail(logger, "azure HTTP", method=method, url=redact_userinfo(url), err=exc)
                 raise
         if last_404 is not None:
             last_404.raise_for_status()

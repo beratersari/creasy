@@ -49,6 +49,9 @@ def test_default_ports_do_not_collide_with_virtual_developer():
     assert "127.0.0.1:8000" not in vite
     assert "127.0.0.1:8080" not in vite
     assert "PORT=9001" in _read(".env.example")
+    env_example = _read(".env.example")
+    assert "DASHBOARD_USER=" in env_example
+    assert "DASHBOARD_PASSWORD=" in env_example
     ci = _read(".github/workflows/ci.yml")
     assert "127.0.0.1:9001" in ci
     assert "127.0.0.1:8000" not in ci
@@ -108,6 +111,20 @@ def test_install_opencode_scripts_require_configs():
     assert "submodule update --init" in sh
 
 
+def test_install_review_agent_scripts_copy_only_review_pack():
+    bat = _read("scripts/install-review-agent.bat")
+    sh = _read("scripts/install-review-agent.sh")
+    assert "xcopy" in bat
+    assert "gitlab-reviewer.md" in bat
+    assert r"%USERPROFILE%\.opencode" in bat
+    assert "gitlab-reviewer.md" in sh
+    assert "skills" in sh
+    assert ".opencode" in sh
+    for body in (bat, sh):
+        assert "install-opencode" in body
+        assert "backup then replace" not in body.lower()
+
+
 def test_ci_runs_vendor_install_start():
     workflow = _read(".github/workflows/ci.yml")
     assert "branches: [main, develop]" in workflow
@@ -125,6 +142,7 @@ def test_ci_runs_vendor_install_start():
     assert "packaging/build_exe.py" in workflow
     assert "creasy.exe" in workflow
     assert "test -f" in workflow and ".env.example" in workflow
+    assert "assert_exe_zip" in workflow
     assert "dist/stage/creasy-" in workflow
     assert "dist/creasy-*.zip" not in workflow
     assert "creasy-offline-zips" not in workflow

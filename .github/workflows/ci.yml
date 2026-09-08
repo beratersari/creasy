@@ -170,14 +170,14 @@ jobs:
         id: ver
         shell: bash
         run: echo "version=$(python -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
-      - name: Assert zip is exe + config only
+      - name: Assert zip is exe + config + review pack
         shell: bash
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
           zip="dist/exe/creasy-${v}-${{ matrix.suffix }}.zip"
           test -f "$zip"
-          python -c "import zipfile,sys; names=sorted(zipfile.ZipFile(sys.argv[1]).namelist()); want='creasy.exe' if 'windows' in sys.argv[2] else 'creasy'; assert names==sorted([want,'.env.example']), names" "$zip" "${{ matrix.suffix }}"
+          python -c "import importlib.util,sys; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('creasy_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); exe='creasy.exe' if 'windows' in sys.argv[2] else 'creasy'; m.assert_exe_zip(Path(sys.argv[1]), expect_exe=exe)" "$zip" "${{ matrix.suffix }}"
       - name: Upload executable zip
         uses: actions/upload-artifact@v4
         with:

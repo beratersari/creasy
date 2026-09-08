@@ -93,6 +93,8 @@ def main() -> int:
         azure_url="https://ado.example/tfs/DefaultCollection",
         azure_token="pat-test",
         azure_webhook_password="secret",
+        dashboard_user="smoke",
+        dashboard_password="smoke-pass",
     )
     cfg.ensure_dirs()
     runner = FakeRunner()
@@ -267,7 +269,36 @@ def main() -> int:
 
         runner.release.set()
         time.sleep(0.3)
-        jobs = client.get("/api/jobs", params={"page_size": 100}).json()
+        locked = client.get("/api/jobs", params={"page_size": 100})
+        print()
+        print(f"{locked.status_code:3} {'-':10} dashboard jobs without login")
+        rows.append((locked.status_code, None, "dashboard jobs without login", ""))
+        login = client.post(
+            "/api/login", json={"username": "smoke", "password": "smoke-pass"}
+        )
+        print(f"{login.status_code:3} {'-':10} dashboard login")
+        rows.append((login.status_code, None, "dashboard login", ""))
+        jobs_res = client.get("/api/jobs", params={"page_size": 100})
+        print(f"{jobs_res.status_code:3} {'-':10} dashboard jobs after login")
+        rows.append((jobs_res.status_code, None, "dashboard jobs after login", ""))
+        jobs = jobs_res.json() if jobs_res.status_code == 200 else {}
+        still = client.post(
+            "/webhook",
+            json=_gitlab_note("/review after login"),
+            headers=gl,
+        )
+        print(
+            f"{still.status_code:3} {str(still.json().get('status')):10} "
+            "gitlab /review after dashboard login"
+        )
+        rows.append(
+            (
+                still.status_code,
+                still.json().get("status"),
+                "gitlab /review after dashboard login",
+                still.json().get("job_id") or still.json().get("reason") or "",
+            )
+        )
     server.should_exit = True
     thread.join(timeout=5)
     print()
@@ -278,7 +309,18 @@ def main() -> int:
             f"trigger={job.get('trigger'):7} {job.get('mr_key')} {job.get('job_id')}"
         )
     manager.shutdown()
-    ok = all(code in {200, 401} for code, *_ in rows)
+    expected_401 = {
+        "gitlab missing secret",
+        "azure missing secret",
+        "dashboard jobs without login",
+    }
+    ok = True
+    for code, _status, label, _reason in rows:
+        if label in expected_401:
+            if code != 401:
+                ok = False
+        elif code not in {200, 401}:
+            ok = False
     return 0 if ok else 1
 
 

@@ -12,6 +12,7 @@ from typing import Any
 
 from creasy import __version__
 from creasy.config import Config
+from creasy.diag import safe_url
 from creasy.logging import redact_userinfo
 
 _MAX_APP_LOG = 512 * 1024
@@ -47,6 +48,7 @@ def build_report_context(manager: Any) -> dict[str, Any]:
             "queued_count": queued,
         },
         "live": {"running": running, "queued": queued},
+        "diagnostics": system_diagnostics(cfg, running=int(health.get("running") or 0), queued=int(health.get("queued") or 0)),
         "app_log": read_capped_text(cfg.log_dir / "app.log", max_bytes=_MAX_APP_LOG),
         "crash_log": read_capped_text(cfg.log_dir / "crash.log", max_bytes=_MAX_CRASH_LOG),
         "wrapper_exit_log": read_capped_text(
@@ -59,6 +61,36 @@ def build_report_context(manager: Any) -> dict[str, Any]:
     }
 
 
+def system_diagnostics(cfg: Config, *, running: int, queued: int) -> dict[str, Any]:
+    """Host snapshot for a general or job issue report. No secrets."""
+    return {
+        "version": __version__,
+        "azure_enabled": cfg.azure_enabled,
+        "azure_url": safe_url(cfg.azure_url) or (cfg.azure_url or ""),
+        "azure_token_set": bool(cfg.azure_token),
+        "azure_api_version": cfg.azure_api_version,
+        "gitlab_url": cfg.gitlab_url,
+        "gitlab_token_set": bool(cfg.gitlab_token),
+        "data_dir": str(cfg.data_dir),
+        "log_dir": str(cfg.log_dir),
+        "max_concurrent_jobs": cfg.max_concurrent_jobs,
+        "running": running,
+        "queued": queued,
+        "recent_fails": _recent_fail_lines(cfg.log_dir / "app.log"),
+    }
+
+
+def _recent_fail_lines(path: Path, *, limit: int = 80) -> list[str]:
+    if not path.is_file():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    fails = [redact_userinfo(line) for line in lines if " FAIL " in line or "] [ERROR" in line]
+    return fails[-limit:]
+
+
 def public_settings(cfg: Config) -> dict[str, Any]:
     return {
         "host": cfg.host,
@@ -67,6 +99,8 @@ def public_settings(cfg: Config) -> dict[str, Any]:
         "gitlab_token_set": bool(cfg.gitlab_token),
         "webhook_secret_set": bool(cfg.webhook_secret),
         "dashboard_token_set": bool(cfg.dashboard_token),
+        "dashboard_user_set": bool(cfg.dashboard_user),
+        "dashboard_password_set": bool(cfg.dashboard_password),
         "opencode_model": cfg.opencode_model,
         "opencode_timeout": cfg.opencode_timeout,
         "opencode_retry_count": cfg.opencode_retry_count,
@@ -78,6 +112,12 @@ def public_settings(cfg: Config) -> dict[str, Any]:
         "log_dir": str(cfg.log_dir),
         "serve_dir": str(cfg.serve_dir),
         "skip_draft_mrs": cfg.skip_draft_mrs,
+        "azure_enabled": cfg.azure_enabled,
+        "azure_url": safe_url(cfg.azure_url) or cfg.azure_url,
+        "azure_token_set": bool(cfg.azure_token),
+        "azure_api_version": cfg.azure_api_version,
+        "azure_webhook_user_set": bool(cfg.azure_webhook_user),
+        "azure_webhook_password_set": bool(cfg.azure_webhook_password),
         "log_level": cfg.log_level,
         "git_timeout": cfg.git_timeout,
         "serve_health_timeout": cfg.serve_health_timeout,

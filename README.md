@@ -46,6 +46,8 @@ python -m creasy
 ```
 
 Dashboard: http://127.0.0.1:9001/jobs  
+Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` in `.env` so the
+dashboard shows a login page. Webhooks do not use those values.  
 GitLab webhook: `POST /webhook`  
 Azure webhook: `POST /webhook/azure`  
 Health: `GET /health`
@@ -57,8 +59,12 @@ Bump with `python scripts/bump_version.py minor`. What changed is in
 Download **GitHub Release** executable zips
 (`creasy-<version>-windows-x64.zip`, `linux-x64`, `darwin-arm64`),
 not the tag’s “Source code” zip. Each zip is one `creasy` /
-`creasy.exe` plus `.env.example`. Copy the example to `.env` next
-to the binary and run it. Reviews still need `opencode` on `PATH`.
+`creasy.exe`, `.env.example`, `opencoderman/agents`,
+`opencoderman/skills`, and `install-review-agent` scripts. Copy the
+example to `.env` next to the binary and run it. Reviews still need
+`opencode` on `PATH`. Run `install-review-agent.bat` (or `.sh`) once
+to copy those agent and skill files into `~/.opencode` without
+replacing an existing OpenCode install.
 
 ## Webhooks
 

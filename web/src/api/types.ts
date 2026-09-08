@@ -38,6 +38,7 @@ export type JobItem = {
   completed_at?: string | null
   accepted_at?: string | null
   error_message?: string | null
+  diagnostics?: Record<string, unknown>
   callback_status_code?: number | null
   text?: string
   original_posted?: boolean
@@ -104,5 +105,6 @@ export type ReportContext = {
   wrapper_exit_log?: ReportLogBlob
   opencode_logs?: ReportLogBlob[]
   serve_logs_present?: string[]
+  diagnostics?: Record<string, unknown>
   server_time?: string
 }

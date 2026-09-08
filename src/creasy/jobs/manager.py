@@ -14,7 +14,8 @@ from creasy.jobs.worker import JobRunner, RunResult
 from creasy.cleanup.end import delete_clone_path, protect_pids, stop_job_holders
 from creasy.cleanup.kill import kill_job_tree, reap_work_dir
 from creasy.log_context import bound
-from creasy.logging import get_logger, log_fail, log_ok
+from creasy.diag import log_diag, merge_job_diag
+from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
 from creasy.workspace.identity import clone_path_for, mr_key
 from creasy.workspace.store import WorkspaceStore
 
@@ -356,7 +357,7 @@ class Manager:
         job.live = False
         job.completed_at = utc_now()
         job.text = result.text or job.text
-        job.error_message = result.error or None
+        job.error_message = redact_userinfo(result.error) or None
         if result.session_id:
             job.session_id = result.session_id
         if result.clone_path:
@@ -375,6 +376,25 @@ class Manager:
             job.serve_pid = result.serve_pid
         if result.serve_port:
             job.serve_port = result.serve_port
+        merge_job_diag(
+            job,
+            stage="end",
+            status=status,
+            posted=bool(result.posted),
+            cancelled=bool(result.cancelled),
+            error=job.error_message or "",
+            clone_path=job.clone_path or "",
+            session_id=job.session_id or "",
+        )
+        log_diag(
+            "job",
+            "end",
+            job=job.job_id,
+            mr=job.mr_key,
+            status=status,
+            error=job.error_message or "",
+            provider=job.provider or "gitlab",
+        )
         self.store.save(job)
         self._cancel.pop(job.job_id, None)
         if status == "success":
@@ -382,7 +402,7 @@ class Manager:
         elif status == "cancelled":
             log_ok(logger, "job finished", job=job.job_id, status=status)
         else:
-            log_fail(logger, "job finished", job=job.job_id, status=status, err=result.error or "")
+            log_fail(logger, "job finished", job=job.job_id, status=status, err=job.error_message or "")
 
     def health(self) -> dict:
         jobs = self.store.list_all()

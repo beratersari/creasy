@@ -12,15 +12,31 @@ from creasy import log_context
 
 # https://oauth2:TOKEN@host → https://host  (also user:pass@)
 _USERINFO_RE = re.compile(r"(https?://)[^/\s\"'<>]+@", re.IGNORECASE)
-_BASIC_RE = re.compile(r"(Authorization:\s*Basic)\s+\S+", re.IGNORECASE)
+_AUTH_RE = re.compile(r"(Authorization:\s*(?:Basic|Bearer))\s+\S+", re.IGNORECASE)
+_ENV_SECRET_RE = re.compile(
+    r"(?i)\b(CREASY_GIT_TOKEN|AZURE_DEVOPS_PAT|AZURE_DEVOPS_TOKEN|GITLAB_TOKEN|"
+    r"WEBHOOK_SECRET|DASHBOARD_TOKEN|DASHBOARD_PASSWORD|AZURE_WEBHOOK_PASSWORD)\s*[=:]\s*\S+"
+)
+_ASSIGN_SECRET_RE = re.compile(
+    r"(?i)\b(password|secret|pat|api[_-]?key)\s*[=:]\s*([^\s,;]+)"
+)
+_TOKEN_ASSIGN_RE = re.compile(r"(?i)\btoken\s*[=:]\s*([^\s,;]{8,})")
+_PEM_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def redact_userinfo(text: str) -> str:
-    """Strip URL userinfo so clone tokens never appear in logs or notes."""
+    """Strip tokens, passwords, and URL userinfo from logs and report zips."""
     if not text:
         return ""
     cleaned = _USERINFO_RE.sub(r"\1", str(text))
-    return _BASIC_RE.sub(r"\1 ***", cleaned)
+    cleaned = _AUTH_RE.sub(r"\1 ***", cleaned)
+    cleaned = _ENV_SECRET_RE.sub(lambda m: m.group(1) + "=***", cleaned)
+    cleaned = _ASSIGN_SECRET_RE.sub(r"\1=***", cleaned)
+    cleaned = _TOKEN_ASSIGN_RE.sub("token=***", cleaned)
+    return _PEM_RE.sub("-----BEGIN PRIVATE KEY-----[redacted]-----END PRIVATE KEY-----", cleaned)
 
 
 class _Formatter(logging.Formatter):

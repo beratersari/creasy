@@ -253,6 +253,14 @@ function Overview({ job, elapsed }: { job: JobItem; elapsed: string }) {
       {job.error_message && (
         <pre className="vd-pre text-danger-text">{job.error_message}</pre>
       )}
+      {job.diagnostics && Object.keys(job.diagnostics).length > 0 && (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+            Diagnostics
+          </div>
+          <pre className="vd-pre text-xs">{JSON.stringify(job.diagnostics, null, 2)}</pre>
+        </div>
+      )}
     </div>
   )
 }

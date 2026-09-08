@@ -148,6 +148,57 @@ def test_azure_secret_required_when_set(tmp_config):
     manager.shutdown()
 
 
+def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
+    """Comment classify runs before apply_collection. Host-only URL cannot see /tfs."""
+    tmp_config.azure_url = "https://tfs02.company.com.tr"
+    tmp_config.azure_token = "pat-test"
+    tmp_config.azure_webhook_password = ""
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    manager.ready = True
+    order: list[str] = []
+
+    class Azure:
+        base_url = "https://tfs02.company.com.tr"
+
+        def current_user_id(self):
+            order.append(f"user:{self.base_url}")
+            return None
+
+        def apply_collection(self, collection="", web_url=""):
+            order.append(f"apply:{web_url}")
+            self.base_url = "https://tfs02.company.com.tr/tfs/ExampleCollection"
+
+    app = FastAPI()
+    app.state.config = tmp_config
+    app.state.manager = manager
+    app.state.azure = Azure()
+    app.state.azure_bot_user_id = None
+    app.include_router(azure_router)
+    client = TestClient(app)
+    payload = {
+        "eventType": "git.pullrequest.commented",
+        "resource": {
+            "comment": {"content": "/review", "author": {"id": "bot-id"}},
+            "pullRequest": _pr(
+                pullRequestId=9,
+                url="https://tfs02.company.com.tr/tfs/ExampleCollection/App/_git/app/pullrequest/9",
+            ),
+        },
+    }
+    res = client.post("/webhook/azure", json=payload)
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
+    assert order[0].startswith("user:")
+    assert order[0] == "user:https://tfs02.company.com.tr"
+    assert any(item.startswith("apply:") for item in order)
+    assert order.index("user:https://tfs02.company.com.tr") < [
+        i for i, item in enumerate(order) if item.startswith("apply:")
+    ][0]
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_azure_disabled_is_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config, azure=False)
     client = TestClient(app)

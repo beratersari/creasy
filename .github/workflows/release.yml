@@ -1,8 +1,9 @@
 name: release
 
 # Tag push or Actions → Run workflow. Publishes one executable zip
-# per platform (creasy[.exe] + .env.example). The tag's
-# "Source code" zip is not an operator download.
+# per platform (creasy[.exe] + .env.example + opencoderman review
+# pack + install-review-agent scripts). The tag's "Source code" zip
+# is not an operator download.
 
 on:
   push:

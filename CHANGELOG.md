@@ -9,6 +9,30 @@ section in the same change.
 
 ## Unreleased
 
+## 0.6.0 — 2026-09-08
+
+The dashboard can require a login. Executable zips now include the
+review agent pack. Job issue reports include redacted diagnostics.
+
+### Added
+
+- Dashboard login page. Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD`
+  in `.env`. Opening `/jobs` asks for those credentials; the password
+  is not put in the URL or shown in the sidebar. A session cookie
+  unlocks job APIs. `DASHBOARD_TOKEN` still works as an API header
+  for scripts. Webhooks are unchanged.
+- Executable zips include `opencoderman/agents`,
+  `opencoderman/skills`, and `install-review-agent` scripts. Those
+  copy only the review agent and skills into `~/.opencode`; they do
+  not replace an existing OpenCode CLI. The zip does not include
+  git history, vendor, or the rest of the submodule.
+- Job and system diagnostics for dashboard issue reports. Each job
+  stores a redacted stage snapshot (provider, collection URL, HTTP
+  status, git/Azure error class, token_set/token_chars). App start
+  logs the same flags. Report zips include `job/diagnostics.json`
+  and `system/diagnostics.json` plus recent FAIL lines. Tokens,
+  Basic/Bearer headers, and URL userinfo are stripped.
+
 ## 0.5.2 — 2026-09-08
 
 Azure REST already accepted the PAT. Git clone still failed because

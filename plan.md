@@ -8,9 +8,12 @@ Daily work is on `develop`. `main` is release-only: never push
 commits directly to `main`; open a pull request / merge request.
 Version is the `VERSION` file. Every bump needs a `CHANGELOG.md`
 `## X.Y.Z` section (that text becomes the GitHub Release body).
-The operator download is the four pack zips on the GitHub Release,
-not the tag “Source code” zip. The binding checklist is in
-[AGENTS.md](AGENTS.md) (Branches and releases).
+The operator download is the three executable zips on the GitHub
+Release (binary, `.env.example`, `opencoderman/agents`,
+`opencoderman/skills`, `install-review-agent` scripts), not the
+tag “Source code” zip.
+The binding checklist is in [AGENTS.md](AGENTS.md)
+(Branches and releases).
 
 ---
 
@@ -335,7 +338,13 @@ What the dashboard must not do:
 - Edit settings.
 - Call OSM `POST /jobs`.
 
-Auth: mutating dashboard routes require `DASHBOARD_TOKEN` (`Authorization: Bearer …` or header `X-Creasy-Token`). GET list/detail can use the same token when it is set; if unset, dashboard binds as open (dev only). Do not reuse `GITLAB_TOKEN` in the browser.
+Auth: dashboard routes require a login when `DASHBOARD_USER` +
+`DASHBOARD_PASSWORD` are set (or `DASHBOARD_TOKEN` alone). The SPA
+shows a username/password page; success sets an httpOnly session
+cookie. Scripts may still send `Authorization: Bearer …` or
+`X-Creasy-Token` matching `DASHBOARD_TOKEN`. If unset, the dashboard
+binds as open (dev only). Do not reuse `GITLAB_TOKEN` in the browser.
+Do not put the password in the URL.
 
 UI: adapt OSM’s jobs-tab look (list + detail + logs). Rename `jira_id` → MR (`project!iid` / `mr_key`). Keep it GET-mostly plus Cancel buttons. Prefer a small SPA under `web/` (copy OSM structure and restyle labels) rather than inventing a new product.
 
@@ -413,7 +422,8 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `SKIP_DRAFT_MRS` | `true` | |
 | `REVIEW_EXTENSIONS` | common source suffixes | |
 | `MAX_FILE_SIZE_KB` | `500` | Drop oversized paths from the stat/file list |
-| `DASHBOARD_TOKEN` | empty (dev) | Required in prod for dashboard GET+cancel |
+| `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | empty (dev) | Login page in prod; session cookie |
+| `DASHBOARD_TOKEN` | empty | Optional API header instead of login |
 
 ### Endpoints
 

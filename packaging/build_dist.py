@@ -630,6 +630,8 @@ def stage_app(root: Path, payload: Path) -> None:
         "install.sh",
         "install-opencode.bat",
         "install-opencode.sh",
+        "install-review-agent.bat",
+        "install-review-agent.sh",
         "start.bat",
         "start.sh",
         "run-server.bat",

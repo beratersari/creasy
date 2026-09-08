@@ -52,6 +52,8 @@ def test_release_notes_extract():
     assert "creasy-0.3.0-darwin-x64.zip" not in notes
     assert "windows-linux" not in notes
     assert "Source code" not in notes
+    assert "opencoderman" in notes
+    assert "install-review-agent" in notes
 
 
 def test_write_version_roundtrip(tmp_path: Path):
