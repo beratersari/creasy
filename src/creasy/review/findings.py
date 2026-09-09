@@ -15,12 +15,25 @@ _FENCE = re.compile(
     r"^[ \t]*(`{3,}|~{3,})(opencoderman-findings|json)[ \t]*\r?\n(.*?)\r?\n[ \t]*\1[ \t]*$",
     re.MULTILINE | re.DOTALL,
 )
-_GROUP = re.compile(r"^###\s+(Critical|Major|Minor|Improvement)\s*$", re.I)
+_GROUP = re.compile(
+    r"^###\s+(Critical|Major|Minor|Improvement|Kritik|Önemli|Onemli|Küçük|Kucuk|İyileştirme|Iyilestirme)\s*$",
+    re.I,
+)
 _TITLE = re.compile(
     r"^####\s+\d+\.\s+`([^`:]+)(?::(\d+)(?:-(\d+))?)?[^`]*`\s+[—–-]\s+(.+?)\s*$"
 )
-_WHY = re.compile(r"^\*\*Why it is an issue and where\*\*\s*$", re.I)
-_FIX = re.compile(r"^\*\*Suggested fix\*\*\s*$", re.I)
+_WHY = re.compile(r"^\*\*(Why it is an issue and where|Sorun)\*\*\s*$", re.I)
+_FIX = re.compile(r"^\*\*(Suggested fix|Öneri)\*\*\s*$", re.I)
+_CODE = re.compile(r"^\*\*(Code|Kod)\*\*\s*$", re.I)
+_SEVERITY_ALIAS = {
+    "kritik": "critical",
+    "önemli": "major",
+    "onemli": "major",
+    "küçük": "minor",
+    "kucuk": "minor",
+    "iyileştirme": "improvement",
+    "iyilestirme": "improvement",
+}
 
 
 @dataclass(frozen=True)
@@ -101,7 +114,7 @@ def extract_markdown_findings(text: str) -> list[Finding]:
         group = _GROUP.match(stripped)
         if group:
             flush()
-            severity = group.group(1).lower()
+            severity = _SEVERITY_ALIAS.get(group.group(1).lower(), group.group(1).lower())
             section = ""
             continue
         title = _TITLE.match(stripped)
@@ -130,7 +143,7 @@ def extract_markdown_findings(text: str) -> list[Finding]:
         if _FIX.match(stripped):
             section = "fix"
             continue
-        if stripped.startswith("**Code**") or stripped.startswith("```"):
+        if _CODE.match(stripped) or stripped.startswith("```"):
             if section == "why" or section == "fix":
                 continue
             section = "skip"

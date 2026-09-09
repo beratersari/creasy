@@ -139,6 +139,34 @@ strcpy(dest, src);
     assert "**Code**" in got
 
 
+def test_soften_keeps_turkish_group_headers() -> None:
+    raw = """### Özet
+
+Bir Kritik.
+
+### Kritik
+
+#### 1. `src/buf.cpp:6` — overflow
+
+**Kod**
+```cpp
+strcpy(dest, src);
+```
+
+**Sorun**
+Sınırsız strcpy.
+
+**Öneri**
+std::string kullanın.
+"""
+    got = soften_markdown(raw)
+    assert got.startswith("### Özet")
+    assert "### Kritik" in got
+    assert "**Kod**" in got
+    assert "**Sorun**" in got
+    assert "**Öneri**" in got
+
+
 def test_ask_note_uses_answer_label() -> None:
     job = _job(trigger="ask", text="Because the lock is per MR.")
     body = format_success(job)

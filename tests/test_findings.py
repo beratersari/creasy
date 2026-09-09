@@ -154,6 +154,33 @@ Return std::string.
     assert findings[1].end_line == 7
 
 
+def test_turkish_group_and_field_labels_parse() -> None:
+    text = """### Özet
+1 Kritik.
+
+### Kritik
+
+#### 1. `src/upload.py:18` — dest üzerinde path traversal
+
+**Kod**
+```python
+dest = os.path.join(OUT, filename)
+```
+
+**Sorun**
+`filename` istemci adıdır.
+
+**Öneri**
+basename alın.
+"""
+    _markdown, findings = split_findings(text)
+    assert len(findings) == 1
+    assert findings[0].severity == "critical"
+    assert findings[0].path == "src/upload.py"
+    assert "istemci" in findings[0].body
+    assert "basename" in findings[0].body
+
+
 def test_markdown_title_uses_first_line_range() -> None:
     text = """### Critical
 

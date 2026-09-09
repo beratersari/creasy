@@ -21,10 +21,19 @@ _OLD_LABELS = {
 }
 _GROUPS = {
     "summary": "Summary",
+    "özet": "Özet",
+    "ozet": "Özet",
     "critical": "Critical",
+    "kritik": "Kritik",
     "major": "Major",
+    "önemli": "Önemli",
+    "onemli": "Önemli",
     "minor": "Minor",
+    "küçük": "Küçük",
+    "kucuk": "Küçük",
     "improvement": "Improvement",
+    "iyileştirme": "İyileştirme",
+    "iyilestirme": "İyileştirme",
     **_OLD_LABELS,
 }
 
@@ -62,7 +71,7 @@ def _normalize_line(line: str) -> str:
 def _drop_preamble(text: str) -> str:
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        if _inner_label(line).lower() == "summary":
+        if _inner_label(line).lower() in {"summary", "özet", "ozet"}:
             return "\n".join(lines[index:])
     return text
 
