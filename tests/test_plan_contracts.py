@@ -821,6 +821,46 @@ def test_boot_reenqueues_leftover_queued_then_dispatches(tmp_config):
     manager.shutdown()
 
 
+def test_boot_reenqueues_leftover_queued_oldest_first(tmp_config):
+    runner = FakeRunner()
+    manager = Manager(tmp_config, runner)
+    tmp_config.max_concurrent_jobs = 1
+    older = JobRecord(
+        job_id="job_old",
+        mr_key="3-9",
+        project_id=3,
+        mr_iid=9,
+        trigger="ask",
+        status="queued",
+        live=True,
+        explicit=True,
+        comment_text="first",
+        accepted_at="2026-01-01T00:00:00Z",
+    )
+    newer = JobRecord(
+        job_id="job_new",
+        mr_key="3-9",
+        project_id=3,
+        mr_iid=9,
+        trigger="ask",
+        status="queued",
+        live=True,
+        explicit=True,
+        comment_text="second",
+        accepted_at="2026-01-01T00:00:10Z",
+    )
+    manager.store.save(newer)
+    manager.store.save(older)
+    manager.boot()
+    assert runner.started.wait(2)
+    assert manager.queue.peek("3-9") == "job_new"
+    running = [j for j in manager.store.list_all() if j.status == "running"]
+    assert len(running) == 1
+    assert running[0].job_id == "job_old"
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_shutdown_cancels_queued_and_rejects_new_submit(tmp_config):
     runner = FakeRunner()
     manager = Manager(tmp_config, runner)

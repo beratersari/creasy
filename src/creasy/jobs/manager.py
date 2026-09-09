@@ -66,8 +66,10 @@ class Manager:
                         RunResult(error="process restarted; leftover job was not resumed"),
                         status="error",
                     )
-            elif job.status == "queued":
-                self.queue.enqueue(job.mr_key, job.job_id)
+        leftover_queued = [j for j in leftover if j.status == "queued"]
+        leftover_queued.sort(key=lambda item: (item.accepted_at or "", item.job_id))
+        for job in leftover_queued:
+            self.queue.enqueue(job.mr_key, job.job_id)
         # queued leftovers stay in the persisted queue and will dispatch
         self.ready = True
         failed = len([j for j in leftover if j.status == "running"])

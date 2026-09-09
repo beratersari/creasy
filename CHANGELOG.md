@@ -32,6 +32,7 @@ section in the same change.
   is known.
 - A later `/ask` on a resumed session no longer posts the previous
   review as the answer.
+- Leftover queued jobs after a restart run oldest-first.
 
 ### Changed
 
