@@ -382,41 +382,6 @@ class GitLabClient:
         )
         return data
 
-    def add_reviewer(self, project_id: int, mr_iid: int, user_id: int) -> bool:
-        """Add the token user as an MR reviewer. Keep existing reviewers."""
-        path = f"/projects/{project_id}/merge_requests/{mr_iid}"
-        try:
-            current = self._http.get(path)
-            current.raise_for_status()
-        except httpx.HTTPError as exc:
-            status, detail = _http_detail(exc)
-            log_fail(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
-            return False
-        data = current.json() if current.content else {}
-        reviewers = data.get("reviewers") if isinstance(data, dict) else None
-        ids: list[int] = []
-        for row in reviewers or []:
-            if not isinstance(row, dict) or row.get("id") is None:
-                continue
-            try:
-                ids.append(int(row["id"]))
-            except (TypeError, ValueError):
-                continue
-        uid = int(user_id)
-        if uid in ids:
-            log_ok(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, reason="already")
-            return True
-        ids.append(uid)
-        try:
-            response = self._http.put(path, json={"reviewer_ids": ids})
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            status, detail = _http_detail(exc)
-            log_fail(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, http=status, err=exc, body=detail)
-            return False
-        log_ok(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, http=response.status_code)
-        return True
-
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:
         if fallback:
             log_ok(logger, "gitlab resolve clone url", project=project_id, source="fallback")

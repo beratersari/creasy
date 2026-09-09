@@ -24,7 +24,17 @@ _COMMENTED = frozenset(
     }
 )
 _UPDATED = frozenset({"git.pullrequest.updated", "git.pullrequest.updatedevent"})
+_REVIEWERS = frozenset(
+    {
+        "git.pullrequest.reviewers.update",
+        "ms.vss-code.git-pullrequest-reviewers-update-event",
+    }
+)
 _MERGED = frozenset({"git.pullrequest.merged", "git.pullrequest.completed"})
+_ADDED_REVIEWER = re.compile(
+    r"^(?P<actor>.+?) added (?P<who>.+?) as an? (?:required )?reviewer",
+    re.IGNORECASE,
+)
 _ABANDONED = frozenset({"abandoned", "completed", "closed"})
 _PR_LINK = re.compile(
     r"/repositories/([^/]+)/pullRequests/(\d+)",
@@ -271,6 +281,72 @@ def _is_comment_edit(payload: dict[str, Any], comment: dict[str, Any]) -> bool:
     return False
 
 
+def _notification_type(payload: dict[str, Any]) -> str:
+    raw = payload.get("notificationType") or payload.get("notification_type") or ""
+    if not raw:
+        resource = _resource(payload)
+        raw = resource.get("notificationType") or resource.get("notification_type") or ""
+    return str(raw).strip()
+
+
+def _message_text(payload: dict[str, Any]) -> str:
+    parts = [
+        _as_dict(payload.get("message")).get("text"),
+        _as_dict(payload.get("detailedMessage")).get("text"),
+    ]
+    return "\n".join(str(part or "") for part in parts)
+
+
+def _azure_reviewer_is_bot(row: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
+    if bot_user_id and str(row.get("id") or "").strip().lower() == str(bot_user_id).strip().lower():
+        return True
+    aliases = {name.lower() for name in names if name}
+    for key in ("displayName", "uniqueName", "name", "providerDisplayName"):
+        value = str(row.get(key) or "").strip()
+        if not value:
+            continue
+        if value.lower() in aliases:
+            return True
+        if "\\" in value and value.rsplit("\\", 1)[-1].lower() in aliases:
+            return True
+    return False
+
+
+def _azure_bot_is_reviewer(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    for row in reviewers:
+        if isinstance(row, dict) and _azure_reviewer_is_bot(row, bot_user_id, names):
+            return True
+    return False
+
+
+def _azure_reviewer_assigned(
+    payload: dict[str, Any],
+    pr: dict[str, Any],
+    *,
+    bot_user_id: Optional[str],
+    mention_names: list[str],
+    event_kind: str,
+) -> bool:
+    if not bot_user_id and not mention_names:
+        return False
+    if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names):
+        return False
+    first_line = (_message_text(payload).splitlines() or [""])[0].strip()
+    match = _ADDED_REVIEWER.match(first_line)
+    aliases = {name.lower() for name in mention_names if name}
+    if match:
+        who = match.group("who").strip().lower()
+        if who in aliases or ("\\" in who and who.rsplit("\\", 1)[-1] in aliases):
+            return True
+        return False
+    text = _message_text(payload).lower()
+    ntype = _notification_type(payload).lower()
+    if (ntype == "reviewersupdatenotification" or event_kind in _REVIEWERS) and "added" in text and "reviewer" in text:
+        return bool(aliases) and any(alias in text for alias in aliases)
+    return False
+
+
 def classify_azure_webhook(
     payload: dict[str, Any],
     *,
@@ -293,10 +369,25 @@ def classify_azure_webhook(
         action = "merge" if _status(pr) == "completed" or kind in _MERGED else "close"
         got = _cleanup(pr, action=action)
         return got
-    if kind in _UPDATED:
-        log_ok(logger, "azure classify Ignore", eventType=kind, reason="action=update")
-        return Ignore("action=update")
+    if kind in _UPDATED or kind in _REVIEWERS:
+        assigned = _azure_reviewer_assigned(
+            payload,
+            pr,
+            bot_user_id=bot_user_id,
+            mention_names=mention_names or [],
+            event_kind=kind,
+        )
+        if assigned:
+            return _review_from_pr(pr, payload, kind="review", explicit=True, skip_drafts=False)
+        if kind in _UPDATED:
+            log_ok(logger, "azure classify Ignore", eventType=kind, reason="action=update")
+            return Ignore("action=update")
+        log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewers unchanged")
+        return Ignore("reviewers unchanged")
     if kind in _CREATED:
+        if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names or []):
+            log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewer not assigned")
+            return Ignore("reviewer not assigned")
         return _review_from_pr(pr, payload, kind="open", explicit=False, skip_drafts=skip_drafts)
     if kind in _COMMENTED:
         return _review_from_comment(
@@ -437,14 +528,14 @@ def _review_from_comment(
         author or "-",
         remainder[:80],
     )
-    if action == "run" and command == "ask" and not remainder:
+    user_text = user_comment_text(note_text, mention_names)
+    if command == "ask" and not remainder and not user_text:
         log_ok(logger, "azure classify Ignore", reason="empty /ask", author=author or "-")
         return Ignore("empty /ask")
     if not pr or _pr_id(pr) is None:
         log_fail(logger, "azure classify ReviewTrigger", reason="missing pull request on comment", command=command or action)
         return Ignore("missing pull request on comment")
-    kind = "usage" if action == "usage" else command
-    user_text = user_comment_text(note_text, mention_names) if action == "run" else remainder
+    kind = command
     return _review_from_pr(
         pr,
         payload,

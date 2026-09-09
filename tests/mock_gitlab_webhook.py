@@ -19,7 +19,9 @@ def payload(event: str, project_id: int, mr_iid: int, note: str = "") -> dict:
                 "target_branch": "main",
                 "draft": False,
                 "url": f"http://gitlab.example/{project_id}/-/merge_requests/{mr_iid}",
+                "reviewer_ids": [1],
             },
+            "reviewers": [{"id": 1, "username": "creasy"}],
         }
     if event == "mr-update":
         return {
@@ -53,7 +55,7 @@ def payload(event: str, project_id: int, mr_iid: int, note: str = "") -> dict:
             },
         }
     if event == "mr-comment":
-        body = note or "@creasy /review"
+        body = note or "@creasy /ask why"
         return {
             "object_kind": "note",
             "user": {"id": 1, "username": "dev"},
@@ -75,7 +77,7 @@ def main() -> None:
     parser.add_argument("--event", default="mr-open", choices=["mr-open", "mr-update", "mr-close", "mr-merge", "mr-comment"])
     parser.add_argument("--project-id", type=int, default=84969716)
     parser.add_argument("--mr-iid", type=int, default=30)
-    parser.add_argument("--note", default="@creasy /review")
+    parser.add_argument("--note", default="@creasy /ask why")
     args = parser.parse_args()
     body = json.dumps(payload(args.event, args.project_id, args.mr_iid, args.note)).encode()
     req = urllib.request.Request(args.url, data=body, method="POST")

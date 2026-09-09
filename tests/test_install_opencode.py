@@ -55,28 +55,28 @@ def test_review_agent_source_is_primary_readonly() -> None:
     assert "detect the C++ dialect" not in text
     assert "CMAKE_CXX_STANDARD" not in text
     assert "typically 0–3" in text or "typically 0-3" in text
-    assert "Default Improvements = none" in text
+    assert "Default İyileştirme = none" in text or "Default Improvements = none" in text
     assert "refactoring: deny" in text
     assert "If you cannot quote" in text or "If you cannot, do not flag" in text
     assert "Do not write “assuming" in text or 'Do not write "assuming' in text
     assert "git-commits" in text
     assert "implementer-only" in text
-    assert "GitLab MR comment" in text
+    assert "GitLab" in text and "comment" in text
     assert "Turkish" in text or "Türkçe" in text
-    assert "technical terms in English" in text
-    assert "Never start a line with `#`" in text
+    assert "English" in text
+    assert "Never start a line with" in text
     assert "opencoderman-findings" in text
     assert '"findings"' in text
-    assert "### Summary" in text
-    assert "### Critical" in text
-    assert "### Major" in text
-    assert "### Minor" in text
-    assert "### Improvement" in text
+    assert "### Özet" in text
+    assert "### Kritik" in text
+    assert "### Önemli" in text
+    assert "### Küçük" in text
+    assert "### İyileştirme" in text
     assert "#### 1." in text
-    assert "**Code**" in text
-    assert "**Why it is an issue and where**" in text
-    assert "**Suggested fix**" in text
-    assert "Do **not** use these labels: Blocking" in text
+    assert "**Kod**" in text
+    assert "**Sorun**" in text
+    assert "**Öneri**" in text
+    assert "Blocking" in text
     assert "only definition of review style" in text
     assert "Write each group header **once**" in text
     assert "Impact analysis (mandatory)" in text

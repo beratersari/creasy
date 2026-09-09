@@ -29,9 +29,8 @@ EVENTS = [
     {"id": "open", "label": "MR open", "kind": "auto"},
     {"id": "update", "label": "MR update (ignored)", "kind": "auto"},
     {"id": "reopen", "label": "MR reopen (ignored)", "kind": "auto"},
-    {"id": "review", "label": "@creasy /review", "kind": "note"},
+    {"id": "review", "label": "Assign reviewer", "kind": "auto"},
     {"id": "ask", "label": "@creasy /ask", "kind": "note"},
-    {"id": "reset", "label": "@creasy /reset", "kind": "note"},
     {"id": "close", "label": "MR close", "kind": "cleanup"},
     {"id": "merge", "label": "MR merge", "kind": "cleanup"},
 ]
@@ -63,7 +62,12 @@ def build_payload(
         "last_commit": last_commit,
     }
     if event == "open":
-        return {"object_kind": "merge_request", "object_attributes": attrs}
+        attrs.setdefault("reviewer_ids", [user_id])
+        return {
+            "object_kind": "merge_request",
+            "object_attributes": attrs,
+            "reviewers": [{"id": user_id, "username": "creasy"}],
+        }
     if event == "reopen":
         attrs["action"] = "reopen"
         return {"object_kind": "merge_request", "object_attributes": attrs}
@@ -82,25 +86,25 @@ def build_payload(
             },
         }
     if event == "review":
-        body = note.strip() or "@creasy /review"
-        if "/review" not in body:
-            body = "@creasy /review " + body
-        elif "@" not in body:
-            body = "@creasy " + body
-        return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
+        attrs["action"] = "update"
+        attrs["reviewer_ids"] = [user_id]
+        return {
+            "object_kind": "merge_request",
+            "user": {"id": 1, "username": "dev"},
+            "object_attributes": attrs,
+            "changes": {
+                "reviewers": {
+                    "previous": [{"id": user_id, "username": "creasy", "re_requested": False}],
+                    "current": [{"id": user_id, "username": "creasy", "re_requested": True}],
+                }
+            },
+        }
     if event == "ask":
         question = note.strip() or "what is the main risk?"
         if "/ask" in question:
             body = question if "@" in question else "@creasy " + question
         else:
             body = f"@creasy /ask {question}"
-        return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
-    if event == "reset":
-        body = note.strip() or "@creasy /reset"
-        if "/reset" not in body:
-            body = "@creasy /reset"
-        elif "@" not in body:
-            body = "@creasy " + body
         return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
     raise ValueError(f"unknown event {event}")
 

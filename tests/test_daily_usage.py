@@ -42,8 +42,8 @@ def _webhook_app(tmp_config):
     return app, manager, runner
 
 
-def test_review_with_a_period_starts_a_job(tmp_config):
-    """Someone types `/review.` and expects a review, not silence."""
+def test_leftover_review_command_is_ignored(tmp_config):
+    """Old `@name /review` comments do not start a job."""
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
@@ -53,10 +53,24 @@ def test_review_with_a_period_starts_a_job(tmp_config):
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["status"] == "accepted", body
-    job = manager.store.get(body["job_id"])
+    assert body["status"] == "ignored", body
+    assert manager.store.list_all() == []
+    manager.shutdown()
+
+
+def test_question_written_before_ask_starts_a_job(tmp_config):
+    app, manager, runner = _webhook_app(tmp_config)
+    client = TestClient(app)
+    res = client.post(
+        "/webhook",
+        json=note_payload("This overflow looks wrong.\n@creasy /ask"),
+        headers={"X-Gitlab-Token": "secret"},
+    )
+    assert res.json()["status"] == "accepted", res.json()
+    job = manager.store.get(res.json()["job_id"])
     assert job is not None
-    assert job.trigger == "review"
+    assert job.trigger == "ask"
+    assert "overflow" in job.comment_text
     runner.release.set()
     manager.shutdown()
 
@@ -83,11 +97,11 @@ def test_editing_a_review_comment_does_not_start_another_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     headers = {"X-Gitlab-Token": "secret"}
-    created = note_payload("@creasy /review focus on auth")
+    created = note_payload("@creasy /ask focus on auth")
     created["object_attributes"]["action"] = "create"
     first = client.post("/webhook", json=created, headers=headers)
     assert first.json()["status"] == "accepted"
-    edited = note_payload("@creasy /review focus on auth and tests")
+    edited = note_payload("@creasy /ask focus on auth and tests")
     edited["object_attributes"]["action"] = "update"
     second = client.post("/webhook", json=edited, headers=headers)
     assert second.json()["status"] == "ignored"
@@ -146,12 +160,12 @@ def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: P
 
 
 def test_edited_note_classify_is_ignore_not_review():
-    payload = note_payload("@creasy /reset")
+    payload = note_payload("@creasy /ask why")
     payload["object_attributes"]["action"] = "update"
     got = classify_webhook(payload, mention_names=["creasy"])
     assert isinstance(got, Ignore)
-    create = note_payload("@creasy /reset")
+    create = note_payload("@creasy /ask why")
     create["object_attributes"]["action"] = "create"
     got2 = classify_webhook(create, mention_names=["creasy"])
     assert isinstance(got2, ReviewTrigger)
-    assert got2.kind == "reset"
+    assert got2.kind == "ask"

@@ -13,6 +13,12 @@ from conftest import FakeRunner
 from test_azure_events import PROJECT, REPO, _pr
 
 
+def _pr_with_bot(**extra):
+    pr = _pr(**extra)
+    pr["reviewers"] = [{"id": "bot-id", "displayName": "creasy"}]
+    return pr
+
+
 def _app(tmp_config, *, azure=True):
     tmp_config.review_mention = tmp_config.review_mention or "creasy"
     if azure:
@@ -50,7 +56,9 @@ def test_azure_route_does_not_change_gitlab_webhook(tmp_config):
             "target_branch": "main",
             "draft": False,
             "title": "Fix login timeout",
+            "reviewer_ids": [99],
         },
+        "reviewers": [{"id": 99, "username": "creasy"}],
     }
     res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
@@ -81,7 +89,7 @@ def test_azure_created_accepted(tmp_config):
     client = TestClient(app)
     res = client.post(
         "/webhook/azure",
-        json={"eventType": "git.pullrequest.created", "resource": _pr()},
+        json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
         headers=_auth(),
     )
     assert res.status_code == 200
@@ -108,7 +116,7 @@ def test_azure_mention_comment_is_accepted(tmp_config):
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {
-                "comment": {"content": "@creasy /review check the lock", "author": {"id": "user-1"}},
+                "comment": {"content": "@creasy /ask check the lock", "author": {"id": "user-1"}},
                 "pullRequest": _pr(pullRequestId=14),
             },
         },
@@ -119,7 +127,7 @@ def test_azure_mention_comment_is_accepted(tmp_config):
     job = manager.store.get(res.json()["job_id"])
     assert job is not None
     assert job.provider == "azure"
-    assert job.trigger == "review"
+    assert job.trigger == "ask"
     assert job.explicit is True
     runner.release.set()
     manager.shutdown()
@@ -156,7 +164,7 @@ def test_gitlab_secret_does_not_lock_azure_route(tmp_config):
     client = TestClient(app)
     res = client.post(
         "/webhook/azure",
-        json={"eventType": "git.pullrequest.created", "resource": _pr(pullRequestId=3)},
+        json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot(pullRequestId=3)},
     )
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
@@ -180,6 +188,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
     tmp_config.azure_url = "https://tfs02.company.com.tr"
     tmp_config.azure_token = "pat-test"
     tmp_config.azure_webhook_password = ""
+    tmp_config.review_mention = "creasy"
     runner = FakeRunner()
     manager = Manager(tmp_config, runner)
     manager.ready = True
@@ -206,7 +215,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
     payload = {
         "eventType": "git.pullrequest.commented",
         "resource": {
-            "comment": {"content": "@creasy /review", "author": {"id": "bot-id"}},
+            "comment": {"content": "@creasy /ask why", "author": {"id": "bot-id"}},
             "pullRequest": _pr(
                 pullRequestId=9,
                 url="https://tfs02.company.com.tr/tfs/ExampleCollection/App/_git/app/pullrequest/9",

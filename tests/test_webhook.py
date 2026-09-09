@@ -25,36 +25,54 @@ def _app(tmp_config):
     return app, manager, runner
 
 
-def test_note_ignored_until_bot_user_resolves(tmp_config):
+def test_ask_runs_when_bot_id_unknown_if_mention_alias_is_set(tmp_config):
     app, manager, runner = _app(tmp_config)
     app.state.bot_user_id = None
-
-    class Gitlab:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def current_user_id(self):
-            self.calls += 1
-            return 7 if self.calls > 1 else None
-
-    app.state.gitlab = Gitlab()
+    app.state.gitlab = None
     client = TestClient(app)
-    headers = {"X-Gitlab-Token": "secret"}
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask why this lock?"},
         "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    first = client.post("/webhook", json=note, headers=headers)
-    assert first.status_code == 200
-    assert first.json()["status"] == "ignored"
-    assert first.json()["reason"] == "bot user unknown"
-    assert manager.store.list_all() == []
-    second = client.post("/webhook", json=note, headers=headers)
-    assert second.json()["status"] == "accepted"
-    assert app.state.bot_user_id == 7
+    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.trigger == "ask"
     runner.release.set()
+    manager.shutdown()
+
+
+def test_note_ignored_when_bot_and_mention_unknown(tmp_config):
+    tmp_config.review_mention = ""
+    app, manager, runner = _app(tmp_config)
+    tmp_config.review_mention = ""
+    app.state.bot_user_id = None
+    app.state.bot_mention_names = []
+
+    class Gitlab:
+        def current_user_id(self):
+            return None
+
+        def current_user(self):
+            return None
+
+    app.state.gitlab = Gitlab()
+    client = TestClient(app)
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask why"},
+        "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
+    }
+    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ignored"
+    assert res.json()["reason"] == "bot user unknown"
+    assert manager.store.list_all() == []
     manager.shutdown()
 
 
@@ -78,7 +96,9 @@ def test_open_accepted(tmp_config):
             "target_branch": "main",
             "draft": False,
             "title": "Fix login timeout",
+            "reviewer_ids": [99],
         },
+        "reviewers": [{"id": 99, "username": "creasy"}],
     }
     res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
@@ -116,22 +136,19 @@ def test_update_with_new_commits_ignored(tmp_config):
     manager.shutdown()
 
 
-def test_command_without_mention_is_usage(tmp_config):
+def test_command_without_mention_is_ignored(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "/ask"},
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
-    assert res.json()["status"] == "accepted"
-    job = manager.store.get(res.json()["job_id"])
-    assert job is not None
-    assert job.trigger == "usage"
-    runner.release.set()
+    assert res.json()["status"] == "ignored"
+    assert manager.store.list_all() == []
     manager.shutdown()
 
 
@@ -143,7 +160,7 @@ def test_comment_job_keeps_discussion_id(tmp_config):
         "user": {"id": 1},
         "object_attributes": {
             "noteable_type": "MergeRequest",
-            "note": "@creasy /review",
+            "note": "@creasy /ask why this lock?",
             "discussion_id": "disc_live",
         },
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
@@ -163,7 +180,7 @@ def test_mention_comment_is_accepted(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review check the lock"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask check the lock"},
         "merge_request": {
             "iid": 8,
             "target_project_id": 5,
@@ -177,7 +194,7 @@ def test_mention_comment_is_accepted(tmp_config):
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
     assert job is not None
-    assert job.trigger == "review"
+    assert job.trigger == "ask"
     assert job.explicit is True
     runner.release.set()
     manager.shutdown()
@@ -190,7 +207,7 @@ def test_comment_queued_while_busy(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask first?"},
         "merge_request": {"iid": 2, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers)
@@ -201,15 +218,9 @@ def test_comment_queued_while_busy(tmp_config):
     }
     queued = client.post("/webhook", json=second, headers=headers)
     assert queued.json()["status"] == "queued"
-    reset = {
-        **note,
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /reset"},
-    }
-    wiped = client.post("/webhook", json=reset, headers=headers)
-    assert wiped.json()["status"] == "queued"
-    job = manager.store.get(wiped.json()["job_id"])
+    job = manager.store.get(queued.json()["job_id"])
     assert job is not None
-    assert job.trigger == "reset"
+    assert job.trigger == "ask"
     runner.release.set()
     manager.shutdown()
 
@@ -221,7 +232,7 @@ def test_dashboard_cancel_queued(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask first?"},
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers).json()

@@ -20,13 +20,12 @@ def test_open_and_update_payloads():
 
 
 def test_review_and_ask_notes():
-    review = build_payload("review", project_id=1, mr_iid=2, note="focus on auth")
-    assert review["object_kind"] == "note"
-    assert review["object_attributes"]["note"].startswith("@creasy /review")
+    review = build_payload("review", project_id=1, mr_iid=2, user_id=99)
+    assert review["object_kind"] == "merge_request"
+    assert review["object_attributes"]["action"] == "update"
+    assert review["changes"]["reviewers"]["current"][0]["username"] == "creasy"
     ask = build_payload("ask", project_id=1, mr_iid=2, note="why this lock?")
     assert ask["object_attributes"]["note"] == "@creasy /ask why this lock?"
-    reset = build_payload("reset", project_id=1, mr_iid=2)
-    assert reset["object_attributes"]["note"] == "@creasy /reset"
 
 
 def test_unknown_event_raises():
