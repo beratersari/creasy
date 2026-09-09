@@ -64,7 +64,10 @@ These look like bugs. They are not.
 - Classify in `creasy.gitlab.events`. Do not re-parse payloads in the
   worker.
 - MR `open` → enqueue review. `update` (new commits) and `reopen` do
-  not. `close` / `merge` → cancel jobs and delete the clone.
+  not, except assigning the token user (`.env` `GITLAB_TOKEN` /
+  `AZURE_DEVOPS_PAT`) as a reviewer, which is an explicit review.
+  The bot assigning itself is ignored so `add_reviewer` cannot loop.
+  `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
   `REVIEW_MENTION` alias) **and** a command in the same comment.
   First command token wins. `@name /review` → full review.

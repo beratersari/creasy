@@ -60,6 +60,48 @@ def test_pr_created_stores_collection_from_containers() -> None:
     assert got.azure_collection == "https://tfs02.company.com.tr/tfs/ExampleCollection"
 
 
+def test_assigning_bot_as_reviewer_starts_review():
+    pr = _pr()
+    pr["reviewers"] = [{"id": "bot-guid", "displayName": "Creasy"}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {"text": "Jamal Hartnett added Creasy as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["Creasy"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+    assert got.explicit is True
+
+
+def test_bot_assigning_itself_as_reviewer_is_ignored():
+    pr = _pr()
+    pr["reviewers"] = [{"id": "bot-guid", "displayName": "Creasy"}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {"text": "Creasy added Creasy as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["Creasy"])
+    assert isinstance(got, Ignore)
+
+
+def test_reviewer_vote_update_is_ignored():
+    pr = _pr()
+    pr["reviewers"] = [{"id": "bot-guid", "displayName": "Creasy", "vote": 10}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewerVoteNotification",
+        "message": {"text": "Jamal Hartnett voted on the pull request"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["Creasy"])
+    assert isinstance(got, Ignore)
+    assert got.reason == "action=update"
+
+
 def test_pr_updated_is_ignored():
     got = classify_azure_webhook({"eventType": "git.pullrequest.updated", "resource": _pr()})
     assert isinstance(got, Ignore)

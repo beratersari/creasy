@@ -57,6 +57,47 @@ def test_mr_title_comes_from_webhook():
     assert ask.title == "Fix login timeout"
 
 
+def test_assigning_bot_as_reviewer_starts_review():
+    payload = mr_payload("update", title="Fix login timeout")
+    payload["user"] = {"id": 7}
+    payload["changes"] = {
+        "reviewers": {
+            "previous": [{"id": 3, "username": "dev"}],
+            "current": [{"id": 3, "username": "dev"}, {"id": 99, "username": "creasy"}],
+        }
+    }
+    got = classify_webhook(payload, bot_user_id=99)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+    assert got.explicit is True
+    assert got.title == "Fix login timeout"
+
+
+def test_bot_assigning_itself_as_reviewer_is_ignored():
+    payload = mr_payload("update")
+    payload["user"] = {"id": 99}
+    payload["changes"] = {
+        "reviewer_ids": {"previous": [], "current": [99]},
+    }
+    got = classify_webhook(payload, bot_user_id=99)
+    assert isinstance(got, Ignore)
+    assert "self" in got.reason
+
+
+def test_reviewer_rerequest_starts_review():
+    payload = mr_payload("update")
+    payload["user"] = {"id": 7}
+    payload["changes"] = {
+        "reviewers": [
+            [{"id": 99, "username": "creasy", "re_requested": False}],
+            [{"id": 99, "username": "creasy", "re_requested": True}],
+        ]
+    }
+    got = classify_webhook(payload, bot_user_id=99)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+
+
 def test_update_with_oldrev_ignored():
     got = classify_webhook(mr_payload("update", oldrev="abc123"))
     assert isinstance(got, Ignore)

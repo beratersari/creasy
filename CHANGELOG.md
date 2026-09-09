@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+### Added
+
+- Assigning the `.env` token user as a GitLab or Azure reviewer
+  starts a review. Creasy assigning itself does not.
+
 ## 0.7.0 — 2026-09-09
 
 Operators can change the review model from the dashboard. Comments

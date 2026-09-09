@@ -138,6 +138,7 @@ Same commands on a GitLab merge request or an Azure pull request.
 | Event | Action |
 |---|---|
 | MR / PR open (created) | Enqueue a review |
+| Token user assigned as reviewer | Enqueue a review (same as `@<bot> /review`) |
 | MR / PR update (new commits) / reopen | Ignored — comment `@<bot> /review` to run again |
 | Comment `@<bot> /review …` | Full review job (queued FIFO if one is running). The token user is assigned as a reviewer |
 | Comment `@<bot> /ask …` | Follow-up on the same `ses_*` |

@@ -146,7 +146,7 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 | GitLab event | Action |
 |---|---|
 | `object_kind=merge_request`, `action=open` | Enqueue review |
-| `object_kind=merge_request`, `action` in `update`, `reopen` | Ignore (comment `/review` to run again) |
+| `object_kind=merge_request`, `action` in `update`, `reopen` | Ignore unless the token user was added or re-requested as reviewer |
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
 | `object_kind=note`, `noteable_type=MergeRequest`, `@name /review` | Enqueue full review (resume `ses_*` if stored) |
 | `object_kind=note`, `noteable_type=MergeRequest`, `@name /ask` + question text | Enqueue follow-up on the same `ses_*` |

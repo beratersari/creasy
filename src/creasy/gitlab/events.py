@@ -102,7 +102,11 @@ def classify_webhook(
     else:
         kind = str(payload.get("object_kind") or "").strip().lower()
         if kind == "merge_request":
-            result = _classify_merge_request(payload, skip_drafts=skip_drafts)
+            result = _classify_merge_request(
+                payload,
+                skip_drafts=skip_drafts,
+                bot_user_id=bot_user_id,
+            )
         elif kind == "note":
             result = _classify_note(
                 payload,
@@ -144,7 +148,12 @@ def _log_classified(result: Classified, payload: dict[str, Any]) -> None:
     )
 
 
-def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Classified:
+def _classify_merge_request(
+    payload: dict[str, Any],
+    *,
+    skip_drafts: bool,
+    bot_user_id: Optional[int],
+) -> Classified:
     attrs = _attrs(payload)
     action = str(attrs.get("action") or "").strip().lower()
     ids = _project_and_mr(payload)
@@ -153,6 +162,8 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
     project_id, mr_iid = ids
     if action in {"close", "merge"}:
         return CleanupTrigger(project_id=project_id, mr_iid=mr_iid, action=action)
+    if action == "update":
+        return _classify_reviewer_assigned(payload, attrs, skip_drafts=skip_drafts, bot_user_id=bot_user_id)
     if action != "open":
         return Ignore(f"action={action or 'missing'}")
     draft = _is_draft(payload, attrs)
@@ -171,6 +182,94 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
         title=str(attrs.get("title") or ""),
         draft=draft,
         explicit=False,
+    )
+
+
+def _reviewer_ids(raw: Any) -> set[int]:
+    ids: set[int] = set()
+    if not isinstance(raw, list):
+        return ids
+    for item in raw:
+        value: Any = item.get("id") if isinstance(item, dict) else item
+        try:
+            if value is not None and str(value).strip() != "":
+                ids.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def _reviewer_sides(changes: dict[str, Any]) -> tuple[set[int], set[int], list[dict[str, Any]]]:
+    blob = changes.get("reviewers") if "reviewers" in changes else changes.get("reviewer_ids")
+    if isinstance(blob, dict):
+        previous = blob.get("previous")
+        current = blob.get("current")
+        curr_rows = current if isinstance(current, list) else []
+        return _reviewer_ids(previous), _reviewer_ids(current), [r for r in curr_rows if isinstance(r, dict)]
+    if isinstance(blob, list) and len(blob) >= 2:
+        previous, current = blob[0], blob[1]
+        curr_rows = current if isinstance(current, list) else []
+        return _reviewer_ids(previous), _reviewer_ids(current), [r for r in curr_rows if isinstance(r, dict)]
+    return set(), set(), []
+
+
+def _gitlab_actor_id(payload: dict[str, Any]) -> Optional[int]:
+    user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+    try:
+        return int(user["id"]) if user.get("id") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _bot_rerequested(current_rows: list[dict[str, Any]], bot_user_id: int) -> bool:
+    for row in current_rows:
+        try:
+            if int(row.get("id")) != bot_user_id:
+                continue
+        except (TypeError, ValueError):
+            continue
+        if row.get("re_requested") is True:
+            return True
+    return False
+
+
+def _classify_reviewer_assigned(
+    payload: dict[str, Any],
+    attrs: dict[str, Any],
+    *,
+    skip_drafts: bool,
+    bot_user_id: Optional[int],
+) -> Classified:
+    if bot_user_id is None:
+        return Ignore("action=update")
+    changes = payload.get("changes") if isinstance(payload.get("changes"), dict) else {}
+    previous, current, current_rows = _reviewer_sides(changes)
+    added = bot_user_id in (current - previous)
+    rerequested = _bot_rerequested(current_rows, bot_user_id)
+    if not added and not rerequested:
+        return Ignore("action=update")
+    actor = _gitlab_actor_id(payload)
+    if actor is not None and actor == bot_user_id:
+        return Ignore("bot assigned self as reviewer")
+    ids = _project_and_mr(payload)
+    if ids is None:
+        return Ignore("missing project_id or mr_iid")
+    project_id, mr_iid = ids
+    draft = _is_draft(payload, attrs)
+    log_ok(logger, "gitlab classify reviewer assigned", project=project_id, mr=mr_iid, bot=bot_user_id)
+    return ReviewTrigger(
+        kind="review",
+        project_id=project_id,
+        mr_iid=mr_iid,
+        source_branch=str(attrs.get("source_branch") or ""),
+        target_branch=str(attrs.get("target_branch") or ""),
+        sha=str((attrs.get("last_commit") or {}).get("id") or "")
+        if isinstance(attrs.get("last_commit"), dict)
+        else "",
+        web_url=str(attrs.get("url") or ""),
+        title=str(attrs.get("title") or ""),
+        draft=draft,
+        explicit=True,
     )
 
 
