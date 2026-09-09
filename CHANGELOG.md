@@ -9,6 +9,12 @@ section in the same change.
 
 ## Unreleased
 
+## 0.7.0 — 2026-09-09
+
+Operators can change the review model from the dashboard. Comments
+run only as `@name /review`, `@name /ask`, or `@name /reset`, and
+the answer lands on the same thread as the request.
+
 ### Added
 
 - Dashboard Settings page to change the OpenCode model and turn
