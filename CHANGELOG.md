@@ -9,6 +9,12 @@ section in the same change.
 
 ## Unreleased
 
+## 0.8.0 — 2026-09-10
+
+A full review starts when the token user is assigned as a reviewer.
+Comments keep only `@name /ask`. `/review`, `/reset`, and usage
+notes are gone.
+
 ### Added
 
 - Assigning the `.env` token user (or a `REVIEW_MENTION` alias) as
