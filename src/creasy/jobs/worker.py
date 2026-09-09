@@ -24,8 +24,10 @@ from creasy.opencode.session import (
     turn_assistant_text,
 )
 from creasy.jobs.store import JobStore
+from creasy.review.comment_range import format_code_comment_prompt
 from creasy.review.findings import Finding, split_findings
 from creasy.review.format import format_cancelled, format_failure, format_success
+from creasy.review.mention import collect_names, parse_mention_aliases, usage_note
 from creasy.review.position import build_position_variants, format_discussion
 from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
@@ -98,6 +100,28 @@ class OpenCodeRunner:
             return nullcontext()
         return bind(getattr(job, "azure_collection", "") or "", job.web_url or "")
 
+    def _ensure_reviewer(self, job: JobRecord) -> None:
+        """Assign the token user as a reviewer. A failed assign does not fail the job."""
+        try:
+            if self._is_azure(job):
+                if self.azure is None:
+                    return
+                uid = self.azure.current_user_id()
+                add = getattr(self.azure, "add_reviewer", None)
+                if not uid or not callable(add):
+                    return
+                if add(job.azure_project, job.azure_repo, job.mr_iid, uid):
+                    log_ok(logger, "assign reviewer", provider="azure", pr=job.mr_iid, user=uid)
+                return
+            uid = self.gitlab.current_user_id()
+            add = getattr(self.gitlab, "add_reviewer", None)
+            if uid is None or not callable(add):
+                return
+            if add(job.project_id, job.mr_iid, uid):
+                log_ok(logger, "assign reviewer", provider="gitlab", mr=job.mr_iid, user=uid)
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "assign reviewer", job=job.job_id, err=exc)
+
     def _remember_title(self, job: JobRecord, title: str) -> None:
         text = (title or "").strip()
         if not text or job.mr_title == text:
@@ -158,6 +182,8 @@ class OpenCodeRunner:
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
         if job.trigger == "reset":
             return self._run_reset(job, should_stop)
+        if job.trigger == "usage":
+            return self._run_usage(job, should_stop)
         result = RunResult()
         handle: Optional[ServeHandle] = None
         client: Optional[OpenCodeClient] = None
@@ -192,6 +218,7 @@ class OpenCodeRunner:
                 target=mr.target_branch or "-",
             )
             self._remember_title(job, mr.title)
+            self._ensure_reviewer(job)
             self._note_diag(
                 job,
                 "load",
@@ -290,7 +317,7 @@ class OpenCodeRunner:
                     client.post_message(
                         session_id,
                         turn,
-                        model=self.config.opencode_model,
+                        model=job.model or self.config.opencode_model,
                         agent=self.config.opencode_agent,
                     )
                     original_posted = True
@@ -414,6 +441,41 @@ class OpenCodeRunner:
                 apply(getattr(job, "azure_collection", "") or "", job.web_url or "")
             return self.azure.get_pull_request(job.azure_project, job.azure_repo, job.mr_iid)
         return self.gitlab.get_merge_request(job.project_id, job.mr_iid)
+
+    def _mention_names_for_note(self, job: JobRecord) -> list[str]:
+        extras = parse_mention_aliases(getattr(self.config, "review_mention", "") or "")
+        live: list[str] = []
+        if self._is_azure(job) and self.azure is not None:
+            current = getattr(self.azure, "current_user", None)
+        else:
+            current = getattr(self.gitlab, "current_user", None)
+        if callable(current):
+            user = current()
+            if isinstance(user, dict):
+                live = list(user.get("names") or [])
+        return collect_names(extras, live)
+
+    def _run_usage(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
+        """Tell the commenter the @mention + command pair. No OpenCode."""
+        result = RunResult()
+        if should_stop():
+            result.cancelled = True
+            log_ok(logger, "usage cancelled", job=job.job_id, stage="start")
+            return result
+        azure_cm = self._bind_azure(job)
+        azure_cm.__enter__()
+        try:
+            body = usage_note(self._mention_names_for_note(job))
+            self._post_result_body(job, body)
+            result.posted = True
+            result.text = body
+            log_ok(logger, "usage note", provider=job.provider or "gitlab", job=job.job_id, mr=job.mr_iid)
+        except Exception as exc:  # noqa: BLE001
+            result.error = f"usage note failed: {exc}"
+            log_fail(logger, "usage note", job=job.job_id, err=exc)
+        finally:
+            azure_cm.__exit__(None, None, None)
+        return result
 
     def _run_reset(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
         """Delete PAT-authored notes/threads. No OpenCode, no clone, no MR note."""
@@ -542,15 +604,29 @@ class OpenCodeRunner:
         if job.trigger == "ask":
             current = workspace.last_sha or mr.sha
             sha_changed = bool(previous_sha and current and previous_sha != current)
-            return build_ask_prompt(
+            question = format_code_comment_prompt(
                 job.comment_text,
+                path=getattr(job, "comment_path", "") or "",
+                side=getattr(job, "comment_side", "") or "",
+                start_line=int(getattr(job, "comment_start_line", 0) or 0),
+                end_line=int(getattr(job, "comment_end_line", 0) or 0),
+            )
+            return build_ask_prompt(
+                question,
                 mr=mr,
                 index=index,
                 sha_changed=sha_changed,
                 previous_sha=previous_sha,
                 include_context=created_new or not workspace.session_id,
             )
-        return build_review_prompt(mr, index, extra_notes=job.comment_text)
+        extra = format_code_comment_prompt(
+            job.comment_text,
+            path=getattr(job, "comment_path", "") or "",
+            side=getattr(job, "comment_side", "") or "",
+            start_line=int(getattr(job, "comment_start_line", 0) or 0),
+            end_line=int(getattr(job, "comment_end_line", 0) or 0),
+        )
+        return build_review_prompt(mr, index, extra_notes=extra)
 
     def _ensure_workspace(
         self,
@@ -614,6 +690,54 @@ class OpenCodeRunner:
         record.last_job_id = job.job_id
         return self.workspaces.save(record)
 
+    def _post_result_body(self, job: JobRecord, body: str) -> str:
+        """Reply on the request thread when we have one; else post the overview."""
+        discussion_id = str(getattr(job, "discussion_id", "") or "").strip()
+        if self._is_azure(job):
+            if self.azure is None:
+                raise AzureError("azure not configured")
+            if discussion_id:
+                reply = getattr(self.azure, "reply_to_thread", None)
+                if callable(reply):
+                    try:
+                        reply(
+                            job.azure_project,
+                            job.azure_repo,
+                            job.mr_iid,
+                            discussion_id,
+                            body,
+                            parent_comment_id=int(getattr(job, "parent_comment_id", 0) or 0),
+                        )
+                        return "thread"
+                    except Exception as exc:  # noqa: BLE001
+                        log_fail(
+                            logger,
+                            "reply request thread",
+                            provider="azure",
+                            job=job.job_id,
+                            discussion=discussion_id,
+                            err=exc,
+                        )
+            self.azure.post_overview(job.azure_project, job.azure_repo, job.mr_iid, body)
+            return "overview"
+        if discussion_id:
+            reply = getattr(self.gitlab, "reply_to_discussion", None)
+            if callable(reply):
+                try:
+                    reply(job.project_id, job.mr_iid, discussion_id, body)
+                    return "thread"
+                except Exception as exc:  # noqa: BLE001
+                    log_fail(
+                        logger,
+                        "reply request thread",
+                        provider="gitlab",
+                        job=job.job_id,
+                        discussion=discussion_id,
+                        err=exc,
+                    )
+        self.gitlab.post_note(job.project_id, job.mr_iid, body)
+        return "overview"
+
     def _post_note(
         self,
         job: JobRecord,
@@ -626,7 +750,7 @@ class OpenCodeRunner:
         shadow = job.model_copy(update={
             "text": result.text,
             "error_message": result.error or None,
-            "model": self.config.opencode_model,
+            "model": job.model or self.config.opencode_model,
         })
         if result.cancelled:
             body = format_cancelled(shadow)
@@ -635,12 +759,7 @@ class OpenCodeRunner:
         else:
             body = format_success(shadow)
         try:
-            if self._is_azure(job):
-                if self.azure is None:
-                    raise AzureError("azure not configured")
-                self.azure.post_overview(job.azure_project, job.azure_repo, job.mr_iid, body)
-            else:
-                self.gitlab.post_note(job.project_id, job.mr_iid, body)
+            via = self._post_result_body(job, body)
             result.posted = True
             log_ok(
                 logger,
@@ -648,6 +767,7 @@ class OpenCodeRunner:
                 provider=job.provider or "gitlab",
                 job=job.job_id,
                 mr=job.mr_iid,
+                via=via,
                 cancelled=result.cancelled,
                 error=bool(result.error),
             )

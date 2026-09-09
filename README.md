@@ -15,7 +15,7 @@ git clone --recurse-submodules https://github.com/beratersari/creasy.git
 git submodule update --init --recursive
 ```
 
-Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. Each `/review` or `/ask` is a separate job that can resume the same OpenCode session. `/reset` deletes that review’s comments posted by the token user and drops the stored session; it does not call OpenCode.
+Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. Each `@mention /review` or `@mention /ask` is a separate job that can resume the same OpenCode session. `@mention /reset` deletes that review’s comments posted by the token user and drops the stored session; it does not call OpenCode. A mention or a slash command alone posts a short usage note.
 
 ## Run
 
@@ -46,8 +46,11 @@ python -m creasy
 ```
 
 Dashboard: http://127.0.0.1:9001/jobs  
+Settings (model + timeout): http://127.0.0.1:9001/settings  
 Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` in `.env` so the
-dashboard shows a login page. Webhooks do not use those values.  
+dashboard shows a login page. Webhooks do not use those values.
+Model and timeout can be changed on Settings without editing `.env`;
+they persist in `DATA_DIR/settings.json` and apply to new jobs.  
 GitLab webhook: `POST /webhook`  
 Azure webhook: `POST /webhook/azure`  
 Health: `GET /health`
@@ -81,7 +84,7 @@ host, not only from your laptop.
    GitLab sends it as `X-Gitlab-Token`. A missing or wrong secret is **401**.
 4. Enable these triggers only:
    - **Merge request events** — `open` starts a review; `close` / `merge` cancel jobs and delete the clone; `update` and `reopen` are ignored.
-   - **Comments** — first command token wins: `/review`, `/ask <question>`, `/reset`.
+   - **Comments** — `@<bot> /review`, `@<bot> /ask <question>`, `@<bot> /reset`. First command token wins.
 5. If Creasy is plain HTTP or uses an intercept certificate, leave **Enable SSL verification** unchecked.
 6. Save, then **Test** with a Merge request hook. Creasy should answer immediately (`accepted`, `queued`, or `ignored`).
 
@@ -113,7 +116,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    | Service Hook event | What Creasy does |
    |---|---|
    | Pull request created | Enqueue a review |
-   | Pull request commented | `/review`, `/ask`, `/reset` (other comments ignored) |
+   | Pull request commented | `@<bot> /review`, `@<bot> /ask`, `@<bot> /reset` (lone mention or command gets a usage note) |
    | Pull request updated | Ignored for new commits; **abandoned** cancels jobs and deletes the clone |
    | Pull request merge attempted | Cancel jobs and delete the clone |
 
@@ -124,7 +127,9 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    - Resource: the repo to review, or all repos in the project.
 6. Save and **Test** the created-PR subscription. Startup logs `azure_enabled=True` when the URL and PAT are set.
 
-Empty `/ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `/review`, `/ask`, or `/reset` still runs.
+Empty `@<bot> /ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `@<bot> /review`, `@<bot> /ask`, or `@<bot> /reset` still runs.
+`@<bot>` is the GitLab username / Azure display name of the token user.
+Set `REVIEW_MENTION=creasy,Creasy Bot` to accept extra aliases.
 
 ## Triggers
 
@@ -133,11 +138,17 @@ Same commands on a GitLab merge request or an Azure pull request.
 | Event | Action |
 |---|---|
 | MR / PR open (created) | Enqueue a review |
-| MR / PR update (new commits) / reopen | Ignored — comment `/review` to run again |
-| Comment `/review …` | Full review job (queued FIFO if one is running) |
-| Comment `/ask …` | Follow-up on the same `ses_*` |
-| Comment `/reset` | Delete notes and threads authored by the token user; clear `ses_*`. No OpenCode |
+| MR / PR update (new commits) / reopen | Ignored — comment `@<bot> /review` to run again |
+| Comment `@<bot> /review …` | Full review job (queued FIFO if one is running). The token user is assigned as a reviewer |
+| Comment `@<bot> /ask …` | Follow-up on the same `ses_*` |
+| Comment `@<bot> /reset` | Delete notes and threads authored by the token user; clear `ses_*`. No OpenCode |
+| Comment `@<bot>` or `/review` `/ask` `/reset` alone | Usage note. No OpenCode |
 | MR close / merge, or Azure abandon / complete | Cancel jobs and delete the local clone |
+
+A comment job replies on that comment’s thread when GitLab or Azure
+sends a discussion/thread id. Auto-open reviews still post the
+Overview on the MR/PR. If the thread reply fails, Creasy posts the
+Overview instead.
 
 OpenCode is told the merge-base and `git diff --stat`. It is **not** given the full unified diff; it inspects the tree from the separation point itself.
 
@@ -150,8 +161,8 @@ pytest
 Replay a fake webhook (defaults to `test_project` MR !30):
 
 ```bash
-python tests/mock_gitlab_webhook.py --event mr-comment --note "/ask why this lock?"
+python tests/mock_gitlab_webhook.py --event mr-comment --note "@creasy /ask why this lock?"
 python tester/tester.py
 ```
 
-Tester UI: http://127.0.0.1:8090/ — pick a repo / MR and fire open, `/review`, `/ask`, `/reset`, close.
+Tester UI: http://127.0.0.1:8090/ — pick a repo / MR and fire open, `@creasy /review`, `@creasy /ask`, `@creasy /reset`, close.

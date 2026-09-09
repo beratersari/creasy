@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from creasy.azure.events import classify_azure_webhook
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
 from creasy.logging import get_logger, log_fail, log_ok
+from creasy.review.mention import collect_names, parse_mention_aliases
 
 router = APIRouter()
 logger = get_logger("webhook.azure")
@@ -28,6 +29,21 @@ def _azure_bot_id(request: Request) -> Optional[str]:
     if uid:
         request.app.state.azure_bot_user_id = uid
     return uid
+
+
+def _mention_names(request: Request) -> list[str]:
+    cfg = request.app.state.config
+    cached = getattr(request.app.state, "azure_bot_mention_names", None) or []
+    azure = getattr(request.app.state, "azure", None)
+    live: list[str] = []
+    current = getattr(azure, "current_user", None) if azure is not None else None
+    if callable(current):
+        user = current()
+        if isinstance(user, dict):
+            live = list(user.get("names") or [])
+            if live:
+                request.app.state.azure_bot_mention_names = live
+    return collect_names(parse_mention_aliases(getattr(cfg, "review_mention", "")), cached, live)
 
 
 def _verify_secret(request: Request) -> None:
@@ -79,6 +95,7 @@ async def webhook_azure(request: Request) -> JSONResponse:
         payload,
         skip_drafts=config.skip_draft_mrs,
         bot_user_id=bot_id,
+        mention_names=_mention_names(request),
     )
     logger.info(
         "azure webhook classified=%s eventType=%s",

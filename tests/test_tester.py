@@ -22,11 +22,11 @@ def test_open_and_update_payloads():
 def test_review_and_ask_notes():
     review = build_payload("review", project_id=1, mr_iid=2, note="focus on auth")
     assert review["object_kind"] == "note"
-    assert review["object_attributes"]["note"].startswith("/review")
+    assert review["object_attributes"]["note"].startswith("@creasy /review")
     ask = build_payload("ask", project_id=1, mr_iid=2, note="why this lock?")
-    assert ask["object_attributes"]["note"] == "/ask why this lock?"
+    assert ask["object_attributes"]["note"] == "@creasy /ask why this lock?"
     reset = build_payload("reset", project_id=1, mr_iid=2)
-    assert reset["object_attributes"]["note"] == "/reset"
+    assert reset["object_attributes"]["note"] == "@creasy /reset"
 
 
 def test_unknown_event_raises():

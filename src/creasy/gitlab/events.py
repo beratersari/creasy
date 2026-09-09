@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union
 
 from creasy.logging import get_logger, log_ok
+from creasy.review.comment_range import parse_gitlab_position
+from creasy.review.mention import comment_intent, first_slash_command, is_usage_note, user_comment_text
 
 logger = get_logger("gitlab.events")
 
-TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
-
-# Word-style match. Trailing . ! ? : ; ) are allowed so "/review." still runs.
-_CMD_RE = re.compile(r"(?:^|\s)/(review|ask|reset)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
-_CMD_TRAIL = ".,!?:;)"
+TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset", "usage"]
 
 
 @dataclass(frozen=True)
@@ -32,6 +29,12 @@ class ReviewTrigger:
     azure_project: str = ""
     azure_repo: str = ""
     azure_collection: str = ""
+    discussion_id: str = ""
+    parent_comment_id: int = 0
+    comment_path: str = ""
+    comment_side: str = ""
+    comment_start_line: int = 0
+    comment_end_line: int = 0
 
 
 @dataclass(frozen=True)
@@ -51,13 +54,7 @@ Classified = Union[ReviewTrigger, CleanupTrigger, Ignore]
 
 def first_command(body: str) -> Optional[tuple[str, str]]:
     """Return (command, remainder) for the first /review, /ask, or /reset token."""
-    text = body or ""
-    match = _CMD_RE.search(text)
-    if not match:
-        return None
-    command = match.group(1).lower()
-    remainder = text[match.end() :].lstrip(_CMD_TRAIL).strip()
-    return command, remainder
+    return first_slash_command(body)
 
 
 def _attrs(payload: dict[str, Any]) -> dict[str, Any]:
@@ -98,6 +95,7 @@ def classify_webhook(
     *,
     skip_drafts: bool = True,
     bot_user_id: Optional[int] = None,
+    mention_names: Optional[list[str]] = None,
 ) -> Classified:
     if not isinstance(payload, dict):
         result: Classified = Ignore("invalid payload")
@@ -106,7 +104,11 @@ def classify_webhook(
         if kind == "merge_request":
             result = _classify_merge_request(payload, skip_drafts=skip_drafts)
         elif kind == "note":
-            result = _classify_note(payload, bot_user_id=bot_user_id)
+            result = _classify_note(
+                payload,
+                bot_user_id=bot_user_id,
+                mention_names=mention_names or [],
+            )
         else:
             result = Ignore(f"object_kind={kind or 'missing'}")
     _log_classified(result, payload if isinstance(payload, dict) else {})
@@ -172,7 +174,12 @@ def _classify_merge_request(payload: dict[str, Any], *, skip_drafts: bool) -> Cl
     )
 
 
-def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Classified:
+def _classify_note(
+    payload: dict[str, Any],
+    *,
+    bot_user_id: Optional[int],
+    mention_names: list[str],
+) -> Classified:
     attrs = _attrs(payload)
     if str(attrs.get("noteable_type") or "") != "MergeRequest":
         return Ignore("note not on merge request")
@@ -188,18 +195,23 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
         user_id = None
     if bot_user_id is not None and user_id == bot_user_id:
         return Ignore("bot note")
-    parsed = first_command(str(attrs.get("note") or ""))
-    if parsed is None:
-        return Ignore("no /review, /ask, or /reset")
-    command, remainder = parsed
-    if command == "ask" and not remainder:
+    note_text = str(attrs.get("note") or "")
+    if is_usage_note(note_text):
+        return Ignore("usage note")
+    intent = comment_intent(note_text, mention_names)
+    if intent is None:
+        return Ignore("no mention+command")
+    action, command, remainder = intent
+    if action == "run" and command == "ask" and not remainder:
         return Ignore("empty /ask")
     ids = _project_and_mr(payload)
     if ids is None:
         return Ignore("missing project_id or mr_iid")
     project_id, mr_iid = ids
     mr = payload.get("merge_request") if isinstance(payload.get("merge_request"), dict) else {}
-    kind: TriggerKind = command  # review | ask | reset
+    kind: TriggerKind = "usage" if action == "usage" else command  # type: ignore[assignment]
+    path, side, start, end = parse_gitlab_position(attrs.get("position") or attrs.get("original_position"))
+    user_text = user_comment_text(note_text, mention_names) if action == "run" else remainder
     return ReviewTrigger(
         kind=kind,
         project_id=project_id,
@@ -209,9 +221,27 @@ def _classify_note(payload: dict[str, Any], *, bot_user_id: Optional[int]) -> Cl
         sha=str(mr.get("last_commit", {}).get("id") or "")
         if isinstance(mr.get("last_commit"), dict)
         else "",
-        comment_text=remainder,
+        comment_text=user_text or remainder,
         web_url=str(mr.get("url") or ""),
         title=str(mr.get("title") or ""),
         draft=_is_draft(payload, attrs),
         explicit=True,
+        discussion_id=_gitlab_discussion_id(payload, attrs),
+        comment_path=path,
+        comment_side=side,
+        comment_start_line=start,
+        comment_end_line=end,
     )
+
+
+def _gitlab_discussion_id(payload: dict[str, Any], attrs: dict[str, Any]) -> str:
+    for raw in (
+        attrs.get("discussion_id"),
+        attrs.get("discussionId"),
+        payload.get("discussion_id"),
+        payload.get("discussionId"),
+    ):
+        text = str(raw or "").strip()
+        if text:
+            return text
+    return ""

@@ -47,6 +47,7 @@ class AzureClient:
             headers["Authorization"] = azure_basic_auth(token)
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
+        self._user: Optional[dict[str, Any]] = None
         parsed = urlparse(self.base_url)
         if self.base_url and not (parsed.path or "").strip("/"):
             log_fail(
@@ -139,9 +140,9 @@ class AzureClient:
             raise last_error
         raise RuntimeError("azure request had no paths")
 
-    def current_user_id(self) -> Optional[str]:
-        if self._user_id is not None:
-            return self._user_id
+    def current_user(self) -> Optional[dict[str, Any]]:
+        if self._user is not None:
+            return self._user
         if not self.token:
             return None
         try:
@@ -151,18 +152,53 @@ class AzureClient:
             user = data.get("authenticatedUser") if isinstance(data, dict) else None
             if isinstance(user, dict) and user.get("id"):
                 self._user_id = str(user["id"])
+                names = [
+                    str(user.get("providerDisplayName") or "").strip(),
+                    str(user.get("displayName") or "").strip(),
+                    str(user.get("customDisplayName") or "").strip(),
+                    str(user.get("uniqueName") or "").strip(),
+                ]
+                self._user = {
+                    "id": self._user_id,
+                    "names": [item for item in names if item],
+                }
                 log_ok(
                     logger,
                     "azure current user",
                     http=response.status_code,
                     user_id=self._user_id,
-                    name=user.get("providerDisplayName") or user.get("displayName") or "-",
+                    name=self._user["names"][0] if self._user["names"] else "-",
                 )
-                return self._user_id
+                return self._user
             log_fail(logger, "azure current user", http=response.status_code, reason="no authenticatedUser.id")
         except Exception as exc:  # noqa: BLE001
             log_fail(logger, "azure current user", err=exc)
         return None
+
+    def current_user_id(self) -> Optional[str]:
+        if self._user_id is not None:
+            return self._user_id
+        user = self.current_user()
+        return str(user["id"]) if user and user.get("id") else None
+
+    def add_reviewer(self, project: str, repo: str, pr_id: int, user_id: str) -> bool:
+        """Assign the PAT user as a PR reviewer. vote=0 is no vote."""
+        uid = str(user_id or "").strip()
+        if not uid:
+            return False
+        extra = f"/pullRequests/{int(pr_id)}/reviewers/{_seg(uid)}"
+        try:
+            self._send(
+                "PUT",
+                self._git_paths(project, repo, extra),
+                json={"id": uid, "vote": 0},
+                params={"api-version": self.api_version},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "azure add reviewer", project=project, repo=repo, pr=pr_id, user=uid, err=exc)
+            return False
+        log_ok(logger, "azure add reviewer", project=project, repo=repo, pr=pr_id, user=uid)
+        return True
 
     def get_pull_request(self, project: str, repo: str, pr_id: int) -> MergeRequest:
         try:

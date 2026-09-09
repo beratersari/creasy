@@ -27,14 +27,17 @@ POST /webhook  (ack immediately)
     │
     ├─ MR open
     │       └─ enqueue one review job for that MR
-    ├─ Note on an MR whose body contains "/review"
-    │       └─ enqueue a full review job (resume ses_* if we have one)
-    ├─ Note on an MR whose body contains "/ask"
+    ├─ Note on an MR that is `@mention /review`
+    │       └─ enqueue a full review job (resume ses_* if we have one);
+    │          assign the token user as an MR reviewer
+    ├─ Note on an MR that is `@mention /ask`
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
     ├─ Note on an MR whose body contains "/reset"
     │       └─ enqueue a wipe of that MR’s notes/threads authored by the token user (no OpenCode)
     ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
-    │       └─ PR created / /review /ask /reset; abandoned or merged cleans up
+    │       └─ PR created / @mention /review /ask /reset; abandoned or merged cleans up;
+    │          assign the PAT user as a PR reviewer on review jobs;
+    │          mention or command alone posts a usage note (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │
@@ -97,7 +100,12 @@ Yes. A completed review does not throw away the OpenCode conversation.
 
 OpenCode sessions live in the global `opencode.db`, keyed by workspace `directory`. The serve process is killed when the job ends; the `ses_*` id is not.
 
-**Decision (user):** later comments continue the same session via `/review` or `/ask`. `/reset` deletes the token user’s notes and threads on that MR and clears `ses_*` so the next `/review` starts a new session. Ordinary notes are ignored.
+**Decision (user):** later comments continue the same session via
+`@mention /review` or `@mention /ask`. `@mention /reset` deletes the
+token user’s notes and threads on that MR and clears `ses_*` so the
+next `@mention /review` starts a new session. A mention or a slash
+command alone posts a usage note and does not call OpenCode.
+Ordinary notes are ignored.
 
 Shared resume flow for both commands after a finished job:
 
@@ -112,11 +120,11 @@ Shared resume flow for both commands after a finished job:
 
 | Command | Prompt on resume | If no prior session |
 |---|---|---|
-| `/review [notes]` | Full review prompt again: MR metadata, merge-base, `--stat`, file list, project rules, “analyze from the separation point”, plus the remainder after `/review` | Create a session and run the full review |
-| `/ask <question>` | Only the question (plus a one-line “SHA changed to …” if the branch moved). Do **not** rebuild the full review prompt. The previous review is already in chat history. | Still run: clone if needed, create a session, send a short context (title, source→target, changed-file list) + the question. Do not require a prior `/review`. |
+| `@name /review [notes]` | Full review prompt again: MR metadata, merge-base, `--stat`, file list, project rules, “analyze from the separation point”, plus the remainder after `/review` | Create a session and run the full review |
+| `@name /ask <question>` | Only the question (plus a one-line “SHA changed to …” if the branch moved). Do **not** rebuild the full review prompt. The previous review is already in chat history. | Still run: clone if needed, create a session, send a short context (title, source→target, changed-file list) + the question. Do not require a prior review. |
 | `/reset` | **No OpenCode.** Delete every MR note and discussion authored by the `GITLAB_TOKEN` user on that MR. Clear the stored `ses_*`. Keep the clone and job history. Do not post a new note. | Same wipe. No session to clear. |
 
-`/ask` with no question text after the command: ignore the webhook (200) and do not start a job. Optionally we can post “usage: `/ask <question>`” later; v1 just ignores.
+`@name /ask` with no question text after the command: ignore the webhook (200) and do not start a job. A mention or `/review` `/ask` `/reset` alone posts a usage note and does not call OpenCode.
 
 `/reset` with no extra text still runs.
 
@@ -129,7 +137,7 @@ Rules:
 - Mid-job hang retry (we already posted the user message): resume the **same** id only. Do not invent a blank session and pretend it is a continue.
 - Different MRs never share a session.
 - Process restart does not keep the serve, but the next `/review` or `/ask` still resumes from `opencode.db` because the clone path is unchanged.
-- Comments with neither `/review` nor `/ask` nor `/reset` are ignored. Thank-yous and LGTM do not spend an OpenCode slot.
+- Comments with neither a bot mention nor a slash command are ignored. Thank-yous and LGTM do not spend an OpenCode slot.
 
 ### 3. Triggers
 
@@ -140,8 +148,9 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 | `object_kind=merge_request`, `action=open` | Enqueue review |
 | `object_kind=merge_request`, `action` in `update`, `reopen` | Ignore (comment `/review` to run again) |
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
-| `object_kind=note`, `noteable_type=MergeRequest`, body contains `/review` | Enqueue full review (resume `ses_*` if stored) |
-| `object_kind=note`, `noteable_type=MergeRequest`, body contains `/ask` + question text | Enqueue follow-up on the same `ses_*` |
+| `object_kind=note`, `noteable_type=MergeRequest`, `@name /review` | Enqueue full review (resume `ses_*` if stored) |
+| `object_kind=note`, `noteable_type=MergeRequest`, `@name /ask` + question text | Enqueue follow-up on the same `ses_*` |
+| `object_kind=note`, mention xor slash command | Enqueue usage note (no OpenCode) |
 | `object_kind=note`, `noteable_type=MergeRequest`, body contains `/reset` | Enqueue a PAT-author wipe on that MR (no OpenCode) |
 | Everything else | 200 ignored |
 
@@ -330,12 +339,13 @@ What you can do (not in OSM):
   - Running: set stopping, force-kill that serve, finish status `cancelled`, post a short MR note (“review cancelled”), then dispatch the **next** queued job for that MR.
   - Queued: mark `cancelled`, remove from the FIFO, never start it. Other queued comments stay in order.
 - **Cancel all for an MR** (`POST /api/mrs/{project_id}/{mr_iid}/cancel`): cancel running + every queued job. Keep the clone (MR is still open). Same as close/merge job-cancel, without deleting the workspace.
+- **Change review model and timeout** (`GET` / `PUT /api/settings`). Persist in `DATA_DIR/settings.json`. New jobs use the new values; a job already queued or running keeps the model stamped on it.
 
 What the dashboard must not do:
 
 - Start a review (webhook is still the only producer).
 - Delete a clone.
-- Edit settings.
+- Edit tokens, secrets, or other `.env` values.
 - Call OSM `POST /jobs`.
 
 Auth: dashboard routes require a login when `DASHBOARD_USER` +
@@ -420,6 +430,7 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `MAX_CONCURRENT_JOBS` | `2` | Live serves |
 | `DATA_DIR` | `./data` | clones, logs, job/workspace JSON |
 | `SKIP_DRAFT_MRS` | `true` | |
+| `REVIEW_MENTION` | empty | Extra `@mention` aliases; token username is always included |
 | `REVIEW_EXTENSIONS` | common source suffixes | |
 | `MAX_FILE_SIZE_KB` | `500` | Drop oversized paths from the stat/file list |
 | `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | empty (dev) | Login page in prod; session cookie |
@@ -439,6 +450,8 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | `GET` | `/api/queue` | Per-MR FIFO (running + waiting) |
 | `POST` | `/api/jobs/{job_id}/cancel` | Cancel one running or queued job |
 | `POST` | `/api/mrs/{project_id}/{mr_iid}/cancel` | Cancel running + queued for that MR |
+| `GET` | `/api/settings` | Current OpenCode model, timeout, suggestions |
+| `PUT` | `/api/settings` | Change model + timeout for new jobs |
 | `GET` | `/reviews/{project_id}/{mr_iid}` | Latest job + workspace (debug) |
 
 No public `POST /jobs`. The webhook handler is the only producer. `GET /` serves the dashboard (or redirects to `/jobs`).

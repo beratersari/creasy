@@ -29,9 +29,9 @@ EVENTS = [
     {"id": "open", "label": "MR open", "kind": "auto"},
     {"id": "update", "label": "MR update (ignored)", "kind": "auto"},
     {"id": "reopen", "label": "MR reopen (ignored)", "kind": "auto"},
-    {"id": "review", "label": "/review", "kind": "note"},
-    {"id": "ask", "label": "/ask", "kind": "note"},
-    {"id": "reset", "label": "/reset", "kind": "note"},
+    {"id": "review", "label": "@creasy /review", "kind": "note"},
+    {"id": "ask", "label": "@creasy /ask", "kind": "note"},
+    {"id": "reset", "label": "@creasy /reset", "kind": "note"},
     {"id": "close", "label": "MR close", "kind": "cleanup"},
     {"id": "merge", "label": "MR merge", "kind": "cleanup"},
 ]
@@ -82,18 +82,25 @@ def build_payload(
             },
         }
     if event == "review":
-        body = note.strip() or "/review"
-        if not body.startswith("/review"):
-            body = "/review " + body
+        body = note.strip() or "@creasy /review"
+        if "/review" not in body:
+            body = "@creasy /review " + body
+        elif "@" not in body:
+            body = "@creasy " + body
         return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
     if event == "ask":
         question = note.strip() or "what is the main risk?"
-        body = question if question.startswith("/ask") else f"/ask {question}"
+        if "/ask" in question:
+            body = question if "@" in question else "@creasy " + question
+        else:
+            body = f"@creasy /ask {question}"
         return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
     if event == "reset":
-        body = note.strip() or "/reset"
-        if not body.startswith("/reset"):
-            body = "/reset"
+        body = note.strip() or "@creasy /reset"
+        if "/reset" not in body:
+            body = "@creasy /reset"
+        elif "@" not in body:
+            body = "@creasy " + body
         return _note(project_id, mr_iid, body, user_id, source_branch, target_branch, sha, mr_url)
     raise ValueError(f"unknown event {event}")
 

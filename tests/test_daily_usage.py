@@ -29,6 +29,7 @@ ASK_WITH_FINDINGS = """C++17 is required — C++98 is not enough.
 
 
 def _webhook_app(tmp_config):
+    tmp_config.review_mention = tmp_config.review_mention or "creasy"
     runner = FakeRunner()
     manager = Manager(tmp_config, runner)
     manager.ready = True
@@ -47,7 +48,7 @@ def test_review_with_a_period_starts_a_job(tmp_config):
     client = TestClient(app)
     res = client.post(
         "/webhook",
-        json=note_payload("/review."),
+        json=note_payload("@creasy /review."),
         headers={"X-Gitlab-Token": "secret"},
     )
     assert res.status_code == 200
@@ -65,7 +66,7 @@ def test_ask_with_a_question_mark_still_asks(tmp_config):
     client = TestClient(app)
     res = client.post(
         "/webhook",
-        json=note_payload("/ask? is C++98 enough?"),
+        json=note_payload("@creasy /ask? is C++98 enough?"),
         headers={"X-Gitlab-Token": "secret"},
     )
     assert res.json()["status"] == "accepted"
@@ -82,11 +83,11 @@ def test_editing_a_review_comment_does_not_start_another_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     headers = {"X-Gitlab-Token": "secret"}
-    created = note_payload("/review focus on auth")
+    created = note_payload("@creasy /review focus on auth")
     created["object_attributes"]["action"] = "create"
     first = client.post("/webhook", json=created, headers=headers)
     assert first.json()["status"] == "accepted"
-    edited = note_payload("/review focus on auth and tests")
+    edited = note_payload("@creasy /review focus on auth and tests")
     edited["object_attributes"]["action"] = "update"
     second = client.post("/webhook", json=edited, headers=headers)
     assert second.json()["status"] == "ignored"
@@ -127,7 +128,7 @@ def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: P
     try:
         ask = client.post(
             "/webhook",
-            json=_note_body("/ask Does this change assume C++17, or is C++98 enough?"),
+            json=_note_body("@creasy /ask Does this change assume C++17, or is C++98 enough?"),
             headers={"X-Gitlab-Token": "secret"},
         )
         assert ask.json()["status"] == "accepted"
@@ -145,12 +146,12 @@ def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: P
 
 
 def test_edited_note_classify_is_ignore_not_review():
-    payload = note_payload("/reset")
+    payload = note_payload("@creasy /reset")
     payload["object_attributes"]["action"] = "update"
-    got = classify_webhook(payload)
+    got = classify_webhook(payload, mention_names=["creasy"])
     assert isinstance(got, Ignore)
-    create = note_payload("/reset")
+    create = note_payload("@creasy /reset")
     create["object_attributes"]["action"] = "create"
-    got2 = classify_webhook(create)
+    got2 = classify_webhook(create, mention_names=["creasy"])
     assert isinstance(got2, ReviewTrigger)
     assert got2.kind == "reset"

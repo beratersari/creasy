@@ -18,7 +18,8 @@ These look like bugs. They are not.
 
 1. **The product of a job is one MR note plus optional diff threads.**
    Last assistant markdown (findings JSON stripped) as the Overview
-   note, then one Discussions-API thread per structured finding
+   note, or a reply on the request thread when the comment has a
+   discussion/thread id. Then one Discussions-API thread per structured finding
    (`path` + line range). A later `/review` that matches an existing
    unresolved Creasy thread replies there, unless the last Creasy
    note is ≥ 90% similar (Ratcliff-Obershelp / token Jaccard /
@@ -28,16 +29,18 @@ These look like bugs. They are not.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/review` or `/ask` can resume `ses_*` on the same path.
-3. **Each comment is a new job.** New `job_id`. `/review` and `/ask`
-   start a serve, one prompt, one note, then kill that serve. `/reset`
-   is a job with **no** serve and **no** model call: it deletes that
-   MR’s notes and threads authored by the `GITLAB_TOKEN` user, then
-   clears the stored `ses_*`. Do not hold a serve open waiting for
+3. **Each comment is a new job.** New `job_id`. `@mention /review`
+   and `@mention /ask` start a serve, one prompt, one note, then
+   kill that serve. `@mention /reset` is a job with **no** serve
+   and **no** model call: it deletes that MR’s notes and threads
+   authored by the `GITLAB_TOKEN` user, then clears the stored
+   `ses_*`. A mention or a command alone posts a usage note and
+   does not call OpenCode. Do not hold a serve open waiting for
    the next GitLab comment.
-4. **Comments queue FIFO per MR.** A later `/review`, `/ask`, or
-   `/reset` while that MR is running is **queued**, not 409, not
-   coalesced to “latest only”. Auto `open` is skipped if that MR
-   already has a running or queued job.
+4. **Comments queue FIFO per MR.** A later `@mention /review`,
+   `@mention /ask`, or `@mention /reset` while that MR is running
+   is **queued**, not 409, not coalesced to “latest only”. Auto
+   `open` is skipped if that MR already has a running or queued job.
 5. **Do not put the unified diff in the prompt.** Give merge-base,
    `git diff --stat <base>...HEAD`, and the path list. OpenCode reads
    the tree and runs git itself. Do not filter paths by extension.
@@ -62,13 +65,19 @@ These look like bugs. They are not.
   worker.
 - MR `open` → enqueue review. `update` (new commits) and `reopen` do
   not. `close` / `merge` → cancel jobs and delete the clone.
-- Note on a merge request: first command token wins. `/review` → full
-  review job. `/ask <question>` → follow-up. `/reset` → delete that
+- Note on a merge request: require `@<token-username>` (or a
+  `REVIEW_MENTION` alias) **and** a command in the same comment.
+  First command token wins. `@name /review` → full review.
+  `@name /ask <question>` → follow-up. `@name /reset` → delete that
   MR’s notes and threads authored by the token user (no OpenCode).
-  Empty `/ask` → ignore. Empty `/reset` still runs. Notes from the
-  token’s own user → ignore.
+  Empty `@name /ask` → ignore. Empty `@name /reset` still runs.
+  Mention alone or `/review` `/ask` `/reset` alone → usage note, no
+  OpenCode. Notes from the token’s own user → ignore.
+  On a review or ask job the token user is assigned as a reviewer;
+  a failed assign does not fail the job. Same pair + assign rules
+  on Azure comments (`@Name` or `data-vss-mention` of the PAT user).
 - Draft MRs: skip auto events when `SKIP_DRAFT_MRS` is true. Explicit
-  `/review`, `/ask`, and `/reset` still run.
+  `@name /review`, `@name /ask`, and `@name /reset` still run.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
 - Azure DevOps Server is optional and isolated. `POST /webhook` stays
@@ -125,7 +134,8 @@ These look like bugs. They are not.
   One OpenCode turn. Parse findings from an optional `opencoderman-findings`
   fence or from `#### N. \`path:lines\`` titles. If GET `/message`
   is unreadable (400), create a new `ses_*` and continue.
-- `/ask`: question only. If SHA moved, prepend a one-line note +
+- `/ask`: question only, plus the inline file/line span when the
+  comment is on a code range. If SHA moved, prepend a one-line note +
   updated `--stat`. If the session is new/rejected, prepend short MR
   context (including draft, labels, pipeline, and a clipped description).
 - OpenCode only. No Codex.
@@ -153,9 +163,11 @@ These look like bugs. They are not.
 
 ### Dashboard
 
-- `GET /jobs` plus `/api/jobs`, chat, logs, queue.
-- Writes: `POST /api/jobs/{id}/cancel` and
-  `POST /api/mrs/{project}/{iid}/cancel`.
+- `GET /jobs` plus `/api/jobs`, chat, logs, queue, `/api/settings`.
+- Writes: `POST /api/jobs/{id}/cancel`,
+  `POST /api/mrs/{project}/{iid}/cancel`, and
+  `PUT /api/settings` (model + timeout only; persist in
+  `DATA_DIR/settings.json`; apply to new jobs).
 - Cancel running: stop that serve, mark `cancelled`, post a short MR
   note, start the next queued job for that MR.
 - Cancel queued: mark `cancelled`, leave the runner alone.
@@ -188,8 +200,9 @@ note or discussion posting in `opencode/`.
 - `pytest` must stay runnable with no live GitLab and no `opencode`
   binary. Fake the runner for manager/webhook tests.
 - Event tests cover open / update-with-and-without-`oldrev` ignored /
-  reopen ignored / close / merge / `/review` / `/ask` / empty `/ask` /
-  `/reset` / bot note / first-command.
+  reopen ignored / close / merge / `@mention /review` / `@mention /ask` /
+  empty `@mention /ask` / `@mention /reset` / bot note / first-command /
+  mention-or-command-alone usage note.
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are

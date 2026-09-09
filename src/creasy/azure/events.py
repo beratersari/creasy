@@ -8,7 +8,9 @@ from typing import Any, Optional
 
 from creasy.azure.identity import azure_project_num
 from creasy.azure.urls import looks_like_azure_resource, normalize_collection_url
-from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, first_command
+from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
+from creasy.review.comment_range import parse_azure_thread_context
+from creasy.review.mention import azure_mention_ids, comment_intent, is_usage_note, user_comment_text
 from creasy.logging import get_logger, log_fail, log_ok
 
 logger = get_logger("azure.events")
@@ -28,6 +30,7 @@ _PR_LINK = re.compile(
     r"/repositories/([^/]+)/pullRequests/(\d+)",
     re.IGNORECASE,
 )
+_THREAD_LINK = re.compile(r"/threads/([^/?#]+)(?:/comments/(\d+))?", re.IGNORECASE)
 _EDIT_MSG = re.compile(
     r"edited a (pull request )?comment|has edited a",
     re.IGNORECASE,
@@ -74,6 +77,33 @@ def _ids_from_links(blob: dict[str, Any]) -> tuple[str, Optional[int]]:
             except (TypeError, ValueError):
                 return match.group(1), None
     return "", None
+
+
+def _thread_ref(payload: dict[str, Any]) -> tuple[str, int]:
+    """Thread id + parent comment id from a comment Service Hook."""
+    comment = _comment(payload)
+    resource = _resource(payload)
+    for blob in (comment, resource):
+        thread = str(blob.get("threadId") or blob.get("thread_id") or "").strip()
+        parent = _int_id(blob.get("id") or blob.get("commentId") or blob.get("comment_id"))
+        if thread:
+            return thread, parent
+        for key in ("self", "threads", "replies"):
+            href = str(_as_dict(_as_dict(blob.get("_links")).get(key)).get("href") or "")
+            match = _THREAD_LINK.search(href)
+            if match:
+                return match.group(1), _int_id(match.group(2)) or parent
+        match = _THREAD_LINK.search(str(blob.get("url") or blob.get("href") or ""))
+        if match:
+            return match.group(1), _int_id(match.group(2)) or parent
+    return "", 0
+
+
+def _int_id(raw: Any) -> int:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _container_project(payload: dict[str, Any]) -> dict[str, Any]:
@@ -246,6 +276,7 @@ def classify_azure_webhook(
     *,
     skip_drafts: bool = True,
     bot_user_id: Optional[str] = None,
+    mention_names: Optional[list[str]] = None,
 ) -> CleanupTrigger | ReviewTrigger | Ignore:
     if not isinstance(payload, dict):
         log_ok(logger, "azure classify Ignore", reason="invalid payload")
@@ -268,7 +299,12 @@ def classify_azure_webhook(
     if kind in _CREATED:
         return _review_from_pr(pr, payload, kind="open", explicit=False, skip_drafts=skip_drafts)
     if kind in _COMMENTED:
-        return _review_from_comment(payload, pr, bot_user_id=bot_user_id)
+        return _review_from_comment(
+            payload,
+            pr,
+            bot_user_id=bot_user_id,
+            mention_names=mention_names or [],
+        )
     if kind:
         log_ok(logger, "azure classify Ignore", eventType=kind, reason=f"eventType={kind}")
         return Ignore(f"eventType={kind}")
@@ -308,6 +344,14 @@ def _review_from_pr(
     if skip_drafts and draft and not explicit:
         log_ok(logger, "azure classify Ignore", reason="draft PR", pr=iid)
         return Ignore("draft PR")
+    thread_id, parent_id = _thread_ref(payload) if explicit else ("", 0)
+    path, side, start, end = ("", "", 0, 0)
+    if explicit:
+        comment = _comment(payload)
+        resource = _resource(payload)
+        path, side, start, end = parse_azure_thread_context(
+            comment.get("threadContext") or resource.get("threadContext")
+        )
     trigger = ReviewTrigger(
         kind=kind,  # type: ignore[arg-type]
         project_id=azure_project_num(project_id, repo_id),
@@ -324,6 +368,12 @@ def _review_from_pr(
         azure_project=project_id,
         azure_repo=repo_id,
         azure_collection=_collection_url(pr, payload),
+        discussion_id=thread_id,
+        parent_comment_id=parent_id,
+        comment_path=path,
+        comment_side=side,
+        comment_start_line=start,
+        comment_end_line=end,
     )
     log_ok(
         logger,
@@ -345,6 +395,7 @@ def _review_from_comment(
     pr: dict[str, Any],
     *,
     bot_user_id: Optional[str],
+    mention_names: list[str],
 ) -> ReviewTrigger | Ignore:
     comment = _comment(payload)
     if not comment:
@@ -360,23 +411,45 @@ def _review_from_comment(
     if bot_user_id and author and author.lower() == bot_user_id.lower():
         log_ok(logger, "azure classify Ignore", reason="bot note", author=author)
         return Ignore("bot note")
-    parsed = first_command(str(comment.get("content") or comment.get("comments") or ""))
-    if parsed is None:
-        log_ok(logger, "azure classify Ignore", reason="no /review, /ask, or /reset", author=author or "-")
-        return Ignore("no /review, /ask, or /reset")
-    command, remainder = parsed
-    logger.info("azure comment command=/%s author=%s remainder=%r", command, author or "-", remainder[:80])
-    if command == "ask" and not remainder:
+    note_text = str(comment.get("content") or comment.get("comments") or "")
+    if is_usage_note(note_text):
+        log_ok(logger, "azure classify Ignore", reason="usage note", author=author or "-")
+        return Ignore("usage note")
+    intent = comment_intent(
+        note_text,
+        mention_names,
+        mentioned_ids=azure_mention_ids(note_text),
+        bot_id=str(bot_user_id or ""),
+    )
+    if intent is None:
+        log_ok(
+            logger,
+            "azure classify Ignore",
+            reason="no mention+command",
+            author=author or "-",
+        )
+        return Ignore("no mention+command")
+    action, command, remainder = intent
+    logger.info(
+        "azure comment intent=%s command=/%s author=%s remainder=%r",
+        action,
+        command or "-",
+        author or "-",
+        remainder[:80],
+    )
+    if action == "run" and command == "ask" and not remainder:
         log_ok(logger, "azure classify Ignore", reason="empty /ask", author=author or "-")
         return Ignore("empty /ask")
     if not pr or _pr_id(pr) is None:
-        log_fail(logger, "azure classify ReviewTrigger", reason="missing pull request on comment", command=command)
+        log_fail(logger, "azure classify ReviewTrigger", reason="missing pull request on comment", command=command or action)
         return Ignore("missing pull request on comment")
+    kind = "usage" if action == "usage" else command
+    user_text = user_comment_text(note_text, mention_names) if action == "run" else remainder
     return _review_from_pr(
         pr,
         payload,
-        kind=command,
+        kind=kind,
         explicit=True,
         skip_drafts=False,
-        comment_text=remainder,
+        comment_text=user_text or remainder,
     )

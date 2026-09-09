@@ -149,6 +149,28 @@ def test_get_pr_retries_collection_scoped_path_on_404() -> None:
         client.close()
 
 
+def test_add_reviewer_puts_collection_path() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url.path}")
+        return httpx.Response(200, json={"id": "bot-guid", "vote": 0})
+
+    client = AzureClient("https://tfs02.company.com.tr/tfs/ExampleCollection", "pat")
+    client._http.close()
+    client._http = httpx.Client(
+        base_url="https://tfs02.company.com.tr/tfs/ExampleCollection",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        assert client.add_reviewer("App", "repo", 12, "bot-guid") is True
+        assert any(
+            item.startswith("PUT ") and "/pullRequests/12/reviewers/bot-guid" in item for item in seen
+        )
+    finally:
+        client.close()
+
+
 def test_current_user_id_on_host_only_url_hits_root_apis_not_collection() -> None:
     seen: list[str] = []
 

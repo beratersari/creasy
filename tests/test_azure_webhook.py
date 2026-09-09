@@ -14,6 +14,7 @@ from test_azure_events import PROJECT, REPO, _pr
 
 
 def _app(tmp_config, *, azure=True):
+    tmp_config.review_mention = tmp_config.review_mention or "creasy"
     if azure:
         tmp_config.azure_url = "https://ado.example/tfs/DefaultCollection"
         tmp_config.azure_token = "pat-test"
@@ -94,6 +95,32 @@ def test_azure_created_accepted(tmp_config):
     assert job.mr_iid == 12
     assert job.project_id == azure_project_num(PROJECT, REPO)
     assert job.trigger == "open"
+    runner.release.set()
+    manager.shutdown()
+
+
+def test_azure_mention_comment_is_accepted(tmp_config):
+    tmp_config.review_mention = "creasy"
+    app, manager, runner = _app(tmp_config)
+    client = TestClient(app)
+    res = client.post(
+        "/webhook/azure",
+        json={
+            "eventType": "git.pullrequest.commented",
+            "resource": {
+                "comment": {"content": "@creasy /review check the lock", "author": {"id": "user-1"}},
+                "pullRequest": _pr(pullRequestId=14),
+            },
+        },
+        headers=_auth(),
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.provider == "azure"
+    assert job.trigger == "review"
+    assert job.explicit is True
     runner.release.set()
     manager.shutdown()
 
@@ -179,7 +206,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
     payload = {
         "eventType": "git.pullrequest.commented",
         "resource": {
-            "comment": {"content": "/review", "author": {"id": "bot-id"}},
+            "comment": {"content": "@creasy /review", "author": {"id": "bot-id"}},
             "pullRequest": _pr(
                 pullRequestId=9,
                 url="https://tfs02.company.com.tr/tfs/ExampleCollection/App/_git/app/pullrequest/9",

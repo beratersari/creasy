@@ -88,32 +88,51 @@ class GitLabClient:
             verify=False,
         )
         self._user_id: Optional[int] = None
+        self._user: Optional[dict[str, Any]] = None
 
     def close(self) -> None:
         self._http.close()
 
-    def current_user_id(self) -> Optional[int]:
-        if self._user_id is not None:
-            return self._user_id
+    def current_user(self) -> Optional[dict[str, Any]]:
+        if self._user is not None:
+            return self._user
         if not self.token:
             return None
         try:
             response = self._http.get("/user")
             response.raise_for_status()
-            data = response.json()
+            data = response.json() if response.content else {}
+            if not isinstance(data, dict) or data.get("id") is None:
+                log_fail(logger, "gitlab current user", reason="no id")
+                return None
+            username = str(data.get("username") or "").strip()
+            name = str(data.get("name") or "").strip()
+            names = [item for item in (username, name) if item]
             self._user_id = int(data["id"])
+            self._user = {
+                "id": self._user_id,
+                "username": username,
+                "name": name,
+                "names": names,
+            }
             log_ok(
                 logger,
                 "gitlab current user",
                 http=response.status_code,
                 user_id=self._user_id,
-                username=data.get("username") or "-",
+                username=username or "-",
             )
-            return self._user_id
+            return self._user
         except Exception as exc:  # noqa: BLE001
             status, detail = _http_detail(exc)
             log_fail(logger, "gitlab current user", http=status, err=exc, body=detail)
             return None
+
+    def current_user_id(self) -> Optional[int]:
+        if self._user_id is not None:
+            return self._user_id
+        user = self.current_user()
+        return int(user["id"]) if user and user.get("id") is not None else None
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}"
@@ -362,6 +381,41 @@ class GitLabClient:
             note_id=(data or {}).get("id") if isinstance(data, dict) else "-",
         )
         return data
+
+    def add_reviewer(self, project_id: int, mr_iid: int, user_id: int) -> bool:
+        """Add the token user as an MR reviewer. Keep existing reviewers."""
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}"
+        try:
+            current = self._http.get(path)
+            current.raise_for_status()
+        except httpx.HTTPError as exc:
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
+            return False
+        data = current.json() if current.content else {}
+        reviewers = data.get("reviewers") if isinstance(data, dict) else None
+        ids: list[int] = []
+        for row in reviewers or []:
+            if not isinstance(row, dict) or row.get("id") is None:
+                continue
+            try:
+                ids.append(int(row["id"]))
+            except (TypeError, ValueError):
+                continue
+        uid = int(user_id)
+        if uid in ids:
+            log_ok(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, reason="already")
+            return True
+        ids.append(uid)
+        try:
+            response = self._http.put(path, json={"reviewer_ids": ids})
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            status, detail = _http_detail(exc)
+            log_fail(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, http=status, err=exc, body=detail)
+            return False
+        log_ok(logger, "gitlab add reviewer", project=project_id, mr=mr_iid, user=uid, http=response.status_code)
+        return True
 
     def resolve_http_url(self, project_id: int, fallback: str = "") -> str:
         if fallback:

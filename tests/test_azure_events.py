@@ -81,15 +81,86 @@ def test_pr_merged_is_cleanup():
     assert got.action == "merge"
 
 
+def test_mention_or_command_alone_is_usage():
+    payload = {
+        "eventType": "git.pullrequest.commented",
+        "resource": {
+            "comment": {"content": "@creasy please check auth", "author": {"id": "user-1"}},
+            "pullRequest": _pr(),
+        },
+    }
+    got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["creasy"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "usage"
+    html = {
+        "eventType": "git.pullrequest.commented",
+        "resource": {
+            "comment": {
+                "content": (
+                    '<a href="#" data-vss-mention="version:2.0,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">'
+                    "@Creasy</a> look at this"
+                ),
+                "author": {"id": "user-1"},
+            },
+            "pullRequest": _pr(),
+        },
+    }
+    tagged = classify_azure_webhook(
+        html,
+        bot_user_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        mention_names=[],
+    )
+    assert isinstance(tagged, ReviewTrigger)
+    assert tagged.kind == "usage"
+    other = classify_azure_webhook(payload, mention_names=["other-bot"])
+    assert isinstance(other, Ignore)
+
+
+def test_file_comment_keeps_range_and_question():
+    payload = {
+        "eventType": "git.pullrequest.commented",
+        "resource": {
+            "comment": {
+                "id": 3,
+                "content": "@creasy /ask is this lock safe?",
+                "author": {"id": "user-1"},
+                "threadContext": {
+                    "filePath": "/src/lock.cpp",
+                    "rightFileStart": {"line": 40, "offset": 1},
+                    "rightFileEnd": {"line": 52, "offset": 1},
+                },
+                "_links": {
+                    "self": {
+                        "href": (
+                            "https://ado.example/_apis/git/repositories/"
+                            f"{REPO}/pullRequests/12/threads/9/comments/3"
+                        )
+                    }
+                },
+            },
+            "pullRequest": _pr(),
+        },
+    }
+    got = classify_azure_webhook(payload, mention_names=["creasy"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
+    assert got.discussion_id == "9"
+    assert got.parent_comment_id == 3
+    assert got.comment_path == "src/lock.cpp"
+    assert got.comment_start_line == 40
+    assert got.comment_end_line == 52
+    assert "lock" in got.comment_text
+
+
 def test_comment_review_and_ask():
     payload = {
         "eventType": "git.pullrequest.commented",
         "resource": {
-            "comment": {"content": "/review focus on auth", "author": {"id": "user-1"}},
+            "comment": {"content": "@creasy /review focus on auth", "author": {"id": "user-1"}},
             "pullRequest": _pr(),
         },
     }
-    got = classify_azure_webhook(payload, bot_user_id="bot")
+    got = classify_azure_webhook(payload, bot_user_id="bot", mention_names=["creasy"])
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "review"
     assert got.explicit is True
@@ -97,11 +168,11 @@ def test_comment_review_and_ask():
     ask = {
         "eventType": "ms.vss-code.git-pullrequest-comment-event",
         "resource": {
-            "comment": {"content": "/ask? why this lock?", "author": {"id": "user-1"}},
+            "comment": {"content": "@creasy /ask? why this lock?", "author": {"id": "user-1"}},
             "pullRequest": _pr(),
         },
     }
-    got_ask = classify_azure_webhook(ask)
+    got_ask = classify_azure_webhook(ask, mention_names=["creasy"])
     assert isinstance(got_ask, ReviewTrigger)
     assert got_ask.kind == "ask"
     assert "lock" in got_ask.comment_text
@@ -111,18 +182,20 @@ def test_bot_comment_and_edit_and_empty_ask_ignored():
     bot = {
         "eventType": "git.pullrequest.commented",
         "resource": {
-            "comment": {"content": "/review", "author": {"id": "bot-id"}},
+            "comment": {"content": "@creasy /review", "author": {"id": "bot-id"}},
             "pullRequest": _pr(),
         },
     }
-    assert isinstance(classify_azure_webhook(bot, bot_user_id="bot-id"), Ignore)
-    assert isinstance(classify_azure_webhook(bot, bot_user_id=None), ReviewTrigger)
+    assert isinstance(classify_azure_webhook(bot, bot_user_id="bot-id", mention_names=["creasy"]), Ignore)
+    got_bot = classify_azure_webhook(bot, bot_user_id=None, mention_names=["creasy"])
+    assert isinstance(got_bot, ReviewTrigger)
+    assert got_bot.kind == "review"
     created_with_updated = {
         "eventType": "ms.vss-code.git-pullrequest-comment-event",
         "message": {"text": "Jamal Hartnett commented"},
         "resource": {
             "comment": {
-                "content": "/review",
+                "content": "@creasy /review",
                 "author": {"id": "user-1"},
                 "publishedDate": "2026-01-01T00:00:00.000Z",
                 "lastUpdatedDate": "2026-01-01T00:00:00.400Z",
@@ -130,7 +203,9 @@ def test_bot_comment_and_edit_and_empty_ask_ignored():
             "pullRequest": _pr(),
         },
     }
-    assert isinstance(classify_azure_webhook(created_with_updated), ReviewTrigger)
+    created_got = classify_azure_webhook(created_with_updated, mention_names=["creasy"])
+    assert isinstance(created_got, ReviewTrigger)
+    assert created_got.kind == "review"
     edited = {
         "eventType": "ms.vss-code.git-pullrequest-comment-event",
         "message": {"text": "Jamal Hartnett has edited a pull request comment"},
@@ -148,9 +223,9 @@ def test_bot_comment_and_edit_and_empty_ask_ignored():
     assert isinstance(classify_azure_webhook(edited), Ignore)
     empty = {
         "eventType": "git.pullrequest.commented",
-        "resource": {"comment": {"content": "/ask   ", "author": {"id": "u"}}, "pullRequest": _pr()},
+        "resource": {"comment": {"content": "@creasy /ask   ", "author": {"id": "u"}}, "pullRequest": _pr()},
     }
-    assert isinstance(classify_azure_webhook(empty), Ignore)
+    assert isinstance(classify_azure_webhook(empty, mention_names=["creasy"]), Ignore)
 
 
 def test_comment_without_nested_pr_uses_links_and_containers():
@@ -160,7 +235,7 @@ def test_comment_without_nested_pr_uses_links_and_containers():
         "resourceContainers": {"project": {"id": PROJECT, "name": "App"}},
         "resource": {
             "comment": {
-                "content": "/review focus on auth",
+                "content": "@creasy /review focus on auth",
                 "author": {"id": "user-1"},
                 "publishedDate": "2026-01-01T00:00:00Z",
                 "lastUpdatedDate": "2026-01-01T00:00:00Z",
@@ -175,13 +250,15 @@ def test_comment_without_nested_pr_uses_links_and_containers():
             }
         },
     }
-    got = classify_azure_webhook(payload)
+    got = classify_azure_webhook(payload, mention_names=["creasy"])
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "review"
     assert got.mr_iid == 12
     assert got.azure_repo == REPO
     assert got.azure_project == PROJECT
     assert got.comment_text == "focus on auth"
+    assert got.discussion_id == "5"
+    assert got.parent_comment_id == 1
 
 
 def test_draft_created_skipped_explicit_allowed():
@@ -193,11 +270,11 @@ def test_draft_created_skipped_explicit_allowed():
     note = {
         "eventType": "git.pullrequest.commented",
         "resource": {
-            "comment": {"content": "/review", "author": {"id": "u"}},
+            "comment": {"content": "@creasy /review", "author": {"id": "u"}},
             "pullRequest": _pr(isDraft=True),
         },
     }
-    got = classify_azure_webhook(note, skip_drafts=True)
+    got = classify_azure_webhook(note, skip_drafts=True, mention_names=["creasy"])
     assert isinstance(got, ReviewTrigger)
     assert got.explicit is True
 
