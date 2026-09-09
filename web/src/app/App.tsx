@@ -4,6 +4,7 @@ import { AUTH_EVENT, fetchAuth, type AuthStatus } from '../api/auth'
 import { JobDetailPage } from '../pages/jobs/JobDetailPage'
 import { JobsPage } from '../pages/jobs/JobsPage'
 import { LoginPage } from '../pages/login/LoginPage'
+import { SettingsPage } from '../pages/settings/SettingsPage'
 import { LiveProvider } from './LiveProvider'
 import { Shell } from './Shell'
 
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/login" element={<Navigate to="/jobs" replace />} />
             <Route path="/jobs" element={<JobsPage />} />
             <Route path="/jobs/:jobId" element={<JobDetailPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/jobs" replace />} />
           </Route>
         </Routes>

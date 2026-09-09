@@ -11,6 +11,7 @@ from conftest import FakeRunner
 
 
 def _app(tmp_config):
+    tmp_config.review_mention = tmp_config.review_mention or "creasy"
     runner = FakeRunner()
     manager = Manager(tmp_config, runner)
     manager.ready = True
@@ -42,7 +43,7 @@ def test_note_ignored_until_bot_user_resolves(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
         "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers)
@@ -115,6 +116,73 @@ def test_update_with_new_commits_ignored(tmp_config):
     manager.shutdown()
 
 
+def test_command_without_mention_is_usage(tmp_config):
+    app, manager, runner = _app(tmp_config)
+    client = TestClient(app)
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
+    }
+    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.trigger == "usage"
+    runner.release.set()
+    manager.shutdown()
+
+
+def test_comment_job_keeps_discussion_id(tmp_config):
+    app, manager, runner = _app(tmp_config)
+    client = TestClient(app)
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {
+            "noteable_type": "MergeRequest",
+            "note": "@creasy /review",
+            "discussion_id": "disc_live",
+        },
+        "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
+    }
+    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.discussion_id == "disc_live"
+    runner.release.set()
+    manager.shutdown()
+
+
+def test_mention_comment_is_accepted(tmp_config):
+    tmp_config.review_mention = "creasy"
+    app, manager, runner = _app(tmp_config)
+    client = TestClient(app)
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review check the lock"},
+        "merge_request": {
+            "iid": 8,
+            "target_project_id": 5,
+            "source_branch": "f",
+            "target_branch": "main",
+            "title": "Add overflow",
+        },
+    }
+    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "accepted"
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.trigger == "review"
+    assert job.explicit is True
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_comment_queued_while_busy(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
@@ -122,20 +190,20 @@ def test_comment_queued_while_busy(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
         "merge_request": {"iid": 2, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers)
     assert first.json()["status"] == "accepted"
     second = {
         **note,
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/ask what about errors?"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask what about errors?"},
     }
     queued = client.post("/webhook", json=second, headers=headers)
     assert queued.json()["status"] == "queued"
     reset = {
         **note,
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/reset"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /reset"},
     }
     wiped = client.post("/webhook", json=reset, headers=headers)
     assert wiped.json()["status"] == "queued"
@@ -153,13 +221,13 @@ def test_dashboard_cancel_queued(tmp_config):
     note = {
         "object_kind": "note",
         "user": {"id": 1},
-        "object_attributes": {"noteable_type": "MergeRequest", "note": "/review"},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /review"},
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
     first = client.post("/webhook", json=note, headers=headers).json()
     second = client.post(
         "/webhook",
-        json={**note, "object_attributes": {"noteable_type": "MergeRequest", "note": "/ask later?"}},
+        json={**note, "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask later?"}},
         headers=headers,
     ).json()
     assert second["status"] == "queued"

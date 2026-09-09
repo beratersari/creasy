@@ -74,7 +74,7 @@ def send_webhooks(args) -> list[dict]:
             mr_iid=args.mr_iid,
             source_branch=args.source,
             target_branch=args.target,
-            note=f"/review eval-{args.tag} {index}/{args.count}",
+            note=f"@creasy /review eval-{args.tag} {index}/{args.count}",
             web_url=DEFAULT_WEB_URL,
         )
         started = time.time()

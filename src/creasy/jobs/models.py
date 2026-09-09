@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset"]
+TriggerKind = Literal["open", "update", "reopen", "review", "ask", "reset", "usage"]
 JobStatus = Literal[
     "queued",
     "running",
@@ -68,6 +68,12 @@ class JobRecord(BaseModel):
     azure_project: str = ""
     azure_repo: str = ""
     azure_collection: str = ""
+    discussion_id: str = ""
+    parent_comment_id: int = 0
+    comment_path: str = ""
+    comment_side: str = ""
+    comment_start_line: int = 0
+    comment_end_line: int = 0
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     def public_dict(self) -> dict[str, Any]:

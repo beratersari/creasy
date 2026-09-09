@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, classify_webhook
 from creasy.logging import get_logger, log_fail, log_ok
+from creasy.review.mention import collect_names, parse_mention_aliases
 
 router = APIRouter()
 logger = get_logger("webhook")
@@ -24,6 +25,21 @@ def _bot_user_id(request: Request) -> Optional[int]:
     if uid is not None:
         request.app.state.bot_user_id = uid
     return uid
+
+
+def _mention_names(request: Request) -> list[str]:
+    cfg = request.app.state.config
+    cached = getattr(request.app.state, "bot_mention_names", None) or []
+    gitlab = getattr(request.app.state, "gitlab", None)
+    live: list[str] = []
+    current = getattr(gitlab, "current_user", None) if gitlab is not None else None
+    if callable(current):
+        user = current()
+        if isinstance(user, dict):
+            live = list(user.get("names") or [])
+            if live:
+                request.app.state.bot_mention_names = live
+    return collect_names(parse_mention_aliases(getattr(cfg, "review_mention", "")), cached, live)
 
 
 def _verify_secret(request: Request) -> None:
@@ -57,7 +73,12 @@ async def webhook(request: Request) -> JSONResponse:
     if kind == "note" and bot_id is None:
         log_fail(logger, "webhook bot user", reason="GITLAB_TOKEN user unknown")
         return JSONResponse({"status": "ignored", "reason": "bot user unknown"})
-    classified = classify_webhook(payload, skip_drafts=config.skip_draft_mrs, bot_user_id=bot_id)
+    classified = classify_webhook(
+        payload,
+        skip_drafts=config.skip_draft_mrs,
+        bot_user_id=bot_id,
+        mention_names=_mention_names(request),
+    )
 
     if isinstance(classified, Ignore):
         log_ok(logger, "webhook ignored", object_kind=kind or "missing", reason=classified.reason)

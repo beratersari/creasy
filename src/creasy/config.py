@@ -49,6 +49,9 @@ class Config:
     azure_api_version: str = "7.1"
     azure_webhook_user: str = ""
     azure_webhook_password: str = ""
+    opencode_model_env: str = ""
+    opencode_timeout_env: int = 0
+    review_mention: str = ""
 
     @property
     def azure_enabled(self) -> bool:
@@ -92,6 +95,8 @@ def load_config(env_file: str | None = ".env") -> Config:
         webhook_secret=(os.getenv("WEBHOOK_SECRET") or "").strip(),
         opencode_model=os.getenv("OPENCODE_MODEL", "opencode/big-pickle").strip(),
         opencode_timeout=max(1, _int("OPENCODE_TIMEOUT", 1800)),
+        opencode_model_env=os.getenv("OPENCODE_MODEL", "opencode/big-pickle").strip(),
+        opencode_timeout_env=max(1, _int("OPENCODE_TIMEOUT", 1800)),
         opencode_retry_count=max(1, _int("OPENCODE_RETRY_COUNT", 2)),
         opencode_agent=os.getenv("OPENCODE_AGENT", "code-reviewer").strip() or "code-reviewer",
         opencode_bin=os.getenv("OPENCODE_BIN", "opencode").strip() or "opencode",
@@ -110,6 +115,7 @@ def load_config(env_file: str | None = ".env") -> Config:
         azure_api_version=(os.getenv("AZURE_DEVOPS_API_VERSION") or "7.1").strip() or "7.1",
         azure_webhook_user=(os.getenv("AZURE_WEBHOOK_USER") or "").strip(),
         azure_webhook_password=(os.getenv("AZURE_WEBHOOK_PASSWORD") or "").strip(),
+        review_mention=(os.getenv("REVIEW_MENTION") or "").strip(),
     )
     cfg.ensure_dirs()
     return cfg

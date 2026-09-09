@@ -143,6 +143,7 @@ body {
 .vd-alert { border-radius: var(--radius); padding: 0.8rem 1rem; font-size: 0.875rem; }
 .vd-alert-danger { border: 1px solid var(--danger); background: var(--danger-muted); color: var(--danger-text); }
 .vd-alert-warning { border: 1px solid var(--warning); background: var(--warning-muted); color: var(--warning-text); }
+.vd-alert-success { border: 1px solid var(--success); background: var(--success-muted); color: var(--success-text); }
 .vd-report-panel {
   position: absolute;
   z-index: 40;

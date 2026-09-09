@@ -95,6 +95,7 @@ def main() -> int:
         azure_webhook_password="secret",
         dashboard_user="smoke",
         dashboard_password="smoke-pass",
+        review_mention="creasy",
     )
     cfg.ensure_dirs()
     runner = FakeRunner()
@@ -122,16 +123,16 @@ def main() -> int:
         ("POST", "/webhook", _gitlab_mr("update", oldrev="abc"), gl, "gitlab update+oldrev"),
         ("POST", "/webhook", _gitlab_mr("reopen"), gl, "gitlab reopen"),
         ("POST", "/webhook", _gitlab_mr("open", draft=True), gl, "gitlab draft open"),
-        ("POST", "/webhook", _gitlab_note("/review."), gl, "gitlab /review."),
-        ("POST", "/webhook", _gitlab_note("/ask? why nullable?"), gl, "gitlab /ask?"),
-        ("POST", "/webhook", _gitlab_note("/ask   "), gl, "gitlab empty /ask"),
-        ("POST", "/webhook", _gitlab_note("/reset!"), gl, "gitlab /reset!"),
+        ("POST", "/webhook", _gitlab_note("@creasy /review."), gl, "gitlab /review."),
+        ("POST", "/webhook", _gitlab_note("@creasy /ask? why nullable?"), gl, "gitlab /ask?"),
+        ("POST", "/webhook", _gitlab_note("@creasy /ask   "), gl, "gitlab empty /ask"),
+        ("POST", "/webhook", _gitlab_note("@creasy /reset!"), gl, "gitlab /reset!"),
         ("POST", "/webhook", _gitlab_note("looks good"), gl, "gitlab chatter"),
-        ("POST", "/webhook", _gitlab_note("/review", user_id=99), gl, "gitlab bot note"),
+        ("POST", "/webhook", _gitlab_note("@creasy /review", user_id=99), gl, "gitlab bot note"),
         (
             "POST",
             "/webhook",
-            {**_gitlab_note("/review"), "object_attributes": {**_gitlab_note("/review")["object_attributes"], "action": "update"}},
+            {**_gitlab_note("@creasy /review"), "object_attributes": {**_gitlab_note("@creasy /review")["object_attributes"], "action": "update"}},
             gl,
             "gitlab note edit",
         ),
@@ -159,7 +160,7 @@ def main() -> int:
             "/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
-                "resource": {"comment": {"content": "/review focus on auth", "author": {"id": "u1"}}, "pullRequest": _pr()},
+                "resource": {"comment": {"content": "@creasy /review focus on auth", "author": {"id": "u1"}}, "pullRequest": _pr()},
             },
             az,
             "azure /review",
@@ -169,7 +170,7 @@ def main() -> int:
             "/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
-                "resource": {"comment": {"content": "/ask? why this lock?", "author": {"id": "u1"}}, "pullRequest": _pr()},
+                "resource": {"comment": {"content": "@creasy /ask? why this lock?", "author": {"id": "u1"}}, "pullRequest": _pr()},
             },
             az,
             "azure /ask?",
@@ -179,7 +180,7 @@ def main() -> int:
             "/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
-                "resource": {"comment": {"content": "/ask   ", "author": {"id": "u1"}}, "pullRequest": _pr()},
+                "resource": {"comment": {"content": "@creasy /ask   ", "author": {"id": "u1"}}, "pullRequest": _pr()},
             },
             az,
             "azure empty /ask",
@@ -189,7 +190,7 @@ def main() -> int:
             "/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
-                "resource": {"comment": {"content": "/reset!", "author": {"id": "u1"}}, "pullRequest": _pr()},
+                "resource": {"comment": {"content": "@creasy /reset!", "author": {"id": "u1"}}, "pullRequest": _pr()},
             },
             az,
             "azure /reset!",
@@ -199,7 +200,7 @@ def main() -> int:
             "/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
-                "resource": {"comment": {"content": "/review", "author": {"id": "bot-id"}}, "pullRequest": _pr()},
+                "resource": {"comment": {"content": "@creasy /review", "author": {"id": "bot-id"}}, "pullRequest": _pr()},
             },
             az,
             "azure bot comment",
@@ -284,7 +285,7 @@ def main() -> int:
         jobs = jobs_res.json() if jobs_res.status_code == 200 else {}
         still = client.post(
             "/webhook",
-            json=_gitlab_note("/review after login"),
+            json=_gitlab_note("@creasy /review after login"),
             headers=gl,
         )
         print(

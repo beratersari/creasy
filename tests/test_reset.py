@@ -187,8 +187,8 @@ def test_reset_fails_without_token_user(tmp_config):
 
 
 def test_webhook_reset_is_explicit():
-    got = classify_webhook(note_payload("/reset"), bot_user_id=99)
+    got = classify_webhook(note_payload("@creasy /reset"), bot_user_id=99, mention_names=["creasy"])
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "reset"
-    bot = classify_webhook(note_payload("/reset"), bot_user_id=1)
+    bot = classify_webhook(note_payload("@creasy /reset"), bot_user_id=1, mention_names=["creasy"])
     assert not isinstance(bot, ReviewTrigger)

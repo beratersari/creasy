@@ -9,6 +9,27 @@ section in the same change.
 
 ## Unreleased
 
+## 0.7.0 — 2026-09-09
+
+Operators can change the review model from the dashboard. Comments
+run only as `@name /review`, `@name /ask`, or `@name /reset`, and
+the answer lands on the same thread as the request.
+
+### Added
+
+- Dashboard Settings page to change the OpenCode model and turn
+  timeout without restarting. Values persist in
+  `DATA_DIR/settings.json` and apply to new jobs.
+- `@mention` of the token user (or `REVIEW_MENTION` aliases) plus
+  `/review`, `/ask`, or `/reset` in the same comment runs that
+  command on GitLab and Azure. A mention or a command alone posts a
+  usage note and does not call OpenCode. The token user is assigned
+  as a reviewer on review and ask jobs.
+- Comment jobs reply on the same GitLab discussion or Azure thread
+  as the request. If that reply fails, the overview note is still
+  posted. An `@ask` or `@review` on an inline code-range comment
+  includes the user’s text and that file/line span in the prompt.
+
 ## 0.6.1 — 2026-09-08
 
 Reviews use a general `code-reviewer` agent. Notes are Turkish
