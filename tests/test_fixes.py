@@ -228,6 +228,76 @@ def test_wait_idle_accepts_already_finished_text():
         httpd.shutdown()
 
 
+class _PriorReviewThenAskHandler(BaseHTTPRequestHandler):
+    """Prior structured review is already on ses_*. A later /ask must not
+    be answered with that old text on the first idle poll."""
+
+    polls: int = 0
+    PRIOR = "### Summary\nOld review with findings."
+    ASK = "The lock is held across the wait."
+
+    def log_message(self, fmt: str, *args) -> None:  # noqa: A003
+        return
+
+    def _json(self, payload) -> None:
+        raw = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_GET(self) -> None:  # noqa: N802
+        path = self.path.split("?", 1)[0]
+        if path == "/global/health":
+            self._json({"ok": True})
+            return
+        if path == "/session/status":
+            self._json({"ses_ask": {"type": "idle"}})
+            return
+        if path.endswith("/message"):
+            type(self).polls += 1
+            prior = [
+                {"info": {"id": "u1", "role": "user"}, "parts": [{"type": "text", "text": "review"}]},
+                {
+                    "info": {"id": "a1", "role": "assistant", "structured_output": True},
+                    "parts": [{"type": "text", "text": self.PRIOR}],
+                },
+                {"info": {"id": "u2", "role": "user"}, "parts": [{"type": "text", "text": "why the lock?"}]},
+            ]
+            if self.polls < 4:
+                self._json(prior)
+                return
+            self._json(
+                prior
+                + [{"info": {"id": "a2", "role": "assistant"}, "parts": [{"type": "text", "text": self.ASK}]}]
+            )
+            return
+        self._json({"id": "ses_ask"})
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._json({"ok": True})
+
+
+def test_wait_idle_does_not_return_prior_review_for_a_later_ask():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = int(sock.getsockname()[1])
+    sock.close()
+    _PriorReviewThenAskHandler.polls = 0
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), _PriorReviewThenAskHandler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    client = OpenCodeClient(f"http://127.0.0.1:{port}", "C:/tmp/clone")
+    try:
+        text = client.wait_idle("ses_ask", timeout=4, hang_timeout=3, idle_settle=0.05)
+        assert text == _PriorReviewThenAskHandler.ASK
+        assert "Old review" not in text
+    finally:
+        client.close()
+        httpd.shutdown()
+
+
 def test_hang_retry_posts_resume_not_original(tmp_config, monkeypatch):
     spy = SpyGitlab()
     runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), spy)
@@ -418,7 +488,9 @@ def test_webhook_close_returns_without_waiting(tmp_config):
                 "source_branch": "f",
                 "target_branch": "main",
                 "draft": False,
+                "reviewer_ids": [99],
             },
+            "reviewers": [{"id": 99, "username": "creasy"}],
         },
         headers={"X-Gitlab-Token": "secret"},
     )

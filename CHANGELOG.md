@@ -30,6 +30,8 @@ section in the same change.
 - `@name /ask` still runs when the GitLab token user id is not
   resolved yet, as long as `REVIEW_MENTION` or the token username
   is known.
+- A later `/ask` on a resumed session no longer posts the previous
+  review as the answer.
 
 ### Changed
 

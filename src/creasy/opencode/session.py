@@ -374,9 +374,11 @@ class OpenCodeClient:
     ) -> str:
         deadline = time.time() + timeout
         last_change = time.time()
-        last_token: tuple[int, int, int, bool] | None = None
+        last_token: tuple[int, int, int, int] | None = None
         saw_busy = False
+        baseline_turn: str | None = None
         settle = max(0.0, float(idle_settle))
+        text = ""
         while time.time() < deadline:
             if should_stop and should_stop():
                 log_ok(logger, "opencode wait cancelled", session=session_id)
@@ -388,9 +390,9 @@ class OpenCodeClient:
                 messages = self.list_messages(session_id)
             except Exception:
                 messages = []
-            text = last_assistant_text(messages)
-            msg_n, parts_n, has_structured = session_activity(messages)
-            token = (msg_n, parts_n, len(text), has_structured)
+            text = turn_assistant_text(messages, prefer_review=False)
+            msg_n, parts_n, _has_structured = session_activity(messages)
+            token = (msg_n, parts_n, len(text), len(messages))
             if token != last_token:
                 last_token = token
                 last_change = time.time()
@@ -398,13 +400,22 @@ class OpenCodeClient:
             if busy:
                 saw_busy = True
                 last_change = time.time()
-            if not busy and (text or has_structured):
-                if saw_busy or has_structured:
-                    log_ok(logger, "opencode idle", session=session_id, chars=len(text), structured=has_structured, saw_busy=saw_busy)
-                    return text
-                if time.time() - last_change > settle:
-                    log_ok(logger, "opencode idle", session=session_id, chars=len(text), structured=has_structured, settled=True)
-                    return text
+            if baseline_turn is None:
+                baseline_turn = text
+                last_change = time.time()
+                time.sleep(min(1.0, max(0.05, settle if settle else 0.2)))
+                continue
+            grew = bool(text) and text != baseline_turn
+            if not busy and text and (saw_busy or grew or time.time() - last_change > settle):
+                log_ok(
+                    logger,
+                    "opencode idle",
+                    session=session_id,
+                    chars=len(text),
+                    saw_busy=saw_busy,
+                    grew=grew,
+                )
+                return text
             if time.time() - last_change > hang_timeout:
                 log_fail(logger, "opencode wait", session=session_id, reason="hang", chars=len(text), messages=msg_n)
                 raise OpenCodeError("hang")
