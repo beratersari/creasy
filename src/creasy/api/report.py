@@ -118,6 +118,7 @@ def public_settings(cfg: Config) -> dict[str, Any]:
         "azure_api_version": cfg.azure_api_version,
         "azure_webhook_user_set": bool(cfg.azure_webhook_user),
         "azure_webhook_password_set": bool(cfg.azure_webhook_password),
+        "review_mention": cfg.review_mention,
         "log_level": cfg.log_level,
         "git_timeout": cfg.git_timeout,
         "serve_health_timeout": cfg.serve_health_timeout,

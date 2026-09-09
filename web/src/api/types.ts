@@ -94,6 +94,14 @@ export type ReportLogBlob = {
   name?: string
 }
 
+export type ReviewSettings = {
+  opencode_model: string
+  opencode_timeout: number
+  env_model: string
+  env_timeout: number
+  models: string[]
+}
+
 export type ReportContext = {
   meta?: { app_name?: string; version?: string; server_time?: string }
   runtime?: Record<string, unknown>

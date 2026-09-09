@@ -22,7 +22,12 @@ from creasy.api.dashboard_auth import (
 from creasy.api.report import build_report_context
 from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
 from creasy.jobs.models import ERROR_STATUSES
-from creasy.logging import get_logger, read_job_log_lines
+from creasy.logging import get_logger, log_ok, read_job_log_lines
+from creasy.settings import (
+    SettingsError,
+    save_runtime_settings,
+    suggested_models,
+)
 from creasy.opencode.serve import read_serve_log, serve_log_path
 from creasy.opencode.session import fetch_live_chat
 from creasy.workspace.identity import mr_key
@@ -317,6 +322,52 @@ def api_meta(request: Request) -> dict:
     return {"version": __version__, "server_time": _now(), "app_name": "creasy"}
 
 
+def _settings_payload(request: Request) -> dict:
+    cfg = request.app.state.config
+    extras: list[str] = []
+    manager = getattr(request.app.state, "manager", None)
+    if manager is not None:
+        extras = [str(job.model or "") for job in manager.store.list_all()]
+    return {
+        "opencode_model": cfg.opencode_model,
+        "opencode_timeout": cfg.opencode_timeout,
+        "env_model": (cfg.opencode_model_env or cfg.opencode_model or "").strip(),
+        "env_timeout": int(cfg.opencode_timeout_env or cfg.opencode_timeout or 1800),
+        "models": suggested_models(cfg, extras),
+    }
+
+
+@router.get("/api/settings")
+def api_settings(request: Request) -> dict:
+    _check_token(request)
+    return _settings_payload(request)
+
+
+@router.put("/api/settings")
+async def api_put_settings(request: Request) -> dict:
+    _check_token(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    cfg = request.app.state.config
+    model = body.get("opencode_model", cfg.opencode_model)
+    timeout = body.get("opencode_timeout", cfg.opencode_timeout)
+    try:
+        save_runtime_settings(cfg, model=model, timeout=timeout)
+    except SettingsError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    log_ok(
+        logger,
+        "settings updated",
+        model=cfg.opencode_model,
+        timeout=cfg.opencode_timeout,
+    )
+    return _settings_payload(request)
+
+
 @router.get("/api/report-context")
 def api_report_context(request: Request) -> dict:
     _check_token(request)
@@ -447,6 +498,10 @@ def attach_spa(app) -> None:
 
     @app.get("/jobs/{job_id}")
     def job_page(job_id: str) -> FileResponse:
+        return _index()
+
+    @app.get("/settings")
+    def settings_page() -> FileResponse:
         return _index()
 
     favicon = dist / "favicon.svg"

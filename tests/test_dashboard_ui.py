@@ -11,6 +11,7 @@ def test_osm_shell_branded_creasy() -> None:
     assert "v{version}" in shell
     assert 'vd-mark">CR' in shell
     assert "Jobs" in shell
+    assert "Settings" in shell
     assert shell.count("connectionLabel(") == 1
     assert "bg-live" not in shell
 
@@ -56,6 +57,12 @@ def test_dashboard_does_not_start_reviews() -> None:
     client = (ROOT / "web" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
     assert "POST /jobs" not in client
     assert "/webhook" not in client
+    assert "saveSettings" in client
+    settings = (ROOT / "web" / "src" / "pages" / "settings" / "SettingsPage.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "Timeout (seconds)" in settings
+    assert "opencode_model" in settings
 
 
 def test_vite_source_html_is_not_the_served_dashboard() -> None:

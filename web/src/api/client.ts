@@ -1,5 +1,5 @@
 import { notifyAuthChanged } from './auth'
-import type { JobChatPayload, JobItem, JobsPayload, LogLine, PromptRow, ReportContext } from './types'
+import type { JobChatPayload, JobItem, JobsPayload, LogLine, PromptRow, ReportContext, ReviewSettings } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -63,6 +63,25 @@ export function fetchQueue(opts?: { jiraId?: string }) {
 
 export function fetchMeta() {
   return request<{ version: string; server_time: string; app_name: string }>('/api/meta')
+}
+
+export function fetchSettings() {
+  return request<ReviewSettings>('/api/settings')
+}
+
+export async function saveSettings(body: { opencode_model: string; opencode_timeout: number }) {
+  const res = await fetch('/api/settings', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const payload = await res.json().catch(() => ({}))
+  if (res.status === 401) notifyAuthChanged()
+  if (!res.ok) {
+    const detail = (payload as { detail?: unknown }).detail
+    throw new ApiError(typeof detail === 'string' ? detail : `HTTP ${res.status}`, res.status)
+  }
+  return payload as ReviewSettings
 }
 
 export function fetchReportContext() {

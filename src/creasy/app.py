@@ -16,11 +16,13 @@ from creasy.jobs.manager import Manager
 from creasy.jobs.worker import OpenCodeRunner
 from creasy.diag import log_diag
 from creasy.logging import setup_logging
+from creasy.settings import apply_runtime_settings
 from creasy.workspace.store import WorkspaceStore
 
 
 def create_app(config: Config | None = None) -> FastAPI:
     cfg = config or load_config()
+    apply_runtime_settings(cfg)
     log = setup_logging(cfg.log_level, cfg.log_dir)
 
     @asynccontextmanager
@@ -38,8 +40,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.manager = manager
         app.state.gitlab = gitlab
         app.state.azure = azure
-        app.state.bot_user_id = gitlab.current_user_id()
-        app.state.azure_bot_user_id = azure.current_user_id() if azure is not None else None
+        gl_user = gitlab.current_user()
+        app.state.bot_user_id = gl_user["id"] if gl_user else None
+        app.state.bot_mention_names = list((gl_user or {}).get("names") or [])
+        az_user = azure.current_user() if azure is not None else None
+        app.state.azure_bot_user_id = az_user["id"] if az_user else None
+        app.state.azure_bot_mention_names = list((az_user or {}).get("names") or [])
         log.info(
             "ok start version=%s host=%s port=%s gitlab=%s gitlab_token=%s azure=%s azure_enabled=%s",
             __version__,

@@ -44,6 +44,9 @@ export function Shell({ showLogout = false }: { showLogout?: boolean }) {
           <NavLink to="/jobs" className={({ isActive }) => (isActive ? 'active' : '')}>
             Jobs
           </NavLink>
+          <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}>
+            Settings
+          </NavLink>
         </nav>
         <div className="mt-3 space-y-2 px-1 text-xs">
           <ReportIssue />
