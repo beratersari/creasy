@@ -320,20 +320,6 @@ def _azure_bot_is_reviewer(pr: dict[str, Any], bot_user_id: Optional[str], names
     return False
 
 
-def _azure_actor_is_bot(payload: dict[str, Any], names: list[str]) -> bool:
-    aliases = {name.lower() for name in names if name}
-    if not aliases:
-        return False
-    first_line = (_message_text(payload).splitlines() or [""])[0].strip()
-    match = _ADDED_REVIEWER.match(first_line)
-    actor = (match.group("actor") if match else "").strip().lower()
-    if not actor:
-        return False
-    if actor in aliases:
-        return True
-    return "\\" in actor and actor.rsplit("\\", 1)[-1] in aliases
-
-
 def _azure_reviewer_assigned(
     payload: dict[str, Any],
     pr: dict[str, Any],
@@ -346,9 +332,6 @@ def _azure_reviewer_assigned(
         return False
     if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names):
         return False
-    if _azure_actor_is_bot(payload, mention_names):
-        log_ok(logger, "azure classify Ignore", reason="bot assigned self as reviewer")
-        return False
     first_line = (_message_text(payload).splitlines() or [""])[0].strip()
     match = _ADDED_REVIEWER.match(first_line)
     aliases = {name.lower() for name in mention_names if name}
@@ -356,10 +339,11 @@ def _azure_reviewer_assigned(
         who = match.group("who").strip().lower()
         if who in aliases or ("\\" in who and who.rsplit("\\", 1)[-1] in aliases):
             return True
+        return False
     text = _message_text(payload).lower()
     ntype = _notification_type(payload).lower()
     if (ntype == "reviewersupdatenotification" or event_kind in _REVIEWERS) and "added" in text and "reviewer" in text:
-        return True
+        return bool(aliases) and any(alias in text for alias in aliases)
     return False
 
 
@@ -401,6 +385,9 @@ def classify_azure_webhook(
         log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewers unchanged")
         return Ignore("reviewers unchanged")
     if kind in _CREATED:
+        if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names or []):
+            log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewer not assigned")
+            return Ignore("reviewer not assigned")
         return _review_from_pr(pr, payload, kind="open", explicit=False, skip_drafts=skip_drafts)
     if kind in _COMMENTED:
         return _review_from_comment(
@@ -541,14 +528,14 @@ def _review_from_comment(
         author or "-",
         remainder[:80],
     )
-    if action == "run" and command == "ask" and not remainder:
+    user_text = user_comment_text(note_text, mention_names)
+    if command == "ask" and not remainder and not user_text:
         log_ok(logger, "azure classify Ignore", reason="empty /ask", author=author or "-")
         return Ignore("empty /ask")
     if not pr or _pr_id(pr) is None:
         log_fail(logger, "azure classify ReviewTrigger", reason="missing pull request on comment", command=command or action)
         return Ignore("missing pull request on comment")
-    kind = "usage" if action == "usage" else command
-    user_text = user_comment_text(note_text, mention_names) if action == "run" else remainder
+    kind = command
     return _review_from_pr(
         pr,
         payload,

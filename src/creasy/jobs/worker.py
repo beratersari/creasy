@@ -7,10 +7,8 @@ from typing import Any, Callable, Optional, Protocol
 
 from creasy.azure.client import AzureClient, AzureError
 from creasy.azure.threads import azure_thread_context, parse_azure_threads
-from creasy.azure.wipe import wipe_azure_comments
 from creasy.config import Config
 from creasy.gitlab.client import GitLabClient, GitLabError, MergeRequest
-from creasy.gitlab.wipe import WipeCancelled, wipe_author_comments
 from creasy.jobs.models import JobRecord
 from creasy.cleanup.end import stop_job_holders
 from creasy.diag import log_diag, merge_job_diag
@@ -19,7 +17,6 @@ from creasy.opencode.serve import ServeHandle, serve_log_path, start_serve, stop
 from creasy.opencode.session import (
     OpenCodeClient,
     OpenCodeError,
-    last_assistant_text,
     snapshot_chat,
     turn_assistant_text,
 )
@@ -27,7 +24,6 @@ from creasy.jobs.store import JobStore
 from creasy.review.comment_range import format_code_comment_prompt
 from creasy.review.findings import Finding, split_findings
 from creasy.review.format import format_cancelled, format_failure, format_success
-from creasy.review.mention import collect_names, parse_mention_aliases, usage_note
 from creasy.review.position import build_position_variants, format_discussion
 from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
@@ -100,28 +96,6 @@ class OpenCodeRunner:
             return nullcontext()
         return bind(getattr(job, "azure_collection", "") or "", job.web_url or "")
 
-    def _ensure_reviewer(self, job: JobRecord) -> None:
-        """Assign the token user as a reviewer. A failed assign does not fail the job."""
-        try:
-            if self._is_azure(job):
-                if self.azure is None:
-                    return
-                uid = self.azure.current_user_id()
-                add = getattr(self.azure, "add_reviewer", None)
-                if not uid or not callable(add):
-                    return
-                if add(job.azure_project, job.azure_repo, job.mr_iid, uid):
-                    log_ok(logger, "assign reviewer", provider="azure", pr=job.mr_iid, user=uid)
-                return
-            uid = self.gitlab.current_user_id()
-            add = getattr(self.gitlab, "add_reviewer", None)
-            if uid is None or not callable(add):
-                return
-            if add(job.project_id, job.mr_iid, uid):
-                log_ok(logger, "assign reviewer", provider="gitlab", mr=job.mr_iid, user=uid)
-        except Exception as exc:  # noqa: BLE001
-            log_fail(logger, "assign reviewer", job=job.job_id, err=exc)
-
     def _remember_title(self, job: JobRecord, title: str) -> None:
         text = (title or "").strip()
         if not text or job.mr_title == text:
@@ -180,10 +154,9 @@ class OpenCodeRunner:
         return {"should_stop": should_stop, "on_pid": lambda pid: self._track_git_pid(job, pid)}
 
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
-        if job.trigger == "reset":
-            return self._run_reset(job, should_stop)
-        if job.trigger == "usage":
-            return self._run_usage(job, should_stop)
+        if job.trigger in {"reset", "usage"}:
+            log_ok(logger, "obsolete trigger skipped", job=job.job_id, trigger=job.trigger)
+            return RunResult()
         result = RunResult()
         handle: Optional[ServeHandle] = None
         client: Optional[OpenCodeClient] = None
@@ -218,7 +191,6 @@ class OpenCodeRunner:
                 target=mr.target_branch or "-",
             )
             self._remember_title(job, mr.title)
-            self._ensure_reviewer(job)
             self._note_diag(
                 job,
                 "load",
@@ -354,11 +326,7 @@ class OpenCodeRunner:
                 log_fail(logger, "opencode turn exhausted", session=session_id, err=last_error)
                 self._post_note(job, result)
                 return result
-            result.text = (
-                turn_assistant_text(messages, prefer_review=job.trigger != "ask")
-                or text
-                or last_assistant_text(messages)
-            )
+            result.text = turn_assistant_text(messages, prefer_review=job.trigger != "ask") or text
             markdown, findings = split_findings(result.text)
             result.text = markdown
             workspace.session_id = session_id
@@ -441,155 +409,6 @@ class OpenCodeRunner:
                 apply(getattr(job, "azure_collection", "") or "", job.web_url or "")
             return self.azure.get_pull_request(job.azure_project, job.azure_repo, job.mr_iid)
         return self.gitlab.get_merge_request(job.project_id, job.mr_iid)
-
-    def _mention_names_for_note(self, job: JobRecord) -> list[str]:
-        extras = parse_mention_aliases(getattr(self.config, "review_mention", "") or "")
-        live: list[str] = []
-        if self._is_azure(job) and self.azure is not None:
-            current = getattr(self.azure, "current_user", None)
-        else:
-            current = getattr(self.gitlab, "current_user", None)
-        if callable(current):
-            user = current()
-            if isinstance(user, dict):
-                live = list(user.get("names") or [])
-        return collect_names(extras, live)
-
-    def _run_usage(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
-        """Tell the commenter the @mention + command pair. No OpenCode."""
-        result = RunResult()
-        if should_stop():
-            result.cancelled = True
-            log_ok(logger, "usage cancelled", job=job.job_id, stage="start")
-            return result
-        azure_cm = self._bind_azure(job)
-        azure_cm.__enter__()
-        try:
-            body = usage_note(self._mention_names_for_note(job))
-            self._post_result_body(job, body)
-            result.posted = True
-            result.text = body
-            log_ok(logger, "usage note", provider=job.provider or "gitlab", job=job.job_id, mr=job.mr_iid)
-        except Exception as exc:  # noqa: BLE001
-            result.error = f"usage note failed: {exc}"
-            log_fail(logger, "usage note", job=job.job_id, err=exc)
-        finally:
-            azure_cm.__exit__(None, None, None)
-        return result
-
-    def _run_reset(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
-        """Delete PAT-authored notes/threads. No OpenCode, no clone, no MR note."""
-        result = RunResult()
-        if should_stop():
-            result.cancelled = True
-            log_ok(logger, "reset cancelled", job=job.job_id, stage="start")
-            return result
-        if self._is_azure(job):
-            return self._run_azure_reset(job, should_stop, result)
-        author_id = self.gitlab.current_user_id()
-        if author_id is None:
-            result.error = "reset failed: could not resolve GITLAB_TOKEN user"
-            log_fail(logger, "reset", provider="gitlab", err=result.error)
-            return result
-        try:
-            stats = wipe_author_comments(
-                self.gitlab,
-                job.project_id,
-                job.mr_iid,
-                author_id,
-                should_stop=should_stop,
-            )
-        except WipeCancelled:
-            result.cancelled = True
-            log_ok(logger, "reset cancelled", job=job.job_id, stage="wipe")
-            return result
-        except GitLabError as exc:
-            result.error = f"reset failed: {exc}"
-            log_fail(logger, "reset", provider="gitlab", err=exc)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("reset wipe failed job=%s", job.job_id)
-            result.error = f"reset failed: {exc}"
-            log_fail(logger, "reset", provider="gitlab", err=exc)
-            return result
-        workspace = self.workspaces.get(job.mr_key)
-        if workspace is not None and workspace.session_id:
-            workspace.session_id = ""
-            self.workspaces.save(workspace)
-        result.session_id = ""
-        result.text = stats.summary()
-        result.posted = True
-        if stats.failed:
-            log_fail(logger, "reset partial", provider="gitlab", job=job.job_id, summary=stats.summary())
-        else:
-            log_ok(logger, "reset", provider="gitlab", mr=job.mr_key, summary=stats.summary())
-        self._append_job_log(job, stats.summary())
-        return result
-
-    def _run_azure_reset(
-        self,
-        job: JobRecord,
-        should_stop: Callable[[], bool],
-        result: RunResult,
-    ) -> RunResult:
-        if self.azure is None:
-            result.error = "reset failed: azure not configured"
-            log_fail(logger, "reset", provider="azure", err=result.error)
-            return result
-        with self._bind_azure(job):
-            return self._wipe_azure(job, should_stop, result)
-
-    def _wipe_azure(
-        self,
-        job: JobRecord,
-        should_stop: Callable[[], bool],
-        result: RunResult,
-    ) -> RunResult:
-        assert self.azure is not None
-        author_id = self.azure.current_user_id()
-        if not author_id:
-            result.error = "reset failed: could not resolve AZURE_DEVOPS_PAT user"
-            log_fail(logger, "reset", provider="azure", err=result.error)
-            return result
-        if not job.azure_project or not job.azure_repo:
-            result.error = "reset failed: azure job is missing project or repo id"
-            log_fail(logger, "reset", provider="azure", err=result.error)
-            return result
-        try:
-            stats = wipe_azure_comments(
-                self.azure,
-                job.azure_project,
-                job.azure_repo,
-                job.mr_iid,
-                author_id,
-                should_stop=should_stop,
-            )
-        except WipeCancelled:
-            result.cancelled = True
-            log_ok(logger, "reset cancelled", job=job.job_id, stage="azure wipe")
-            return result
-        except AzureError as exc:
-            result.error = f"reset failed: {exc}"
-            log_fail(logger, "reset", provider="azure", err=exc)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("azure reset wipe failed job=%s", job.job_id)
-            result.error = f"reset failed: {exc}"
-            log_fail(logger, "reset", provider="azure", err=exc)
-            return result
-        workspace = self.workspaces.get(job.mr_key)
-        if workspace is not None and workspace.session_id:
-            workspace.session_id = ""
-            self.workspaces.save(workspace)
-        result.session_id = ""
-        result.text = stats.summary()
-        result.posted = True
-        if stats.failed:
-            log_fail(logger, "reset partial", provider="azure", job=job.job_id, summary=stats.summary())
-        else:
-            log_ok(logger, "reset", provider="azure", mr=job.mr_key, summary=stats.summary())
-        self._append_job_log(job, stats.summary())
-        return result
 
     def _prompt(
         self,

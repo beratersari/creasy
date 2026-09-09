@@ -15,7 +15,7 @@ git clone --recurse-submodules https://github.com/beratersari/creasy.git
 git submodule update --init --recursive
 ```
 
-Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. Each `@mention /review` or `@mention /ask` is a separate job that can resume the same OpenCode session. `@mention /reset` deletes that review’s comments posted by the token user and drops the stored session; it does not call OpenCode. A mention or a slash command alone posts a short usage note.
+Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. A full review starts when the token user is assigned or re-requested as reviewer. Each `@mention /ask` is a separate job that can resume the same OpenCode session. A mention or a slash command alone is ignored. There is no `/review` or `/reset` command.
 
 ## Run
 
@@ -84,11 +84,11 @@ host, not only from your laptop.
    GitLab sends it as `X-Gitlab-Token`. A missing or wrong secret is **401**.
 4. Enable these triggers only:
    - **Merge request events** — `open` starts a review; `close` / `merge` cancel jobs and delete the clone; `update` and `reopen` are ignored.
-   - **Comments** — `@<bot> /review`, `@<bot> /ask <question>`, `@<bot> /reset`. First command token wins.
+   - **Comments** — `@<bot> /ask <question>`.
 5. If Creasy is plain HTTP or uses an intercept certificate, leave **Enable SSL verification** unchecked.
 6. Save, then **Test** with a Merge request hook. Creasy should answer immediately (`accepted`, `queued`, or `ignored`).
 
-`GITLAB_TOKEN` needs the `api` scope so Creasy can clone over HTTPS, post the overview note, and open diff threads. Use a dedicated bot user: notes from that user are ignored, and `/reset` deletes only that user’s notes and threads.
+`GITLAB_TOKEN` needs the `api` scope so Creasy can clone over HTTPS, post the overview note, and open diff threads. Use a dedicated bot user: notes from that user are ignored.
 
 ### Azure DevOps Server
 
@@ -115,9 +115,9 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
 
    | Service Hook event | What Creasy does |
    |---|---|
-   | Pull request created | Enqueue a review |
-   | Pull request commented | `@<bot> /review`, `@<bot> /ask`, `@<bot> /reset` (lone mention or command gets a usage note) |
-   | Pull request updated | Ignored for new commits; **abandoned** cancels jobs and deletes the clone |
+   | Pull request created | Enqueue a review if the PAT user is already a reviewer |
+   | Pull request commented | `@<bot> /ask` (lone mention or command is ignored) |
+   | Pull request updated | Ignored for new commits; assigning the PAT user starts a review; **abandoned** cancels jobs and deletes the clone |
    | Pull request merge attempted | Cancel jobs and delete the clone |
 
 5. On each subscription’s action page:
@@ -127,7 +127,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    - Resource: the repo to review, or all repos in the project.
 6. Save and **Test** the created-PR subscription. Startup logs `azure_enabled=True` when the URL and PAT are set.
 
-Empty `@<bot> /ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `@<bot> /review`, `@<bot> /ask`, or `@<bot> /reset` still runs.
+Empty `@<bot> /ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `@<bot> /ask` or reviewer assign still runs.
 `@<bot>` is the GitLab username / Azure display name of the token user.
 Set `REVIEW_MENTION=creasy,Creasy Bot` to accept extra aliases.
 
@@ -137,13 +137,11 @@ Same commands on a GitLab merge request or an Azure pull request.
 
 | Event | Action |
 |---|---|
-| MR / PR open (created) | Enqueue a review |
-| Token user assigned as reviewer | Enqueue a review (same as `@<bot> /review`) |
-| MR / PR update (new commits) / reopen | Ignored — comment `@<bot> /review` to run again |
-| Comment `@<bot> /review …` | Full review job (queued FIFO if one is running). The token user is assigned as a reviewer |
+| MR / PR open (created) | Enqueue a review only if the token user or a `REVIEW_MENTION` alias is already a reviewer |
+| Token user assigned or re-requested as reviewer | Enqueue a review |
+| MR / PR update (new commits) / reopen | Ignored — assign or re-request the bot to run again |
 | Comment `@<bot> /ask …` | Follow-up on the same `ses_*` |
-| Comment `@<bot> /reset` | Delete notes and threads authored by the token user; clear `ses_*`. No OpenCode |
-| Comment `@<bot>` or `/review` `/ask` `/reset` alone | Usage note. No OpenCode |
+| Comment `@<bot>` or `/ask` alone | Ignored |
 | MR close / merge, or Azure abandon / complete | Cancel jobs and delete the local clone |
 
 A comment job replies on that comment’s thread when GitLab or Azure
@@ -166,4 +164,4 @@ python tests/mock_gitlab_webhook.py --event mr-comment --note "@creasy /ask why 
 python tester/tester.py
 ```
 
-Tester UI: http://127.0.0.1:8090/ — pick a repo / MR and fire open, `@creasy /review`, `@creasy /ask`, `@creasy /reset`, close.
+Tester UI: http://127.0.0.1:8090/ — pick a repo / MR and fire open, assign reviewer, `@creasy /ask`, close.

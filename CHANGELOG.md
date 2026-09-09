@@ -11,8 +11,25 @@ section in the same change.
 
 ### Added
 
-- Assigning the `.env` token user as a GitLab or Azure reviewer
-  starts a review. Creasy assigning itself does not.
+- Assigning the `.env` token user (or a `REVIEW_MENTION` alias) as
+  a GitLab or Azure reviewer starts a review. Opening an MR or PR
+  also starts a review only when that user is already a reviewer.
+  Jobs do not assign that user themselves.
+- There is no `/review` or `/reset` comment command. A leftover
+  `@name /review` or `@name /reset` is ignored. Use assign /
+  re-request for a full review and `@name /ask` for a follow-up.
+  A mention or command alone is ignored; Creasy no longer posts a
+  usage note.
+
+### Fixed
+
+- Adding a teammate as an Azure reviewer no longer starts a Creasy
+  review when the bot is already on the PR.
+- `@name /ask` at the end of a comment still runs when the question
+  is written above the command.
+- `@name /ask` still runs when the GitLab token user id is not
+  resolved yet, as long as `REVIEW_MENTION` or the token username
+  is known.
 
 ### Changed
 

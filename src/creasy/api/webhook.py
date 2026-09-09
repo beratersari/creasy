@@ -69,15 +69,16 @@ async def webhook(request: Request) -> JSONResponse:
     config = request.app.state.config
     manager = request.app.state.manager
     bot_id = _bot_user_id(request)
+    mention_names = _mention_names(request)
     kind = str(payload.get("object_kind") or "").strip().lower()
-    if kind == "note" and bot_id is None:
+    if kind == "note" and bot_id is None and not mention_names:
         log_fail(logger, "webhook bot user", reason="GITLAB_TOKEN user unknown")
         return JSONResponse({"status": "ignored", "reason": "bot user unknown"})
     classified = classify_webhook(
         payload,
         skip_drafts=config.skip_draft_mrs,
         bot_user_id=bot_id,
-        mention_names=_mention_names(request),
+        mention_names=mention_names,
     )
 
     if isinstance(classified, Ignore):

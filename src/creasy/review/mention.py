@@ -11,7 +11,7 @@ _VSS_MENTION = re.compile(
     re.IGNORECASE,
 )
 _HTML_MENTION = re.compile(r"<a\b[^>]*data-vss-mention[^>]*>.*?</a>", re.IGNORECASE | re.DOTALL)
-_CMD_RE = re.compile(r"(?:^|\s)/(review|ask|reset)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
+_CMD_RE = re.compile(r"(?:^|\s)/(ask)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
 _CMD_TRAIL = ".,!?:;)"
 
 
@@ -45,7 +45,7 @@ def azure_mention_ids(text: str) -> list[str]:
 
 
 def first_slash_command(body: str) -> Optional[tuple[str, str]]:
-    """Return (command, remainder) for the first /review, /ask, or /reset token."""
+    """Return (command, remainder) for the first /ask token."""
     text = body or ""
     match = _CMD_RE.search(text)
     if not match:
@@ -116,21 +116,16 @@ def comment_intent(
 ) -> Optional[tuple[str, str, str]]:
     """Parse a comment.
 
-    Returns:
-    - ``("run", command, remainder)`` when the bot is mentioned and a
-      slash command is present
-    - ``("usage", "", "")`` when only one of those is present
-    - ``None`` when the comment is unrelated
+    Returns ``("run", "ask", remainder)`` when the bot is mentioned and
+    ``/ask`` is present. Otherwise ``None``.
     """
     mentioned = has_bot_mention(body, names, mentioned_ids=mentioned_ids, bot_id=bot_id)
     parsed = first_slash_command(body)
-    if mentioned and parsed:
-        command, remainder = parsed
-        remainder = strip_bot_mentions(remainder, names)
-        return "run", command, remainder
-    if mentioned or parsed:
-        return "usage", "", ""
-    return None
+    if not mentioned or not parsed:
+        return None
+    command, remainder = parsed
+    remainder = strip_bot_mentions(remainder, names)
+    return "run", command, remainder
 
 
 USAGE_HEADING = "**Creasy — how to run a command**"
@@ -138,20 +133,6 @@ USAGE_MARKER = "<!-- creasy-usage -->"
 
 
 def is_usage_note(body: str) -> bool:
-    """True for the help note we post, so its examples do not start a job."""
+    """True for an old help note, so its examples do not start a job."""
     text = body or ""
     return USAGE_MARKER in text or USAGE_HEADING in text
-
-
-def usage_note(names: Sequence[str]) -> str:
-    alias = (collect_names(names) or ["creasy"])[0]
-    return (
-        f"{USAGE_MARKER}\n"
-        f"{USAGE_HEADING}\n\n"
-        "Mention this bot and a command in the **same** comment. Examples:\n\n"
-        f"- `@{alias} /review`\n"
-        f"- `@{alias} /review focus on auth`\n"
-        f"- `@{alias} /ask why is this lock held?`\n"
-        f"- `@{alias} /reset`\n\n"
-        "A mention alone or a command alone does nothing."
-    )

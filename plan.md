@@ -26,17 +26,13 @@ GitLab webhook
 POST /webhook  (ack immediately)
     │
     ├─ MR open
-    │       └─ enqueue one review job for that MR
-    ├─ Note on an MR that is `@mention /review`
-    │       └─ enqueue a full review job (resume ses_* if we have one);
-    │          assign the token user as an MR reviewer
+    │       └─ enqueue a review only if the token user / REVIEW_MENTION
+    │          is already assigned as a reviewer
     ├─ Note on an MR that is `@mention /ask`
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
-    ├─ Note on an MR whose body contains "/reset"
-    │       └─ enqueue a wipe of that MR’s notes/threads authored by the token user (no OpenCode)
     ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
-    │       └─ PR created / @mention /review /ask /reset; abandoned or merged cleans up;
-    │          assign the PAT user as a PR reviewer on review jobs;
+    │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
+    │          @mention /ask; abandoned or merged cleans up;
     │          mention or command alone posts a usage note (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
@@ -101,10 +97,9 @@ Yes. A completed review does not throw away the OpenCode conversation.
 OpenCode sessions live in the global `opencode.db`, keyed by workspace `directory`. The serve process is killed when the job ends; the `ses_*` id is not.
 
 **Decision (user):** later comments continue the same session via
-`@mention /review` or `@mention /ask`. `@mention /reset` deletes the
-token user’s notes and threads on that MR and clears `ses_*` so the
-next `@mention /review` starts a new session. A mention or a slash
-command alone posts a usage note and does not call OpenCode.
+`@mention /ask`. A full review starts when the token user is assigned
+or re-requested as reviewer. A mention or a slash command alone
+is ignored.
 Ordinary notes are ignored.
 
 Shared resume flow for both commands after a finished job:
@@ -120,18 +115,14 @@ Shared resume flow for both commands after a finished job:
 
 | Command | Prompt on resume | If no prior session |
 |---|---|---|
-| `@name /review [notes]` | Full review prompt again: MR metadata, merge-base, `--stat`, file list, project rules, “analyze from the separation point”, plus the remainder after `/review` | Create a session and run the full review |
+| Assign / re-request the token user | Full review prompt: MR metadata, merge-base, `--stat`, file list, “analyze from the separation point” | Create a session and run the full review |
 | `@name /ask <question>` | Only the question (plus a one-line “SHA changed to …” if the branch moved). Do **not** rebuild the full review prompt. The previous review is already in chat history. | Still run: clone if needed, create a session, send a short context (title, source→target, changed-file list) + the question. Do not require a prior review. |
-| `/reset` | **No OpenCode.** Delete every MR note and discussion authored by the `GITLAB_TOKEN` user on that MR. Clear the stored `ses_*`. Keep the clone and job history. Do not post a new note. | Same wipe. No session to clear. |
-
-`@name /ask` with no question text after the command: ignore the webhook (200) and do not start a job. A mention or `/review` `/ask` `/reset` alone posts a usage note and does not call OpenCode.
-
-`/reset` with no extra text still runs.
+`@name /ask` with no question text after the command: ignore the webhook (200) and do not start a job. A mention or `/ask` alone is ignored.
 
 Rules:
 
 - First job for an MR: no `ses_*` yet → create a session, save it.
-- Later `/review` or `/ask` on the same MR: resume that `ses_*` so the agent still has the previous review in chat history.
+- Later review or `/ask` on the same MR: resume that `ses_*` so the agent still has the previous review in chat history.
 - `/reset` clears the stored `ses_*`. The next `/review` or `/ask` creates a new session.
 - If OpenCode rejects the id (expired / unknown), create a **new** session and continue. Do not fail the job. Save the new id. For `/ask` after a rejected id, include the short MR context so the new session is not blind.
 - Mid-job hang retry (we already posted the user message): resume the **same** id only. Do not invent a blank session and pretend it is a continue.
@@ -145,24 +136,23 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 
 | GitLab event | Action |
 |---|---|
-| `object_kind=merge_request`, `action=open` | Enqueue review |
+| `object_kind=merge_request`, `action=open` | Enqueue review only if the token user / `REVIEW_MENTION` is already a reviewer |
 | `object_kind=merge_request`, `action` in `update`, `reopen` | Ignore unless the token user was added or re-requested as reviewer |
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
-| `object_kind=note`, `noteable_type=MergeRequest`, `@name /review` | Enqueue full review (resume `ses_*` if stored) |
+| `object_kind=note`, `noteable_type=MergeRequest`, `@name /review` | Ignore |
 | `object_kind=note`, `noteable_type=MergeRequest`, `@name /ask` + question text | Enqueue follow-up on the same `ses_*` |
-| `object_kind=note`, mention xor slash command | Enqueue usage note (no OpenCode) |
-| `object_kind=note`, `noteable_type=MergeRequest`, body contains `/reset` | Enqueue a PAT-author wipe on that MR (no OpenCode) |
+| `object_kind=note`, mention xor slash command | Ignore |
 | Everything else | 200 ignored |
 
-If `/review`, `/ask`, and `/reset` appear in one note, the **first** command token wins.
+`/ask` is the only comment command. `/review` and `/reset` are ignored.
 
 Extra guards:
 
 - Ignore notes authored by the token’s own user so our posted review cannot retrigger.
-- Treat `/review`, `/ask`, and `/reset` as command tokens (word-style match), not substrings of “preview” / “task”.
-- Skip draft MRs by default (`SKIP_DRAFT_MRS=true`) for auto MR events. `/review`, `/ask`, and `/reset` on a draft still run (explicit human request).
+- Treat `/ask` as a command token (word-style match), not a substring of “task”.
+- Skip draft MRs by default (`SKIP_DRAFT_MRS=true`) for auto MR events. `/ask` and reviewer assign on a draft still run (explicit human request).
 - New commits on an open MR (`update` + `oldrev`) do not review.
-  Reopen and mark-as-ready do not review. Comment `/review`.
+  Reopen and mark-as-ready do not review. Assign or re-request the bot.
 
 Webhook HTTP response is always an immediate ack (`accepted`, `queued`, or `ignored`). A comment that arrives while that MR already has a running job is **accepted and queued**, not 409. Review work never holds the GitLab webhook socket.
 

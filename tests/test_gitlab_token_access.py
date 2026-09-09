@@ -395,25 +395,6 @@ def test_reply_discussion_denied_sets_status(status: int) -> None:
         client.close()
 
 
-def test_add_reviewer_keeps_existing() -> None:
-    seen: list[tuple[str, object]] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append((request.method, request.url.path))
-        if request.method == "GET":
-            return httpx.Response(200, json={"iid": 2, "reviewers": [{"id": 5}]})
-        body = request.read()
-        return httpx.Response(200, json={"iid": 2, "reviewers": [{"id": 5}, {"id": 99}]})
-
-    client = _client(handler)
-    try:
-        assert client.add_reviewer(1, 2, 99) is True
-        assert any(path.endswith("/projects/1/merge_requests/2") for method, path in seen if method == "GET")
-        assert any(path.endswith("/projects/1/merge_requests/2") for method, path in seen if method == "PUT")
-    finally:
-        client.close()
-
-
 def test_current_user_id_401_returns_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(401, text='{"message":"401 Unauthorized"}')

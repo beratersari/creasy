@@ -78,7 +78,7 @@ export function JobsPage() {
         title="Jobs"
         description={
           live.connected
-            ? 'Each card is one review, /ask, or /reset.'
+            ? 'Each card is one review or /ask.'
             : `${connectionLabel(false)} — list may be stale.`
         }
         actions={

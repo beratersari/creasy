@@ -181,25 +181,6 @@ class AzureClient:
         user = self.current_user()
         return str(user["id"]) if user and user.get("id") else None
 
-    def add_reviewer(self, project: str, repo: str, pr_id: int, user_id: str) -> bool:
-        """Assign the PAT user as a PR reviewer. vote=0 is no vote."""
-        uid = str(user_id or "").strip()
-        if not uid:
-            return False
-        extra = f"/pullRequests/{int(pr_id)}/reviewers/{_seg(uid)}"
-        try:
-            self._send(
-                "PUT",
-                self._git_paths(project, repo, extra),
-                json={"id": uid, "vote": 0},
-                params={"api-version": self.api_version},
-            )
-        except Exception as exc:  # noqa: BLE001
-            log_fail(logger, "azure add reviewer", project=project, repo=repo, pr=pr_id, user=uid, err=exc)
-            return False
-        log_ok(logger, "azure add reviewer", project=project, repo=repo, pr=pr_id, user=uid)
-        return True
-
     def get_pull_request(self, project: str, repo: str, pr_id: int) -> MergeRequest:
         try:
             response = self._send(
