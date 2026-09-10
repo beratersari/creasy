@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.7 — 2026-09-10
+
+Mentions without `/ask` or `/review` get a usage note. Azure and
+GitLab `/ask` follow-ups use the same prompt.
+
 ### Changed
 
 - `/ask` on Azure and GitLab now feed OpenCode the same follow-up
