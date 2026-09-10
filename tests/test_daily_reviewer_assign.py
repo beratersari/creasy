@@ -34,7 +34,7 @@ def test_gitlab_adding_teammate_does_not_start_a_job(tmp_config):
             }
         },
     }
-    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"
     assert manager.store.list_all() == []
@@ -66,7 +66,7 @@ def test_gitlab_assigning_bot_after_teammate_starts_one_job(tmp_config):
             }
         },
     }
-    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
     assert job is not None
@@ -84,7 +84,7 @@ def test_azure_adding_teammate_does_not_start_a_job(tmp_config):
         {"id": "alice", "displayName": "Alice"},
     ]
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -103,7 +103,7 @@ def test_azure_adding_bot_starts_a_job(tmp_config):
     app, manager, runner = _azure_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -124,7 +124,7 @@ def test_azure_created_then_teammate_add_does_not_queue_second_job(tmp_config):
     app, manager, runner = _azure_app(tmp_config)
     client = TestClient(app)
     created = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
         headers=_auth(),
     )
@@ -132,7 +132,7 @@ def test_azure_created_then_teammate_add_does_not_queue_second_job(tmp_config):
     pr = _pr_with_bot()
     pr["reviewers"] = list(pr["reviewers"]) + [{"id": "alice", "displayName": "Alice"}]
     later = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",

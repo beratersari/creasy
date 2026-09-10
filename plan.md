@@ -23,14 +23,15 @@ The binding checklist is in [AGENTS.md](AGENTS.md)
 GitLab webhook
     │
     ▼
-POST /webhook  (ack immediately)
+POST /creasy/webhook/gitlab  (ack immediately)
     │
     ├─ MR open
     │       └─ enqueue a review only if the token user / REVIEW_MENTION
     │          is already assigned as a reviewer
     ├─ Note on an MR that is `@mention /ask`
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
-    ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
+    ├─ Azure DevOps POST /creasy/webhook/azure
+    │          (optional; GitLab routes stay GitLab-only)
     │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
     │          @mention /ask; abandoned or merged cleans up;
     │          mention or command alone is ignored (no OpenCode)
@@ -370,7 +371,7 @@ creasy/
     app.py                 # FastAPI + lifespan (boot / shutdown)
     config.py
     api/
-      webhook.py           # POST /webhook
+      webhook.py           # POST /creasy/webhook/gitlab
       health.py            # GET /health
       dashboard.py         # GET /api/jobs, cancel
     dashboard/             # SPA adapter (OSM jobs-tab look)
@@ -439,7 +440,8 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | ready, running/queued counts, workspace count |
-| `POST` | `/webhook` | GitLab hook |
+| `POST` | `/creasy/webhook/gitlab` | GitLab hook |
+| `POST` | `/creasy/webhook/azure` | Azure hook |
 | `GET` | `/jobs` | Dashboard SPA |
 | `GET` | `/api/jobs` | List/filter jobs (`filter`, `mr_key`, page) |
 | `GET` | `/api/jobs/{job_id}` | Job detail + system logs |

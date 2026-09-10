@@ -1,4 +1,4 @@
-"""Azure DevOps Service Hook receiver. Isolated from POST /webhook."""
+"""Azure DevOps Service Hook receiver. Isolated from the GitLab route."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def _verify_secret(request: Request) -> None:
     log_ok(logger, "azure webhook secret", check="matched")
 
 
-@router.post("/webhook/azure")
+@router.post("/creasy/webhook/azure")
 async def webhook_azure(request: Request) -> JSONResponse:
     _verify_secret(request)
     config = request.app.state.config

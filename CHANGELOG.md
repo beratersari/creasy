@@ -9,6 +9,12 @@ section in the same change.
 
 ## Unreleased
 
+### Added
+
+- Webhook URLs are `POST /creasy/webhook/gitlab` and
+  `POST /creasy/webhook/azure`. The old `/webhook`,
+  `/webhook/gitlab`, and `/webhook/azure` paths are gone.
+
 ### Fixed
 
 - After a successful GitLab review, Creasy marks the token user

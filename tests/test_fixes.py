@@ -483,7 +483,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     app.include_router(webhook_router)
     client = TestClient(app)
     opened = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {
@@ -503,7 +503,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     assert runner.started.wait(2)
     t0 = time.time()
     closed = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {"action": "close", "iid": 11, "target_project_id": 6},

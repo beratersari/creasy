@@ -58,8 +58,8 @@ These look like bugs. They are not.
 
 ### Webhook
 
-- `POST /webhook` acks immediately. Never hold that socket for clone
-  or OpenCode.
+- `POST /creasy/webhook/gitlab` acks immediately. Never hold that
+  socket for clone or OpenCode.
 - Verify `X-Gitlab-Token` against `WEBHOOK_SECRET` when the secret is
   set. Missing/wrong → **401**.
 - Classify in `creasy.gitlab.events`. Do not re-parse payloads in the
@@ -81,11 +81,11 @@ These look like bugs. They are not.
   `@name /ask` and reviewer assign still run.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
-- Azure DevOps Server is optional and isolated. `POST /webhook` stays
-  GitLab-only. Azure uses `POST /webhook/azure`, `creasy.azure`, and
-  `job.provider=azure`. Empty `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT`
-  means Azure is off. Do not fold Azure classify into
-  `creasy.gitlab.events`.
+- Azure DevOps Server is optional and isolated. GitLab routes stay
+  GitLab-only. Azure uses `POST /creasy/webhook/azure`,
+  `creasy.azure`, and `job.provider=azure`. Empty
+  `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT` means Azure is off. Do
+  not fold Azure classify into `creasy.gitlab.events`.
 
 ### Jobs and concurrency
 

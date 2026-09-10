@@ -63,7 +63,7 @@ def _append(path: Path, row: dict) -> None:
 
 def send_webhooks(args) -> list[dict]:
     acks: list[dict] = []
-    url = args.base.rstrip("/") + "/webhook"
+    url = args.base.rstrip("/") + "/creasy/webhook/gitlab"
     headers = {"Content-Type": "application/json"}
     if args.secret:
         headers["X-Gitlab-Token"] = args.secret

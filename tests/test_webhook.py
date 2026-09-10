@@ -36,7 +36,7 @@ def test_ask_runs_when_bot_id_unknown_if_mention_alias_is_set(tmp_config):
         "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask why this lock?"},
         "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
@@ -68,7 +68,7 @@ def test_note_ignored_when_bot_and_mention_unknown(tmp_config):
         "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask why"},
         "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"
     assert res.json()["reason"] == "bot user unknown"
@@ -79,7 +79,7 @@ def test_note_ignored_when_bot_and_mention_unknown(tmp_config):
 def test_secret_required(tmp_config):
     app, _, _ = _app(tmp_config)
     client = TestClient(app)
-    res = client.post("/webhook", json={"object_kind": "merge_request"})
+    res = client.post("/creasy/webhook/gitlab", json={"object_kind": "merge_request"})
     assert res.status_code == 401
 
 
@@ -100,7 +100,7 @@ def test_open_accepted(tmp_config):
         },
         "reviewers": [{"id": 99, "username": "creasy"}],
     }
-    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "accepted"
@@ -110,6 +110,29 @@ def test_open_accepted(tmp_config):
     assert job.mr_title == "Fix login timeout"
     assert job.public_dict()["mr_title"] == "Fix login timeout"
     runner.release.set()
+    manager.shutdown()
+
+
+def test_old_gitlab_webhook_paths_are_gone(tmp_config):
+    app, manager, _runner = _app(tmp_config)
+    client = TestClient(app)
+    payload = {
+        "object_kind": "merge_request",
+        "object_attributes": {
+            "action": "open",
+            "iid": 1,
+            "target_project_id": 5,
+            "source_branch": "f",
+            "target_branch": "main",
+            "draft": False,
+            "title": "Fix login timeout",
+            "reviewer_ids": [99],
+        },
+        "reviewers": [{"id": 99, "username": "creasy"}],
+    }
+    headers = {"X-Gitlab-Token": "secret"}
+    assert client.post("/webhook", json=payload, headers=headers).status_code == 404
+    assert client.post("/webhook/gitlab", json=payload, headers=headers).status_code == 404
     manager.shutdown()
 
 
@@ -129,7 +152,7 @@ def test_update_with_new_commits_ignored(tmp_config):
             "title": "Fix login timeout",
         },
     }
-    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"
     assert manager.store.list_all() == []
@@ -145,7 +168,7 @@ def test_command_without_mention_is_ignored(tmp_config):
         "object_attributes": {"noteable_type": "MergeRequest", "note": "/ask"},
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "ignored"
     assert manager.store.list_all() == []
@@ -165,7 +188,7 @@ def test_comment_job_keeps_discussion_id(tmp_config):
         },
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
     job = manager.store.get(res.json()["job_id"])
     assert job is not None
     assert job.discussion_id == "disc_live"
@@ -189,7 +212,7 @@ def test_mention_comment_is_accepted(tmp_config):
             "title": "Add overflow",
         },
     }
-    res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
@@ -210,13 +233,13 @@ def test_comment_queued_while_busy(tmp_config):
         "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask first?"},
         "merge_request": {"iid": 2, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    first = client.post("/webhook", json=note, headers=headers)
+    first = client.post("/creasy/webhook/gitlab", json=note, headers=headers)
     assert first.json()["status"] == "accepted"
     second = {
         **note,
         "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask what about errors?"},
     }
-    queued = client.post("/webhook", json=second, headers=headers)
+    queued = client.post("/creasy/webhook/gitlab", json=second, headers=headers)
     assert queued.json()["status"] == "queued"
     job = manager.store.get(queued.json()["job_id"])
     assert job is not None
@@ -235,9 +258,9 @@ def test_dashboard_cancel_queued(tmp_config):
         "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask first?"},
         "merge_request": {"iid": 8, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
     }
-    first = client.post("/webhook", json=note, headers=headers).json()
+    first = client.post("/creasy/webhook/gitlab", json=note, headers=headers).json()
     second = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={**note, "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask later?"}},
         headers=headers,
     ).json()

@@ -123,29 +123,29 @@ def main() -> int:
 
     cases = [
         ("GET", "/health", None, {}, "health"),
-        ("POST", "/webhook", _gitlab_mr("open"), gl, "gitlab open"),
-        ("POST", "/webhook", _gitlab_mr("update", oldrev="abc"), gl, "gitlab update+oldrev"),
-        ("POST", "/webhook", _gitlab_mr("reopen"), gl, "gitlab reopen"),
-        ("POST", "/webhook", _gitlab_mr("open", draft=True), gl, "gitlab draft open"),
-        ("POST", "/webhook", _gitlab_note("@creasy /review."), gl, "gitlab leftover /review."),
-        ("POST", "/webhook", _gitlab_note("@creasy /ask? why nullable?"), gl, "gitlab /ask?"),
-        ("POST", "/webhook", _gitlab_note("@creasy /ask   "), gl, "gitlab empty /ask"),
-        ("POST", "/webhook", _gitlab_note("@creasy /reset!"), gl, "gitlab leftover /reset!"),
-        ("POST", "/webhook", _gitlab_note("looks good"), gl, "gitlab chatter"),
-        ("POST", "/webhook", _gitlab_note("@creasy /ask why", user_id=99), gl, "gitlab bot note"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_mr("open"), gl, "gitlab open"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_mr("update", oldrev="abc"), gl, "gitlab update+oldrev"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_mr("reopen"), gl, "gitlab reopen"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_mr("open", draft=True), gl, "gitlab draft open"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("@creasy /review."), gl, "gitlab leftover /review."),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("@creasy /ask? why nullable?"), gl, "gitlab /ask?"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("@creasy /ask   "), gl, "gitlab empty /ask"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("@creasy /reset!"), gl, "gitlab leftover /reset!"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("looks good"), gl, "gitlab chatter"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_note("@creasy /ask why", user_id=99), gl, "gitlab bot note"),
         (
             "POST",
-            "/webhook",
+            "/creasy/webhook/gitlab",
             {**_gitlab_note("@creasy /ask why"), "object_attributes": {**_gitlab_note("@creasy /ask why")["object_attributes"], "action": "update"}},
             gl,
             "gitlab note edit",
         ),
-        ("POST", "/webhook", _gitlab_mr("close"), gl, "gitlab close"),
-        ("POST", "/webhook", {"eventType": "git.pullrequest.created", "resource": _pr()}, gl, "azure body on /webhook"),
-        ("POST", "/webhook", {"object_kind": "merge_request"}, {}, "gitlab missing secret"),
+        ("POST", "/creasy/webhook/gitlab", _gitlab_mr("close"), gl, "gitlab close"),
+        ("POST", "/creasy/webhook/gitlab", {"eventType": "git.pullrequest.created", "resource": _pr()}, gl, "azure body on gitlab webhook"),
+        ("POST", "/creasy/webhook/gitlab", {"object_kind": "merge_request"}, {}, "gitlab missing secret"),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.created",
                 "resource": {**_pr(), "reviewers": [{"id": "bot-id", "displayName": "creasy"}]},
@@ -153,24 +153,24 @@ def main() -> int:
             az,
             "azure PR created",
         ),
-        ("POST", "/webhook/azure", {"eventType": "git.pullrequest.updated", "resource": _pr()}, az, "azure PR updated"),
+        ("POST", "/creasy/webhook/azure", {"eventType": "git.pullrequest.updated", "resource": _pr()}, az, "azure PR updated"),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {"eventType": "git.pullrequest.updated", "resource": _pr(status="abandoned")},
             az,
             "azure PR abandoned",
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {"eventType": "git.pullrequest.merged", "resource": _pr(status="completed")},
             az,
             "azure PR merged",
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
                 "resource": {"comment": {"content": "@creasy /ask focus on auth", "author": {"id": "u1"}}, "pullRequest": _pr()},
@@ -180,7 +180,7 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
                 "resource": {"comment": {"content": "@creasy /ask? why this lock?", "author": {"id": "u1"}}, "pullRequest": _pr()},
@@ -190,7 +190,7 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
                 "resource": {"comment": {"content": "@creasy /ask   ", "author": {"id": "u1"}}, "pullRequest": _pr()},
@@ -200,7 +200,7 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
                 "resource": {"comment": {"content": "@creasy /reset!", "author": {"id": "u1"}}, "pullRequest": _pr()},
@@ -210,7 +210,7 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.commented",
                 "resource": {"comment": {"content": "@creasy /ask why", "author": {"id": "bot-id"}}, "pullRequest": _pr()},
@@ -220,7 +220,7 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.created",
                 "resource": {**_pr(isDraft=True), "reviewers": [{"id": "bot-id", "displayName": "creasy"}]},
@@ -230,15 +230,15 @@ def main() -> int:
         ),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {"eventType": "workitem.created", "resource": {}},
             az,
             "azure work item",
         ),
-        ("POST", "/webhook/azure", {"eventType": "git.pullrequest.created", "resource": _pr()}, {}, "azure missing secret"),
+        ("POST", "/creasy/webhook/azure", {"eventType": "git.pullrequest.created", "resource": _pr()}, {}, "azure missing secret"),
         (
             "POST",
-            "/webhook/azure",
+            "/creasy/webhook/azure",
             {
                 "eventType": "git.pullrequest.created",
                 "resource": {
@@ -303,7 +303,7 @@ def main() -> int:
         rows.append((jobs_res.status_code, None, "dashboard jobs after login", ""))
         jobs = jobs_res.json() if jobs_res.status_code == 200 else {}
         still = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_gitlab_note("@creasy /ask after login"),
             headers=gl,
         )

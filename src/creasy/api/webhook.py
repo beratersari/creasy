@@ -54,7 +54,7 @@ def _verify_secret(request: Request) -> None:
     log_ok(logger, "webhook secret", check="matched")
 
 
-@router.post("/webhook")
+@router.post("/creasy/webhook/gitlab")
 async def webhook(request: Request) -> JSONResponse:
     _verify_secret(request)
     try:
