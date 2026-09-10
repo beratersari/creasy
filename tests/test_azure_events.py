@@ -284,7 +284,7 @@ def test_pr_merged_is_cleanup():
     assert got.action == "merge"
 
 
-def test_mention_or_command_alone_is_ignored():
+def test_mention_without_command_is_usage():
     payload = {
         "eventType": "git.pullrequest.commented",
         "resource": {
@@ -293,7 +293,9 @@ def test_mention_or_command_alone_is_ignored():
         },
     }
     got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["creasy"])
-    assert isinstance(got, Ignore)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "usage"
+    assert got.explicit is True
     html = {
         "eventType": "git.pullrequest.commented",
         "resource": {
@@ -312,7 +314,8 @@ def test_mention_or_command_alone_is_ignored():
         bot_user_id="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
         mention_names=[],
     )
-    assert isinstance(tagged, Ignore)
+    assert isinstance(tagged, ReviewTrigger)
+    assert tagged.kind == "usage"
     other = classify_azure_webhook(payload, mention_names=["other-bot"])
     assert isinstance(other, Ignore)
 

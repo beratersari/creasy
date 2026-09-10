@@ -23,7 +23,8 @@ from creasy.opencode.session import (
 from creasy.jobs.store import JobStore
 from creasy.review.comment_range import format_code_comment_prompt
 from creasy.review.findings import Finding, split_findings
-from creasy.review.format import format_cancelled, format_failure, format_success
+from creasy.review.format import format_cancelled, format_failure, format_success, format_usage
+from creasy.review.mention import plain_comment
 from creasy.review.position import build_position_variants, format_discussion
 from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
@@ -159,9 +160,11 @@ class OpenCodeRunner:
         return {"should_stop": should_stop, "on_pid": lambda pid: self._track_git_pid(job, pid)}
 
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
-        if job.trigger in {"reset", "usage"}:
+        if job.trigger == "reset":
             log_ok(logger, "obsolete trigger skipped", job=job.job_id, trigger=job.trigger)
             return RunResult()
+        if job.trigger == "usage":
+            return self._run_usage(job, should_stop)
         result = RunResult()
         handle: Optional[ServeHandle] = None
         client: Optional[OpenCodeClient] = None
@@ -403,6 +406,37 @@ class OpenCodeRunner:
                 logger.exception("job-end stop_job_holders failed job=%s", job.job_id)
             stop_serve(handle)
             # Keep the clone. OSM deletes here; Creasy waits for MR close/merge.
+
+    def _run_usage(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult:
+        result = RunResult()
+        azure_cm = self._bind_azure(job)
+        azure_cm.__enter__()
+        try:
+            if should_stop():
+                result.cancelled = True
+                log_ok(logger, "job cancelled", job=job.job_id, stage="usage")
+                return result
+            body = format_usage(job)
+            via = self._post_result_body(job, body)
+            result.posted = True
+            result.text = body
+            log_ok(
+                logger,
+                "post usage",
+                provider=job.provider or "gitlab",
+                job=job.job_id,
+                via=via,
+            )
+            return result
+        except Exception as exc:  # noqa: BLE001
+            result.error = f"post usage failed: {redact_userinfo(str(exc))}"
+            log_fail(logger, "post usage", provider=job.provider or "gitlab", job=job.job_id, err=exc)
+            return result
+        finally:
+            try:
+                azure_cm.__exit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                logger.exception("azure unbind failed job=%s", job.job_id)
 
     def _load_change(self, job: JobRecord) -> MergeRequest:
         if self._is_azure(job):
@@ -658,6 +692,9 @@ class OpenCodeRunner:
         except ValueError:
             return False
 
+    def _comment_plain(self, comment: dict) -> str:
+        return plain_comment(str(comment.get("content") or comment.get("body") or ""))
+
     def _prior_from_comments(self, comments: list[dict], *, current_id: int, current_text: str) -> str:
         current_text = (current_text or "").strip()
         current = None
@@ -668,7 +705,7 @@ class OpenCodeRunner:
                     break
         if current is None and current_text:
             for comment in reversed(comments):
-                body = str(comment.get("content") or comment.get("body") or "").strip()
+                body = self._comment_plain(comment)
                 if body and current_text in body:
                     current = comment
                     break
@@ -682,11 +719,15 @@ class OpenCodeRunner:
             if parent_id:
                 for comment in comments:
                     if int(comment.get("id") or 0) == parent_id:
-                        return str(comment.get("content") or comment.get("body") or "").strip()
-        if len(comments) >= 2:
-            return str(comments[-2].get("content") or comments[-2].get("body") or "").strip()
-        if comments:
-            return str(comments[0].get("content") or comments[0].get("body") or "").strip()
+                        return self._comment_plain(comment)
+        skip_ids = {int(current.get("id") or 0)} if current is not None else set()
+        if current_id:
+            skip_ids.add(current_id)
+        prior = [comment for comment in comments if int(comment.get("id") or 0) not in skip_ids]
+        if current_text:
+            prior = [comment for comment in prior if current_text not in self._comment_plain(comment)]
+        if prior:
+            return self._comment_plain(prior[-1])
         return ""
 
     def _load_prior_thread_text(self, job: JobRecord) -> str:
@@ -722,7 +763,7 @@ class OpenCodeRunner:
     def _submit_gitlab_review(self, job: JobRecord) -> None:
         if self._is_azure(job):
             return
-        if (job.trigger or "") == "ask":
+        if (job.trigger or "") in {"ask", "usage"}:
             return
         submit = getattr(self.gitlab, "submit_review", None)
         if not callable(submit):

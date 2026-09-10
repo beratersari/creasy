@@ -34,7 +34,9 @@ def format_mr_meta(mr: MergeRequest) -> str:
 
 
 def format_mr_description(mr: MergeRequest, *, limit: int = _DESC_LIMIT) -> str:
-    return _clip(mr.description, limit)
+    from creasy.review.mention import plain_comment
+
+    return _clip(plain_comment(mr.description), limit)
 
 
 def build_review_prompt(
@@ -91,14 +93,14 @@ def build_ask_prompt(
     parts: list[str] = []
     if sha_changed and index is not None:
         parts.append(
-            f"Note: the MR HEAD moved"
+            f"Note: the HEAD moved"
             + (f" from `{previous_sha}`" if previous_sha else "")
             + f" to `{mr.sha if mr else ''}`. Updated stat:\n```\n{index.stat}\n```"
         )
     if include_context and mr is not None:
         paths = ", ".join(index.paths[:40]) if index else ""
         parts.append(
-            f"MR !{mr.iid} {mr.title} (`{mr.source_branch}` → `{mr.target_branch}`). "
+            f"!{mr.iid} {mr.title} (`{mr.source_branch}` → `{mr.target_branch}`). "
             f"Changed files: {paths or '(see git)'}."
         )
         parts.append(format_mr_meta(mr).replace("\n", "; "))

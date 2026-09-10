@@ -65,6 +65,7 @@ class SpyGitlab:
         self.mr = mr or _mr()
         self.notes: list[str] = []
         self.submit_calls: list[tuple[int, int]] = []
+        self.discussions: list[dict] = []
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         return self.mr
@@ -79,6 +80,9 @@ class SpyGitlab:
     def submit_review(self, project_id: int, mr_iid: int) -> bool:
         self.submit_calls.append((project_id, mr_iid))
         return True
+
+    def list_discussions(self, project_id: int, mr_iid: int) -> list:
+        return list(self.discussions)
 
 
 def test_record_spawn_persists_pid_and_job_log(tmp_config):

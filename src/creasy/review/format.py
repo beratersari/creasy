@@ -6,6 +6,7 @@ from creasy import __version__
 from creasy.jobs.models import JobRecord
 from creasy.logging import redact_userinfo
 from creasy.review.findings import split_findings
+from creasy.review.mention import USAGE_HEADING, USAGE_MARKER
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _BOLD = re.compile(r"^\*\*(.+?)\*\*\s*$")
@@ -154,3 +155,15 @@ def format_failure(job: JobRecord) -> str:
 
 def format_cancelled(job: JobRecord) -> str:
     return f"**Creasy {__version__} — Cancelled** · `{job.job_id}` was cancelled.\n"
+
+
+def format_usage(job: JobRecord) -> str:
+    """Help text for a mention that is not `/ask` or `/review`."""
+    return (
+        f"{USAGE_MARKER}\n"
+        f"{USAGE_HEADING} · `{job.job_id}`\n\n"
+        "I only run `/ask` and `/review`. Mention me and put one of those "
+        "in the same comment.\n\n"
+        "- `/ask <question>` — answer on this thread\n"
+        "- `/review` — review the change (focused if this is a thread reply)\n"
+    )

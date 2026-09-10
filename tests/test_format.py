@@ -7,9 +7,11 @@ from creasy.review.format import (
     format_cancelled,
     format_failure,
     format_success,
+    format_usage,
     soften_markdown,
     strip_at_mentions,
 )
+from creasy.review.mention import is_usage_note
 
 
 def _job(**kwargs) -> JobRecord:
@@ -191,6 +193,14 @@ def test_thread_reply_does_not_quote_previous_comment() -> None:
     assert "@mberatersari" not in body
     assert "mberatersari" in body
     assert strip_at_mentions("ping @bot please") == "ping bot please"
+
+
+def test_usage_note_is_help_not_a_command() -> None:
+    body = format_usage(_job(trigger="usage"))
+    assert is_usage_note(body)
+    assert "/ask" in body
+    assert "/review" in body
+    assert "how to run a command" in body
 
 
 def test_failure_and_cancel_notes_are_not_commands() -> None:

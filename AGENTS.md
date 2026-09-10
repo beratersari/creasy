@@ -40,9 +40,10 @@ These look like bugs. They are not.
    starts a serve, one prompt, one thread reply, then kill that serve.
    `/ask` never opens new diff threads. `@mention /review` (or `/ask`
    text that explicitly asks for a new review) is a full or
-   thread-focused review and may open findings threads. A mention or
-   command alone is ignored. Do not hold a serve open waiting for the
-   next GitLab comment.
+   thread-focused review and may open findings threads. A mention
+   without `/ask` or `/review` posts a usage note on that thread
+   (no OpenCode). A command alone is ignored. Do not hold a serve
+   open waiting for the next GitLab comment.
 4. **Comments queue FIFO per MR.** A later `@mention /ask` while
    that MR is running is **queued**, not 409, not coalesced to
    “latest only”. Auto `open` is skipped if that MR already has a
@@ -81,7 +82,9 @@ These look like bugs. They are not.
   comment. `@name /ask <question>` → follow-up, reply only.
   `@name /review` → review (thread-focused when the comment is a
   reply). Empty `@name /ask` → ignore. Empty `@name /review` still
-  runs. Mention alone or a command alone → ignore. `/reset` → ignore.
+  runs. Mention without `/ask` or `/review` → usage note on that
+  thread (no OpenCode). A command alone → ignore. `/reset` with a
+  mention → usage note; `/reset` alone → ignore.
   Notes from the token’s own user → ignore. Same pair on Azure
   comments (`@Name` or `data-vss-mention` of the PAT user).
 - Draft MRs: skip auto events when `SKIP_DRAFT_MRS` is true. Explicit
@@ -211,7 +214,8 @@ note or discussion posting in `opencode/`.
 - Event tests cover open / update-with-and-without-`oldrev` ignored /
   reopen ignored / close / merge / assign reviewer / leftover
   `@mention /review` / `@mention /ask` / empty `@mention /ask` /
-  leftover `/reset` ignored / bot note / mention-or-command-alone ignored.
+  leftover `/reset` ignored / bot note / mention-without-command
+  posts usage / command-alone ignored.
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are

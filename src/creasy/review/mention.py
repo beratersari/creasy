@@ -21,6 +21,7 @@ _HTML_INNER = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _HTML_TAG = re.compile(r"<[^>]+>")
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([.,!?:;])")
 # Azure mention picker often emits "</a>/ask" with no space. Typed
 # "@name/ask" has no space either. HTML tags are stripped to spaces
 # before this runs, so "</a>/ask" becomes " /ask".
@@ -74,6 +75,15 @@ def azure_mention_ids(text: str) -> list[str]:
 
 def _plain_comment(text: str) -> str:
     return _HTML_TAG.sub(" ", text or "")
+
+
+def plain_comment(text: str) -> str:
+    """HTML-stripped comment or description text for the model prompt."""
+    lines = []
+    for line in _plain_comment(text).splitlines():
+        cleaned = _SPACE_BEFORE_PUNCT.sub(r"\1", " ".join(line.split()))
+        lines.append(cleaned)
+    return "\n".join(lines).strip()
 
 
 def extract_mentioned_names(text: str) -> list[str]:
@@ -180,8 +190,10 @@ def comment_intent(
 ) -> Optional[tuple[str, str, str]]:
     """Parse a comment.
 
-    Returns ``("run", "ask", remainder)`` when the bot is mentioned and
-    ``/ask`` is present. Otherwise ``None``.
+    Returns ``("run", "ask"|"review", remainder)`` when the bot is
+    mentioned and ``/ask`` or ``/review`` is present.
+    Returns ``("usage", "usage", leftover)`` when the bot is mentioned
+    without those commands. Otherwise ``None``.
     """
     mentioned = has_bot_mention(
         body,
@@ -191,11 +203,13 @@ def comment_intent(
         extra_ids=extra_ids,
     )
     parsed = first_slash_command(body)
-    if not mentioned or not parsed:
+    leftover = user_comment_text(body, names)
+    if not mentioned:
         return None
+    if not parsed:
+        return "usage", "usage", leftover
     command, remainder = parsed
     remainder = strip_bot_mentions(remainder, names)
-    leftover = user_comment_text(body, names)
     if command == "ask":
         from creasy.review.ask import ask_wants_new_review
 

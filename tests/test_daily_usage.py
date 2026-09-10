@@ -42,6 +42,27 @@ def _webhook_app(tmp_config):
     return app, manager, runner
 
 
+def test_mention_without_command_starts_usage_job(tmp_config):
+    app, manager, runner = _webhook_app(tmp_config)
+    client = TestClient(app)
+    payload = note_payload("@creasy please check auth")
+    payload["object_attributes"]["discussion_id"] = "disc_help"
+    res = client.post(
+        "/creasy/webhook/gitlab",
+        json=payload,
+        headers={"X-Gitlab-Token": "secret"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["status"] == "accepted", body
+    job = manager.store.get(body["job_id"])
+    assert job is not None
+    assert job.trigger == "usage"
+    assert job.discussion_id == "disc_help"
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_review_command_starts_a_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)

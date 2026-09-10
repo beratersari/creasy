@@ -203,9 +203,11 @@ def test_diff_note_keeps_range_and_user_question():
 def test_note_keeps_discussion_id_for_thread_reply():
     payload = note_payload("@creasy /ask focus on auth")
     payload["object_attributes"]["discussion_id"] = "abc123def"
+    payload["object_attributes"]["id"] = 88
     got = classify_webhook(payload, mention_names=["creasy"])
     assert isinstance(got, ReviewTrigger)
     assert got.discussion_id == "abc123def"
+    assert got.parent_comment_id == 88
     open_ = classify_webhook(open_with_reviewer(), bot_user_id=99)
     assert isinstance(open_, ReviewTrigger)
     assert open_.discussion_id == ""
@@ -274,9 +276,22 @@ def test_pasted_usage_note_is_ignored():
     assert isinstance(wrapped, Ignore)
 
 
-def test_mention_or_command_alone_is_ignored():
-    mention = classify_webhook(note_payload("@creasy please check auth"), mention_names=["creasy"])
-    assert isinstance(mention, Ignore)
+def test_mention_without_command_is_usage():
+    payload = note_payload("@creasy please check auth")
+    payload["object_attributes"]["discussion_id"] = "disc_help"
+    payload["object_attributes"]["id"] = 12
+    mention = classify_webhook(payload, mention_names=["creasy"])
+    assert isinstance(mention, ReviewTrigger)
+    assert mention.kind == "usage"
+    assert mention.explicit is True
+    assert mention.discussion_id == "disc_help"
+    assert mention.parent_comment_id == 12
+    reset = classify_webhook(note_payload("@creasy /reset"), mention_names=["creasy"])
+    assert isinstance(reset, ReviewTrigger)
+    assert reset.kind == "usage"
+
+
+def test_command_alone_is_ignored():
     command = classify_webhook(note_payload("/ask focus on auth"), mention_names=["creasy"])
     assert isinstance(command, Ignore)
     leftover_cmd = classify_webhook(note_payload("/review focus on auth"), mention_names=["creasy"])
@@ -335,7 +350,9 @@ def test_trailing_punctuation_still_runs_the_command():
     assert ask.kind == "ask"
     assert "nullable" in ask.comment_text
     assert isinstance(classify_webhook(note_payload("@creasy /ask?"), mention_names=["creasy"]), Ignore)
-    assert isinstance(classify_webhook(note_payload("@creasy /reset!"), mention_names=["creasy"]), Ignore)
+    reset = classify_webhook(note_payload("@creasy /reset!"), mention_names=["creasy"])
+    assert isinstance(reset, ReviewTrigger)
+    assert reset.kind == "usage"
     assert first_command("please /review.") == ("review", "")
     assert first_command("please /ask.") == ("ask", "")
     assert first_command("/asks") is None
