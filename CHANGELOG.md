@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.4 — 2026-09-10
+
+`/ask` is a thread reply only. `/review` is back for an explicit
+review.
+
 ### Changed
 
 - `@name /ask` only replies on the request thread. It never opens
