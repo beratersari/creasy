@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.0 — 2026-09-10
+
+Webhook URLs are namespaced. A finished GitLab review can be
+re-requested because Creasy now submits that review.
+
 ### Added
 
 - Webhook URLs are `POST /creasy/webhook/gitlab` and
