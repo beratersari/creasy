@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.2 — 2026-09-10
+
+Azure assign recognizes TFS `ORGANIZATION\\user` names and
+self-assign.
+
 ### Fixed
 
 - Azure assign matches `ORGANIZATION\\user` against `REVIEW_MENTION=user`.
