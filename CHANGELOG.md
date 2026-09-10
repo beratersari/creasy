@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.5 — 2026-09-10
+
+`@mention /ask` is recognized from the comment text, including Azure
+mention links with no space before `/ask`.
+
 ### Changed
 
 - Thread replies do not quote the previous comment or @mention
