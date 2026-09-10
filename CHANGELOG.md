@@ -9,6 +9,23 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.0 — 2026-09-10
+
+Webhook URLs are namespaced. A finished GitLab review can be
+re-requested because Creasy now submits that review.
+
+### Added
+
+- Webhook URLs are `POST /creasy/webhook/gitlab` and
+  `POST /creasy/webhook/azure`. The old `/webhook`,
+  `/webhook/gitlab`, and `/webhook/azure` paths are gone.
+
+### Fixed
+
+- After a successful GitLab review, Creasy marks the token user
+  as reviewed so the Re-request button appears. It does not
+  approve the merge request.
+
 ## 0.8.0 — 2026-09-10
 
 A full review starts when the token user is assigned as a reviewer.

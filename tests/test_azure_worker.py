@@ -88,6 +88,7 @@ def test_azure_job_posts_overview_to_azure_not_gitlab(tmp_config):
     assert azure.overviews
     assert "Looks risky" in azure.overviews[0]
     assert gitlab.notes == []
+    assert gitlab.submit_calls == []
 
 
 def test_gitlab_job_still_posts_to_gitlab(tmp_config):
@@ -108,3 +109,68 @@ def test_gitlab_job_still_posts_to_gitlab(tmp_config):
     assert result.posted is True
     assert gitlab.notes
     assert azure.overviews == []
+    assert gitlab.submit_calls == [(1, 2)]
+
+
+def test_ask_job_does_not_submit_gitlab_review(tmp_config):
+    gitlab = SpyGitlab()
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="ask",
+        text="Because the lock is per MR.",
+        model="opencode/x",
+    )
+    result = RunResult(text=job.text)
+    runner._post_note(job, result)
+    assert result.posted is True
+    assert gitlab.notes
+    assert gitlab.submit_calls == []
+
+
+def test_cancelled_or_error_note_does_not_submit_gitlab_review(tmp_config):
+    gitlab = SpyGitlab()
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="review",
+    )
+    cancelled = RunResult(cancelled=True)
+    runner._post_note(job, cancelled)
+    assert cancelled.posted is True
+    assert gitlab.submit_calls == []
+
+    failed = RunResult(error="opencode timed out")
+    runner._post_note(job, failed)
+    assert failed.posted is True
+    assert gitlab.submit_calls == []
+
+
+def test_submit_review_failure_does_not_fail_posted_job(tmp_config):
+    gitlab = SpyGitlab()
+
+    def boom(project_id: int, mr_iid: int) -> bool:
+        raise RuntimeError("gitlab down")
+
+    gitlab.submit_review = boom  # type: ignore[method-assign]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="open",
+        text="### Summary\nLooks fine.",
+        model="opencode/x",
+    )
+    result = RunResult(text=job.text)
+    runner._post_note(job, result)
+    assert result.posted is True
+    assert not result.error
+    assert gitlab.notes

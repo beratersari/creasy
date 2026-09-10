@@ -47,7 +47,7 @@ def test_leftover_review_command_is_ignored(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json=note_payload("@creasy /review."),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -62,7 +62,7 @@ def test_question_written_before_ask_starts_a_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json=note_payload("This overflow looks wrong.\n@creasy /ask"),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -79,7 +79,7 @@ def test_ask_with_a_question_mark_still_asks(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json=note_payload("@creasy /ask? is C++98 enough?"),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -99,11 +99,11 @@ def test_editing_a_review_comment_does_not_start_another_job(tmp_config):
     headers = {"X-Gitlab-Token": "secret"}
     created = note_payload("@creasy /ask focus on auth")
     created["object_attributes"]["action"] = "create"
-    first = client.post("/webhook", json=created, headers=headers)
+    first = client.post("/creasy/webhook/gitlab", json=created, headers=headers)
     assert first.json()["status"] == "accepted"
     edited = note_payload("@creasy /ask focus on auth and tests")
     edited["object_attributes"]["action"] = "update"
-    second = client.post("/webhook", json=edited, headers=headers)
+    second = client.post("/creasy/webhook/gitlab", json=edited, headers=headers)
     assert second.json()["status"] == "ignored"
     assert second.json()["reason"] == "note edit"
     assert len(manager.store.list_all()) == 1
@@ -141,7 +141,7 @@ def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: P
     )
     try:
         ask = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_note_body("@creasy /ask Does this change assume C++17, or is C++98 enough?"),
             headers={"X-Gitlab-Token": "secret"},
         )

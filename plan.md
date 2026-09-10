@@ -23,17 +23,18 @@ The binding checklist is in [AGENTS.md](AGENTS.md)
 GitLab webhook
     │
     ▼
-POST /webhook  (ack immediately)
+POST /creasy/webhook/gitlab  (ack immediately)
     │
     ├─ MR open
     │       └─ enqueue a review only if the token user / REVIEW_MENTION
     │          is already assigned as a reviewer
     ├─ Note on an MR that is `@mention /ask`
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
-    ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
+    ├─ Azure DevOps POST /creasy/webhook/azure
+    │          (optional; GitLab routes stay GitLab-only)
     │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
     │          @mention /ask; abandoned or merged cleans up;
-    │          mention or command alone posts a usage note (no OpenCode)
+    │          mention or command alone is ignored (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │
@@ -277,6 +278,14 @@ anchors on `path` + line range (`x.cpp` 30–40), posted via
 finding overlaps an unresolved Creasy thread, reply on that
 thread unless the last Creasy note is ≥ 90% similar (then skip).
 A failed thread is logged and skipped; it does not fail the job.
+After a successful GitLab review or open note (not `/ask`, not a
+short error or cancel note), mark the token user as `reviewed`
+via `POST .../draft_notes/bulk_publish` with
+`reviewer_state=reviewed`. That does not record a formal
+approval. If the endpoint is missing or the reviewer is still
+`unreviewed`, post a `/submit_review` quick-action note. A
+failed submit is logged and skipped so Re-request can appear
+without the bot approving the MR. Azure is unchanged.
 
 The agent reply is the markdown review, plus an optional
 `opencoderman-findings` fence. Creasy strips that fence before posting
@@ -362,7 +371,7 @@ creasy/
     app.py                 # FastAPI + lifespan (boot / shutdown)
     config.py
     api/
-      webhook.py           # POST /webhook
+      webhook.py           # POST /creasy/webhook/gitlab
       health.py            # GET /health
       dashboard.py         # GET /api/jobs, cancel
     dashboard/             # SPA adapter (OSM jobs-tab look)
@@ -431,7 +440,8 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | ready, running/queued counts, workspace count |
-| `POST` | `/webhook` | GitLab hook |
+| `POST` | `/creasy/webhook/gitlab` | GitLab hook |
+| `POST` | `/creasy/webhook/azure` | Azure hook |
 | `GET` | `/jobs` | Dashboard SPA |
 | `GET` | `/api/jobs` | List/filter jobs (`filter`, `mr_key`, page) |
 | `GET` | `/api/jobs/{job_id}` | Job detail + system logs |

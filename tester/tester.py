@@ -136,7 +136,7 @@ def _fire(body: dict[str, Any]) -> tuple[int, Any, dict[str, Any]]:
         headers["X-Gitlab-Token"] = cfg["webhook_secret"]
     status, resp = _http(
         "POST",
-        cfg["creasy_url"] + "/webhook",
+        cfg["creasy_url"] + "/creasy/webhook/gitlab",
         headers=headers,
         data=json.dumps(payload).encode("utf-8"),
     )
@@ -202,7 +202,7 @@ def main() -> None:
     cfg = _env()
     httpd = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Creasy tester  http://{args.host}:{args.port}/")
-    print(f"Target         {cfg['creasy_url']}/webhook")
+    print(f"Target         {cfg['creasy_url']}/creasy/webhook/gitlab")
     print(f"Default repo   {REPOS[0]['path']}  project={DEFAULT_PROJECT_ID}  MR !{DEFAULT_MR_IID}")
     print(f"Secret         {'set' if cfg['webhook_secret'] else 'MISSING (.env WEBHOOK_SECRET)'}")
     try:

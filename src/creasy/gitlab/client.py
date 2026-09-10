@@ -338,6 +338,109 @@ class GitLabClient:
         log_ok(logger, "gitlab delete", op=err.replace(" failed", ""), path=path)
         return True
 
+    def submit_review(self, project_id: int, mr_iid: int) -> bool:
+        """Mark this reviewer as reviewed so GitLab shows Re-request.
+
+        Does not approve the MR. A missing endpoint or ignored
+        ``reviewer_state`` falls back to a ``/submit_review`` quick
+        action. Failures are logged and return False.
+        """
+        if self._publish_reviewed(project_id, mr_iid) and self._reviewer_is_reviewed(
+            project_id, mr_iid
+        ):
+            return True
+        return self._submit_review_quick_action(project_id, mr_iid)
+
+    def _publish_reviewed(self, project_id: int, mr_iid: int) -> bool:
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/draft_notes/bulk_publish"
+        try:
+            response = self._http.post(path, json={"reviewer_state": "reviewed"})
+            if response.status_code in {200, 204}:
+                log_ok(
+                    logger,
+                    "gitlab submit review",
+                    via="bulk_publish",
+                    project=project_id,
+                    mr=mr_iid,
+                    http=response.status_code,
+                )
+                return True
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            status, detail = _http_detail(exc)
+            log_fail(
+                logger,
+                "gitlab submit review",
+                via="bulk_publish",
+                project=project_id,
+                mr=mr_iid,
+                http=status,
+                err=exc,
+                body=detail,
+            )
+            return False
+        return False
+
+    def _reviewer_is_reviewed(self, project_id: int, mr_iid: int) -> bool:
+        user_id = self.current_user_id()
+        if user_id is None:
+            return False
+        path = f"/projects/{project_id}/merge_requests/{mr_iid}/reviewers"
+        try:
+            response = self._http.get(path)
+            response.raise_for_status()
+        except Exception as exc:  # noqa: BLE001
+            status, detail = _http_detail(exc)
+            log_fail(
+                logger,
+                "gitlab list reviewers",
+                project=project_id,
+                mr=mr_iid,
+                http=status,
+                err=exc,
+                body=detail,
+            )
+            return False
+        batch = response.json() if response.content else []
+        if not isinstance(batch, list):
+            return False
+        done = {"reviewed", "requested_changes", "approved"}
+        for item in batch:
+            if not isinstance(item, dict):
+                continue
+            user = item.get("user") if isinstance(item.get("user"), dict) else item
+            try:
+                uid = int((user or {}).get("id"))
+            except (TypeError, ValueError):
+                continue
+            if uid != int(user_id):
+                continue
+            state = str(item.get("state") or "").strip().lower()
+            return state in done
+        return False
+
+    def _submit_review_quick_action(self, project_id: int, mr_iid: int) -> bool:
+        try:
+            self.post_note(project_id, mr_iid, "/submit_review")
+        except Exception as exc:  # noqa: BLE001
+            log_fail(
+                logger,
+                "gitlab submit review",
+                via="quick_action",
+                project=project_id,
+                mr=mr_iid,
+                err=exc,
+            )
+            return False
+        log_ok(
+            logger,
+            "gitlab submit review",
+            via="quick_action",
+            project=project_id,
+            mr=mr_iid,
+        )
+        return True
+
     def reply_to_discussion(
         self,
         project_id: int,

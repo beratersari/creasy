@@ -51,7 +51,7 @@
   <main>
     <h1>Creasy webhook tester</h1>
     <p class="sub">
-      Posts fake GitLab hooks at <code id="target">/webhook</code>.
+      Posts fake GitLab hooks at <code id="target">/creasy/webhook/gitlab</code>.
       Default repo is <code>beratersari0/test_project</code> MR <code>!30</code>.
       Dashboard: <a href="http://127.0.0.1:9001/jobs" target="_blank" rel="noreferrer">/jobs</a>
       · <span id="health" class="pill down">creasy ?</span>
@@ -204,7 +204,7 @@
 
     async function init() {
       const meta = await fetch("/api/meta").then((r) => r.json());
-      $("target").textContent = meta.creasy_url + "/webhook";
+      $("target").textContent = meta.creasy_url + "/creasy/webhook/gitlab";
       state.repos = meta.repos || [];
       state.events = meta.events || [];
       const repoSel = $("repo");

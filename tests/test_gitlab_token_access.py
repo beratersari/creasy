@@ -380,6 +380,97 @@ def test_list_discussions_denied(status: int) -> None:
         client.close()
 
 
+def test_submit_review_uses_bulk_publish_when_state_is_reviewed() -> None:
+    seen: list[tuple[str, str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = request.content.decode() if request.content else ""
+        seen.append((request.method, request.url.path, payload))
+        if request.url.path.endswith("/user"):
+            return httpx.Response(200, json={"id": 7, "username": "creasy"})
+        if request.url.path.endswith("/draft_notes/bulk_publish"):
+            return httpx.Response(204)
+        if request.url.path.endswith("/reviewers"):
+            return httpx.Response(
+                200,
+                json=[{"user": {"id": 7, "username": "creasy"}, "state": "reviewed"}],
+            )
+        raise AssertionError(f"unexpected {request.method} {request.url.path}")
+
+    client = _client(handler)
+    try:
+        assert client.submit_review(1, 2) is True
+        assert any(
+            method == "POST" and path.endswith("/draft_notes/bulk_publish") and "reviewed" in body
+            for method, path, body in seen
+        )
+        assert not any("approve" in str(body).lower() for _method, _path, body in seen)
+        assert not any(path.endswith("/notes") for _method, path, _body in seen)
+    finally:
+        client.close()
+
+
+def test_submit_review_falls_back_when_bulk_publish_missing() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url.path}")
+        if request.url.path.endswith("/draft_notes/bulk_publish"):
+            return httpx.Response(404, text='{"message":"404 Not Found"}')
+        if request.url.path.endswith("/notes"):
+            body = request.content.decode()
+            assert "/submit_review" in body
+            assert "approve" not in body.lower()
+            return httpx.Response(201, json={"id": 9})
+        raise AssertionError(f"unexpected {request.method} {request.url.path}")
+
+    client = _client(handler)
+    try:
+        assert client.submit_review(1, 2) is True
+        assert any(item.endswith("/draft_notes/bulk_publish") for item in seen)
+        assert any(item.endswith("/notes") for item in seen)
+    finally:
+        client.close()
+
+
+def test_submit_review_falls_back_when_state_still_unreviewed() -> None:
+    notes: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/draft_notes/bulk_publish"):
+            return httpx.Response(204)
+        if request.url.path.endswith("/user"):
+            return httpx.Response(200, json={"id": 7, "username": "creasy"})
+        if request.url.path.endswith("/reviewers"):
+            return httpx.Response(
+                200,
+                json=[{"user": {"id": 7, "username": "creasy"}, "state": "unreviewed"}],
+            )
+        if request.url.path.endswith("/notes"):
+            notes.append(request.content.decode())
+            return httpx.Response(201, json={"id": 11})
+        raise AssertionError(f"unexpected {request.method} {request.url.path}")
+
+    client = _client(handler)
+    try:
+        assert client.submit_review(1, 2) is True
+        assert notes and "/submit_review" in notes[0]
+        assert "approve" not in notes[0].lower()
+    finally:
+        client.close()
+
+
+def test_submit_review_failure_returns_false() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(403, text='{"message":"403 Forbidden"}')
+
+    client = _client(handler)
+    try:
+        assert client.submit_review(1, 2) is False
+    finally:
+        client.close()
+
+
 @pytest.mark.parametrize("status", [401, 403])
 def test_reply_discussion_denied_sets_status(status: int) -> None:
     def handler(request: httpx.Request) -> httpx.Response:

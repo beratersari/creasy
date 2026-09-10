@@ -60,7 +60,7 @@ def test_azure_route_does_not_change_gitlab_webhook(tmp_config):
         },
         "reviewers": [{"id": 99, "username": "creasy"}],
     }
-    res = client.post("/webhook", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
@@ -74,7 +74,7 @@ def test_azure_payload_on_gitlab_route_is_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={"eventType": "git.pullrequest.created", "resource": _pr()},
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -88,7 +88,7 @@ def test_azure_created_accepted(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
         headers=_auth(),
     )
@@ -107,12 +107,24 @@ def test_azure_created_accepted(tmp_config):
     manager.shutdown()
 
 
+def test_old_azure_webhook_path_is_gone(tmp_config):
+    app, manager, _runner = _app(tmp_config)
+    client = TestClient(app)
+    res = client.post(
+        "/webhook/azure",
+        json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
+        headers=_auth(),
+    )
+    assert res.status_code == 404
+    manager.shutdown()
+
+
 def test_azure_mention_comment_is_accepted(tmp_config):
     tmp_config.review_mention = "creasy"
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {
@@ -137,7 +149,7 @@ def test_azure_update_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={"eventType": "git.pullrequest.updated", "resource": _pr()},
         headers=_auth(),
     )
@@ -163,7 +175,7 @@ def test_gitlab_secret_does_not_lock_azure_route(tmp_config):
     app.include_router(azure_router)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot(pullRequestId=3)},
     )
     assert res.status_code == 200
@@ -176,7 +188,7 @@ def test_azure_secret_required_when_set(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/webhook/azure",
+        "/creasy/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr()},
     )
     assert res.status_code == 401
@@ -222,7 +234,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
             ),
         },
     }
-    res = client.post("/webhook/azure", json=payload)
+    res = client.post("/creasy/webhook/azure", json=payload)
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     assert order[0].startswith("user:")
@@ -238,7 +250,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
 def test_azure_disabled_is_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config, azure=False)
     client = TestClient(app)
-    res = client.post("/webhook/azure", json={"eventType": "git.pullrequest.created", "resource": _pr()})
+    res = client.post("/creasy/webhook/azure", json={"eventType": "git.pullrequest.created", "resource": _pr()})
     assert res.status_code == 200
     assert res.json()["reason"] == "azure not configured"
     manager.shutdown()

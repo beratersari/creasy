@@ -64,6 +64,7 @@ class SpyGitlab:
     def __init__(self, mr: MergeRequest | None = None) -> None:
         self.mr = mr or _mr()
         self.notes: list[str] = []
+        self.submit_calls: list[tuple[int, int]] = []
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         return self.mr
@@ -74,6 +75,10 @@ class SpyGitlab:
     def post_note(self, project_id: int, mr_iid: int, body: str) -> dict:
         self.notes.append(body)
         return {"ok": True}
+
+    def submit_review(self, project_id: int, mr_iid: int) -> bool:
+        self.submit_calls.append((project_id, mr_iid))
+        return True
 
 
 def test_record_spawn_persists_pid_and_job_log(tmp_config):
@@ -478,7 +483,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     app.include_router(webhook_router)
     client = TestClient(app)
     opened = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {
@@ -498,7 +503,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     assert runner.started.wait(2)
     t0 = time.time()
     closed = client.post(
-        "/webhook",
+        "/creasy/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {"action": "close", "iid": 11, "target_project_id": 6},

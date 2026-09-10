@@ -25,7 +25,10 @@ These look like bugs. They are not.
    note is ≥ 90% similar (Ratcliff-Obershelp / token Jaccard /
    3-gram Jaccard) — then skip the reply and do not open a new
    thread. Short error / cancelled notes have no threads. A failed
-   thread does not fail the job. No git push.
+   thread does not fail the job. After a successful GitLab review
+   or open job, mark the token user as `reviewed` (not approved)
+   so Re-request appears. A failed submit does not fail the job.
+   `/ask` and Azure jobs do not change reviewer state. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/ask` or a later review can resume `ses_*` on the same path.
@@ -55,8 +58,8 @@ These look like bugs. They are not.
 
 ### Webhook
 
-- `POST /webhook` acks immediately. Never hold that socket for clone
-  or OpenCode.
+- `POST /creasy/webhook/gitlab` acks immediately. Never hold that
+  socket for clone or OpenCode.
 - Verify `X-Gitlab-Token` against `WEBHOOK_SECRET` when the secret is
   set. Missing/wrong → **401**.
 - Classify in `creasy.gitlab.events`. Do not re-parse payloads in the
@@ -78,11 +81,11 @@ These look like bugs. They are not.
   `@name /ask` and reviewer assign still run.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
-- Azure DevOps Server is optional and isolated. `POST /webhook` stays
-  GitLab-only. Azure uses `POST /webhook/azure`, `creasy.azure`, and
-  `job.provider=azure`. Empty `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT`
-  means Azure is off. Do not fold Azure classify into
-  `creasy.gitlab.events`.
+- Azure DevOps Server is optional and isolated. GitLab routes stay
+  GitLab-only. Azure uses `POST /creasy/webhook/azure`,
+  `creasy.azure`, and `job.provider=azure`. Empty
+  `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT` means Azure is off. Do
+  not fold Azure classify into `creasy.gitlab.events`.
 
 ### Jobs and concurrency
 
@@ -208,6 +211,8 @@ note or discussion posting in `opencode/`.
   not in the path list.
 - Findings JSON is stripped from the MR note. Each valid finding is
   posted as a discussion. A failed thread does not fail the job.
+  After a successful GitLab review or open post, mark the reviewer
+  as reviewed (not approved). A failed submit does not fail the job.
 - Do not add tests that require network unless they are clearly marked
   and skipped by default.
 - Live OpenCode review coverage is `tests/test_opencode_review.py`.

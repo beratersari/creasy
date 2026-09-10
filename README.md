@@ -51,8 +51,8 @@ Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` in `.env` so the
 dashboard shows a login page. Webhooks do not use those values.
 Model and timeout can be changed on Settings without editing `.env`;
 they persist in `DATA_DIR/settings.json` and apply to new jobs.  
-GitLab webhook: `POST /webhook`  
-Azure webhook: `POST /webhook/azure`  
+GitLab webhook: `POST /creasy/webhook/gitlab`  
+Azure webhook: `POST /creasy/webhook/azure`  
 Health: `GET /health`
 
 The product version is the `VERSION` file (`/health` and `/api/meta` expose it).
@@ -78,8 +78,8 @@ host, not only from your laptop.
 ### GitLab
 
 1. In the project or group: **Settings → Webhooks**.
-2. **URL:** `http://<creasy-host>:9001/webhook`  
-   Use `https://` if Creasy is behind TLS. Do not use `/webhook/azure`.
+2. **URL:** `http://<creasy-host>:9001/creasy/webhook/gitlab`  
+   Use `https://` if Creasy is behind TLS. Do not use the Azure path.
 3. **Secret token:** the same value as `WEBHOOK_SECRET` in `.env`.  
    GitLab sends it as `X-Gitlab-Token`. A missing or wrong secret is **401**.
 4. Enable these triggers only:
@@ -92,7 +92,7 @@ host, not only from your laptop.
 
 ### Azure DevOps Server
 
-Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-only. GitLab `/webhook` is unchanged.
+Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-only. GitLab webhook routes stay GitLab-only.
 
 1. In `.env` set the collection URL and a PAT, then restart Creasy:
 
@@ -111,7 +111,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
 2. In the Azure project: **Project settings → Service hooks → Create subscription**.
 3. Service: **Web Hooks**.
 4. Create **one subscription per event**, all with the same URL
-   `http://<creasy-host>:9001/webhook/azure`:
+   `http://<creasy-host>:9001/creasy/webhook/azure`:
 
    | Service Hook event | What Creasy does |
    |---|---|
@@ -121,7 +121,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    | Pull request merge attempted | Cancel jobs and delete the clone |
 
 5. On each subscription’s action page:
-   - **URL:** `http://<creasy-host>:9001/webhook/azure` — never `/webhook`.
+   - **URL:** `http://<creasy-host>:9001/creasy/webhook/azure` — never a GitLab path.
    - **Basic authentication username / password:** `AZURE_WEBHOOK_USER` and `AZURE_WEBHOOK_PASSWORD`.  
      If the password is set, a missing or wrong `Authorization` header is **401**.
    - Resource: the repo to review, or all repos in the project.

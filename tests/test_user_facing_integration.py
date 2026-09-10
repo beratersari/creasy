@@ -100,6 +100,7 @@ class _GitlabState:
         self.deleted_notes: list[int] = []
         self.note_id = 100
         self.disc_id = 1
+        self.reviewer_state = "unreviewed"
 
 
 def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
@@ -146,6 +147,11 @@ def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
             if path.endswith("/merge_requests/7/pipelines"):
                 self._json([])
                 return
+            if path.endswith("/merge_requests/7/reviewers"):
+                self._json(
+                    [{"user": {"id": 99, "username": "creasy-bot"}, "state": st.reviewer_state}]
+                )
+                return
             if "/projects/" in path and path.count("/") == 4:
                 self._json({"id": 42, "http_url_to_repo": st.mr.get("http_url_to_repo") or ""})
                 return
@@ -157,6 +163,12 @@ def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
             body = self._read_json()
             st = holder["s"]
             with st.lock:
+                if path.endswith("/draft_notes/bulk_publish"):
+                    if str(body.get("reviewer_state") or "") == "reviewed":
+                        st.reviewer_state = "reviewed"
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if path.endswith("/merge_requests/7/notes") and "/discussions/" not in path:
                     st.note_id += 1
                     note = {
@@ -357,7 +369,7 @@ def test_review_posts_overview_and_one_diff_thread(tmp_config, tmp_path: Path):
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
         res = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -393,7 +405,7 @@ def test_wrapup_last_message_does_not_replace_the_review_on_the_mr(tmp_config, t
     )
     try:
         res = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -426,7 +438,7 @@ def test_empty_gitlab_diff_refs_drops_inline_threads(tmp_config, tmp_path: Path)
     )
     try:
         res = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -476,10 +488,10 @@ def test_new_commits_and_mark_as_ready_do_not_start_a_review(tmp_config, tmp_pat
         assert isinstance(classify_webhook(push, skip_drafts=True), Ignore)
         assert isinstance(classify_webhook(ready, skip_drafts=True), Ignore)
         headers = {"X-Gitlab-Token": "secret"}
-        assert client.post("/webhook", json=push, headers=headers).json()["status"] == "ignored"
-        assert client.post("/webhook", json=ready, headers=headers).json()["status"] == "ignored"
+        assert client.post("/creasy/webhook/gitlab", json=push, headers=headers).json()["status"] == "ignored"
+        assert client.post("/creasy/webhook/gitlab", json=ready, headers=headers).json()["status"] == "ignored"
         assert manager.store.list_all() == []
-        res = client.post("/webhook", json=_assign_body(), headers=headers)
+        res = client.post("/creasy/webhook/gitlab", json=_assign_body(), headers=headers)
         assert res.json()["status"] == "accepted"
         job = _wait_job(manager, res.json()["job_id"])
         assert job.status == "success", job.error_message
@@ -503,10 +515,10 @@ def test_draft_open_is_skipped_but_explicit_review_still_runs(tmp_config, tmp_pa
                 "draft": True,
             },
         }
-        skipped = client.post("/webhook", json=draft_open, headers={"X-Gitlab-Token": "secret"})
+        skipped = client.post("/creasy/webhook/gitlab", json=draft_open, headers={"X-Gitlab-Token": "secret"})
         assert skipped.json()["status"] == "ignored"
         note = _assign_body(draft=True)
-        res = client.post("/webhook", json=note, headers={"X-Gitlab-Token": "secret"})
+        res = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
         assert res.json()["status"] == "accepted"
         job = _wait_job(manager, res.json()["job_id"])
         assert job.status == "success", job.error_message
@@ -521,7 +533,7 @@ def test_ask_through_the_http_api(tmp_config, tmp_path: Path):
     )
     try:
         review = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -529,7 +541,7 @@ def test_ask_through_the_http_api(tmp_config, tmp_path: Path):
         assert first.status == "success", first.error_message
         assert state.notes
         ask = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_note_body("@creasy /ask why is this lock held?"),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -549,7 +561,7 @@ def test_dashboard_search_matches_bang_iid_and_title(tmp_config, tmp_path: Path)
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
         res = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -590,12 +602,12 @@ def test_queued_job_is_live_and_jobs_list_has_no_http_poll(tmp_config, tmp_path:
     try:
         # Hold the first job so the second stays queued.
         first = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
         second = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_note_body("@creasy /ask what about dest?"),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -617,12 +629,12 @@ def test_cancel_queued_from_dashboard_does_not_post_a_gitlab_note(tmp_config, tm
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
         first = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
         second = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_note_body("@creasy /ask later?"),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -644,7 +656,7 @@ def test_ask_without_a_question_is_ignored(tmp_config, tmp_path: Path):
     client, manager, state, httpd = _boot(tmp_config, tmp_path, assistants=[REVIEW_MARKDOWN])
     try:
         res = client.post(
-            "/webhook",
+            "/creasy/webhook/gitlab",
             json=_note_body("@creasy /ask   "),
             headers={"X-Gitlab-Token": "secret"},
         )
