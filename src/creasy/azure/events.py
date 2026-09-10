@@ -32,9 +32,11 @@ _REVIEWERS = frozenset(
 )
 _MERGED = frozenset({"git.pullrequest.merged", "git.pullrequest.completed"})
 _ADDED_REVIEWER = re.compile(
-    r"^(?P<actor>.+?) added (?P<who>.+?) as an? (?:required )?reviewer",
+    r"(?P<actor>.+?) added (?P<who>.+?) as an? (?:required )?reviewer",
     re.IGNORECASE,
 )
+_SELF_WHO = frozenset({"yourself", "themselves", "himself", "herself", "myself"})
+_HTML_TAG = re.compile(r"<[^>]+>")
 _ABANDONED = frozenset({"abandoned", "completed", "closed"})
 _PR_LINK = re.compile(
     r"/repositories/([^/]+)/pullRequests/(\d+)",
@@ -289,27 +291,82 @@ def _notification_type(payload: dict[str, Any]) -> str:
     return str(raw).strip()
 
 
+def _plain_text(value: Any) -> str:
+    text = _HTML_TAG.sub(" ", str(value or ""))
+    return " ".join(text.split()).strip()
+
+
 def _message_text(payload: dict[str, Any]) -> str:
-    parts = [
-        _as_dict(payload.get("message")).get("text"),
-        _as_dict(payload.get("detailedMessage")).get("text"),
-    ]
-    return "\n".join(str(part or "") for part in parts)
+    parts = []
+    for blob in (payload.get("message"), payload.get("detailedMessage"), _resource(payload).get("message")):
+        item = _as_dict(blob)
+        for key in ("text", "markdown", "html"):
+            parts.append(_plain_text(item.get(key)))
+    return "\n".join(part for part in parts if part)
+
+
+def _name_aliases(names: list[str]) -> set[str]:
+    aliases: set[str] = set()
+    for name in names:
+        text = str(name or "").strip().lower()
+        if not text:
+            continue
+        aliases.add(text)
+        if "\\" in text:
+            tail = text.rsplit("\\", 1)[-1].strip()
+            if tail:
+                aliases.add(tail)
+    return aliases
+
+
+def _names_match(value: str, aliases: set[str]) -> bool:
+    text = str(value or "").strip()
+    if not text or not aliases:
+        return False
+    lowered = text.lower()
+    if lowered in aliases:
+        return True
+    if "\\" in text:
+        tail = text.rsplit("\\", 1)[-1].strip().lower()
+        if tail in aliases:
+            return True
+    return False
+
+
+def _reviewer_name_values(row: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    nested = row.get("user") if isinstance(row.get("user"), dict) else {}
+    for src in (row, nested):
+        if not isinstance(src, dict):
+            continue
+        for key in ("displayName", "uniqueName", "name", "providerDisplayName", "directoryAlias"):
+            value = str(src.get(key) or "").strip()
+            if value and value not in values:
+                values.append(value)
+    return values
+
+
+def _reviewer_summaries(pr: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    for row in reviewers:
+        if not isinstance(row, dict):
+            continue
+        names = _reviewer_name_values(row) or ["-"]
+        nested = row.get("user") if isinstance(row.get("user"), dict) else {}
+        uid = str(row.get("id") or (nested or {}).get("id") or "").strip() or "-"
+        out.append(f"{uid}:{'/'.join(names)}")
+    return out
 
 
 def _azure_reviewer_is_bot(row: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
     if bot_user_id and str(row.get("id") or "").strip().lower() == str(bot_user_id).strip().lower():
         return True
-    aliases = {name.lower() for name in names if name}
-    for key in ("displayName", "uniqueName", "name", "providerDisplayName"):
-        value = str(row.get(key) or "").strip()
-        if not value:
-            continue
-        if value.lower() in aliases:
-            return True
-        if "\\" in value and value.rsplit("\\", 1)[-1].lower() in aliases:
-            return True
-    return False
+    nested = row.get("user") if isinstance(row.get("user"), dict) else {}
+    if bot_user_id and str((nested or {}).get("id") or "").strip().lower() == str(bot_user_id).strip().lower():
+        return True
+    aliases = _name_aliases(names)
+    return any(_names_match(value, aliases) for value in _reviewer_name_values(row))
 
 
 def _azure_bot_is_reviewer(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
@@ -328,22 +385,45 @@ def _azure_reviewer_assigned(
     mention_names: list[str],
     event_kind: str,
 ) -> bool:
-    if not bot_user_id and not mention_names:
+    aliases = _name_aliases(mention_names)
+    listed = _azure_bot_is_reviewer(pr, bot_user_id, mention_names)
+    text = _message_text(payload)
+    first_line = (text.splitlines() or [""])[0].strip()
+    match = _ADDED_REVIEWER.search(first_line) or _ADDED_REVIEWER.search(text)
+    ntype = _notification_type(payload)
+    reviewers = _reviewer_summaries(pr)
+    logger.info(
+        "azure assign check bot_id=%s names=%s listed=%s notify=%s reviewers=%s message=%r",
+        bot_user_id or "-",
+        ",".join(mention_names) or "-",
+        listed,
+        ntype or "-",
+        reviewers or ["-"],
+        (first_line or text)[:180],
+    )
+    if not bot_user_id and not aliases:
+        logger.info("azure assign skip reason=no-bot-id-or-REVIEW_MENTION")
         return False
-    if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names):
-        return False
-    first_line = (_message_text(payload).splitlines() or [""])[0].strip()
-    match = _ADDED_REVIEWER.match(first_line)
-    aliases = {name.lower() for name in mention_names if name}
     if match:
-        who = match.group("who").strip().lower()
-        if who in aliases or ("\\" in who and who.rsplit("\\", 1)[-1] in aliases):
+        who = match.group("who").strip()
+        actor = match.group("actor").strip()
+        if _names_match(who, aliases):
+            logger.info("azure assign yes reason=message-who who=%r actor=%r", who, actor)
             return True
+        if listed and who.lower() in _SELF_WHO:
+            logger.info("azure assign yes reason=self-assign-message who=%r actor=%r", who, actor)
+            return True
+        logger.info("azure assign skip reason=added-someone-else who=%r actor=%r", who, actor)
         return False
-    text = _message_text(payload).lower()
-    ntype = _notification_type(payload).lower()
-    if (ntype == "reviewersupdatenotification" or event_kind in _REVIEWERS) and "added" in text and "reviewer" in text:
-        return bool(aliases) and any(alias in text for alias in aliases)
+    lowered = text.lower()
+    if (ntype.lower() == "reviewersupdatenotification" or event_kind in _REVIEWERS) and "added" in lowered and "reviewer" in lowered:
+        if any(alias in lowered for alias in aliases):
+            logger.info("azure assign yes reason=reviewers-update-alias-in-text")
+            return True
+    if not listed:
+        logger.info("azure assign skip reason=bot-not-in-reviewers")
+        return False
+    logger.info("azure assign skip reason=not-an-add-reviewer-message")
     return False
 
 

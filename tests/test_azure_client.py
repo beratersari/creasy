@@ -167,6 +167,45 @@ def test_current_user_id_on_host_only_url_tries_root_then_tfs() -> None:
         assert seen[0] == "/_apis/connectionData"
         assert "/tfs/_apis/connectionData" in seen
         assert not any("/ExampleCollection/" in path for path in seen)
+        # Failed lookup is cached so a later call does not hammer TFS.
+        n = len(seen)
+        assert client.current_user_id() is None
+        assert len(seen) == n
+    finally:
+        client.close()
+
+
+def test_current_user_retries_older_api_version_after_400() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        version = request.url.params.get("api-version") or ""
+        seen.append((request.url.path, version))
+        if request.url.path == "/tfs/_apis/connectionData" and version == "4.1":
+            return httpx.Response(
+                200,
+                json={
+                    "authenticatedUser": {
+                        "id": "bot-guid",
+                        "uniqueName": "ORGANIZATION\\mberatersari",
+                    }
+                },
+            )
+        return httpx.Response(400, json={"message": f"bad {version}"})
+
+    client = AzureClient("https://tfs02.company.com.tr/tfs", "pat")
+    client._http.close()
+    client._http = httpx.Client(
+        base_url="https://tfs02.company.com.tr/tfs",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        user = client.current_user()
+        assert user is not None
+        assert user["id"] == "bot-guid"
+        assert "ORGANIZATION\\mberatersari" in user["names"]
+        assert ("/tfs/_apis/connectionData", "7.1") in seen
+        assert ("/tfs/_apis/connectionData", "4.1") in seen
     finally:
         client.close()
 

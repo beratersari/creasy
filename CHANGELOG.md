@@ -9,6 +9,15 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- Azure assign matches `ORGANIZATION\\user` against `REVIEW_MENTION=user`.
+  A TFS self-assign message (“added yourself as a reviewer”) also
+  starts a review when that user is already on the reviewer list.
+  Identity retries older `api-version` values and logs each
+  `connectionData` attempt so a 400 no longer hides why the PAT user
+  was unknown.
+
 ## 0.9.1 — 2026-09-10
 
 Azure identity works again with a TFS application-root URL.
