@@ -9,6 +9,10 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.3 — 2026-09-10
+
+TFS reviewer-list changes and comment events start jobs.
+
 ### Fixed
 
 - TFS assign messages that say “changed the reviewer list” start a
