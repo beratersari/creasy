@@ -5,7 +5,7 @@ import os
 import threading
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import MISSING, asdict, dataclass, fields
 from pathlib import Path
 from typing import Optional
 
@@ -13,6 +13,18 @@ from creasy.jobs.models import utc_now
 from creasy.logging import get_logger
 
 logger = get_logger("workspace.store")
+
+
+def _record_from_dict(data: dict) -> WorkspaceRecord:
+    kwargs = {}
+    for item in fields(WorkspaceRecord):
+        if item.name in data:
+            kwargs[item.name] = data[item.name]
+        elif item.default is not MISSING:
+            kwargs[item.name] = item.default
+        elif item.default_factory is not MISSING:  # type: ignore[misc]
+            kwargs[item.name] = item.default_factory()
+    return WorkspaceRecord(**kwargs)
 
 
 @dataclass
@@ -52,8 +64,7 @@ class WorkspaceStore:
         if not isinstance(data, dict):
             logger.warning("corrupt workspace meta path=%s", path)
             return None
-        fields = WorkspaceRecord.__dataclass_fields__
-        return WorkspaceRecord(**{k: data[k] if k in data else fields[k].default for k in fields})
+        return _record_from_dict(data)
 
     def save(self, record: WorkspaceRecord) -> WorkspaceRecord:
         record.updated_at = utc_now()
@@ -89,8 +100,7 @@ class WorkspaceStore:
         for path in sorted(self.root.glob("*.json")):
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
-                fields = WorkspaceRecord.__dataclass_fields__
-                out.append(WorkspaceRecord(**{k: data[k] if k in data else fields[k].default for k in fields}))
+                out.append(_record_from_dict(data))
             except Exception:
                 continue
         return [r for r in out if r.mr_key]

@@ -348,3 +348,20 @@ def test_current_user_after_apply_collection_still_uses_tfs_root() -> None:
         assert "/tfs/ExampleCollection/_apis/connectionData" not in seen
     finally:
         client.close()
+
+
+def test_list_reviewers_reads_value_array() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/pullRequests/12/reviewers"):
+            return httpx.Response(
+                200,
+                json={"value": [{"id": "bot-id", "displayName": "Creasy"}, {"id": "alice"}]},
+            )
+        return httpx.Response(404)
+
+    client = _client(handler)
+    try:
+        rows = client.list_reviewers("proj", "repo", 12)
+        assert [row["id"] for row in rows] == ["bot-id", "alice"]
+    finally:
+        client.close()

@@ -9,6 +9,19 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- Unassigning a reviewer no longer starts a review. Azure TFS does
+  not send add vs remove. Creasy does not cache the reviewer list.
+  On a reviewer-change hook it GETs `/pullRequests/{id}/reviewers`
+  and starts a review only when that live list still includes the
+  bot and the message says the bot was added. If the first GET is
+  empty after an add, it retries twice (0.3s then 0.7s). The GET
+  rebases onto `/tfs/<Collection>` from the hook collection or the
+  PR web URL when `AZURE_DEVOPS_URL` is only the host. A generic
+  “changed the reviewer list” sentence is ignored. A failed GET
+  does not start a review.
+
 ## 0.9.7 — 2026-09-10
 
 Mentions without `/ask` or `/review` get a usage note. Azure and

@@ -75,6 +75,16 @@ These look like bugs. They are not.
   is already a reviewer. Open without that reviewer is ignored.
   `update` (new commits) and `reopen` do not enqueue, except
   assigning that same user later, which is an explicit review.
+  Unassign / remove reviewer does not enqueue.
+  Azure TFS does not send add vs remove. Do not cache reviewer
+  lists. On a reviewer-change hook, GET
+  `/pullRequests/{id}/reviewers` and start a review only when that
+  live list still includes the bot **and** the message says the bot
+  was added. A generic “changed the reviewer list” sentence is
+  ignored. If the first GET is empty after an add, retry twice
+  (0.3s then 0.7s). Rebase the GET onto `/tfs/<Collection>` from
+  the hook collection or the PR web URL when `AZURE_DEVOPS_URL` is
+  only the host. A failed GET does not start a review.
   Jobs do not assign the token user.
   `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
@@ -215,7 +225,9 @@ note or discussion posting in `opencode/`.
   reopen ignored / close / merge / assign reviewer / leftover
   `@mention /review` / `@mention /ask` / empty `@mention /ask` /
   leftover `/reset` ignored / bot note / mention-without-command
-  posts usage / command-alone ignored.
+  posts usage / command-alone ignored / GitLab unassign ignored /
+  Azure reviewer-change GET (add listed / add missing / generic
+  ignored / GET retry / host-only collection rebase).
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.
 - Rebase: merge-base is the **new** target tip; target-only files are

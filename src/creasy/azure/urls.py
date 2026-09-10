@@ -9,7 +9,11 @@ _RESOURCE_MARKERS = ("/_git/", "/_apis/", "/pullrequest/")
 
 def looks_like_azure_resource(url: str) -> bool:
     text = unquote(str(url or "")).lower()
-    return any(marker in text for marker in _RESOURCE_MARKERS)
+    if any(marker in text for marker in _RESOURCE_MARKERS):
+        return True
+    parsed = urlparse(str(url or "").strip())
+    parts = [item for item in unquote(parsed.path or "").split("/") if item]
+    return bool(parts and parts[0].lower() == "tfs" and len(parts) >= 2)
 
 
 def normalize_collection_url(url: str) -> str:

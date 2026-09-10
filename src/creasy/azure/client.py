@@ -332,6 +332,39 @@ class AzureClient:
         )
         return mr
 
+    def list_reviewers(
+        self,
+        project: str,
+        repo: str,
+        pr_id: int,
+        *,
+        collection: str = "",
+        web_url: str = "",
+    ) -> list[dict[str, Any]]:
+        """Live reviewer list. Used to verify a reviewer-change webhook."""
+        if collection or web_url:
+            self.apply_collection(collection, web_url)
+        try:
+            response = self._send(
+                "GET",
+                self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}/reviewers"),
+                params={"api-version": self.api_version},
+            )
+        except httpx.HTTPError as exc:
+            detail = (getattr(exc, "response", None).text or "")[:400] if getattr(exc, "response", None) else ""
+            log_fail(logger, "azure GET reviewers", project=project, repo=repo, pr=pr_id, err=exc, body=detail)
+            raise AzureError(f"fetch reviewers failed: {exc}") from exc
+        data = response.json() if response.content else {}
+        if isinstance(data, list):
+            rows = data
+        elif isinstance(data, dict):
+            rows = data.get("value") if isinstance(data.get("value"), list) else []
+        else:
+            rows = []
+        out = [row for row in rows if isinstance(row, dict)]
+        log_ok(logger, "azure GET reviewers", project=project, repo=repo, pr=pr_id, count=len(out))
+        return out
+
     def _attach_latest_status(self, mr: MergeRequest, project: str, repo: str, pr_id: int) -> None:
         try:
             response = self._send(
