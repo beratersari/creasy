@@ -435,6 +435,36 @@ def test_comment_vss_mention_uses_reviewer_id_not_connectiondata_id():
     assert got.kind == "ask"
 
 
+def test_comment_tfs_angle_guid_mention_starts_ask():
+    payload = {
+        "eventType": "ms.vss-code.git-pullrequest-comment-event",
+        "resource": {
+            "id": 8,
+            "content": (
+                "@<71440E05-BE9E-4768-897E-DA81A889D26E> /ask hey buradaki sorun ne"
+            ),
+            "author": {"id": "71440e05-be9e-4768-897e-da81a889d26e"},
+            "pullRequest": _pr(
+                reviewers=[
+                    {
+                        "id": "71440e05-be9e-4768-897e-da81a889d26e",
+                        "displayName": "Berat ERSARI",
+                        "uniqueName": r"company\mberatersari",
+                    }
+                ]
+            ),
+        },
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["sa_mirai_project", "mberatersari", "Berat"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
+    assert got.comment_text == "hey buradaki sorun ne"
+
+
 def test_comment_html_ask_without_space_after_mention():
     payload = {
         "eventType": "ms.vss-code.git-pullrequest-comment-event",
