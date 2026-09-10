@@ -10,7 +10,7 @@ from urllib.parse import quote, urlparse
 import httpx
 
 from creasy.azure.auth import azure_basic_auth
-from creasy.azure.urls import resolve_collection_url
+from creasy.azure.urls import identity_root, resolve_collection_url
 from creasy.gitlab.client import MergeRequest
 from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
 
@@ -32,7 +32,8 @@ def _seg(value: str) -> str:
 
 class AzureClient:
     def __init__(self, base_url: str, token: str, *, api_version: str = "7.1", timeout: float = 30.0) -> None:
-        self.base_url = (base_url or "").rstrip("/")
+        self.configured_url = (base_url or "").rstrip("/")
+        self.base_url = self.configured_url
         self.token = token
         self.api_version = api_version or "7.1"
         self.timeout = timeout
@@ -48,14 +49,6 @@ class AzureClient:
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
         self._user: Optional[dict[str, Any]] = None
-        parsed = urlparse(self.base_url)
-        if self.base_url and not (parsed.path or "").strip("/"):
-            log_fail(
-                logger,
-                "azure collection missing",
-                url=self.base_url,
-                reason="AZURE_DEVOPS_URL is only the host; need /tfs/<Collection>",
-            )
 
     def close(self) -> None:
         self._http.close()
@@ -140,39 +133,73 @@ class AzureClient:
             raise last_error
         raise RuntimeError("azure request had no paths")
 
+    def _identity_roots(self) -> list[str]:
+        """connectionData lives on the TFS app root, not /tfs/<Collection>."""
+        configured = (self.configured_url or self.base_url or "").rstrip("/")
+        roots: list[str] = []
+        ident = identity_root(configured)
+        if ident:
+            roots.append(ident.rstrip("/"))
+        parsed = urlparse(configured)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            host_root = f"{parsed.scheme}://{parsed.netloc}"
+            tfs_root = f"{host_root}/tfs"
+            parts = [item for item in (parsed.path or "").split("/") if item]
+            if not parts:
+                roots.append(host_root)
+                roots.append(tfs_root)
+            elif parts[0].lower() != "tfs":
+                roots.append(configured)
+        if configured and configured not in roots:
+            roots.append(configured)
+        return list(dict.fromkeys(item for item in roots if item))
+
     def current_user(self) -> Optional[dict[str, Any]]:
         if self._user is not None:
             return self._user
         if not self.token:
             return None
-        try:
-            response = self._http.get(self._abs("/_apis/connectionData"), params={"api-version": self.api_version})
-            response.raise_for_status()
-            data = response.json()
-            user = data.get("authenticatedUser") if isinstance(data, dict) else None
-            if isinstance(user, dict) and user.get("id"):
-                self._user_id = str(user["id"])
-                names = [
-                    str(user.get("providerDisplayName") or "").strip(),
-                    str(user.get("displayName") or "").strip(),
-                    str(user.get("customDisplayName") or "").strip(),
-                    str(user.get("uniqueName") or "").strip(),
-                ]
-                self._user = {
-                    "id": self._user_id,
-                    "names": [item for item in names if item],
-                }
-                log_ok(
-                    logger,
-                    "azure current user",
-                    http=response.status_code,
-                    user_id=self._user_id,
-                    name=self._user["names"][0] if self._user["names"] else "-",
-                )
-                return self._user
-            log_fail(logger, "azure current user", http=response.status_code, reason="no authenticatedUser.id")
-        except Exception as exc:  # noqa: BLE001
-            log_fail(logger, "azure current user", err=exc)
+        last_exc: Optional[Exception] = None
+        for root in self._identity_roots():
+            url = f"{root}/_apis/connectionData"
+            try:
+                response = self._http.get(url, params={"api-version": self.api_version})
+                if response.status_code in {400, 404}:
+                    last_exc = httpx.HTTPStatusError(
+                        f"{response.status_code} {url}",
+                        request=response.request,
+                        response=response,
+                    )
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                user = data.get("authenticatedUser") if isinstance(data, dict) else None
+                if isinstance(user, dict) and user.get("id"):
+                    self._user_id = str(user["id"])
+                    names = [
+                        str(user.get("providerDisplayName") or "").strip(),
+                        str(user.get("displayName") or "").strip(),
+                        str(user.get("customDisplayName") or "").strip(),
+                        str(user.get("uniqueName") or "").strip(),
+                    ]
+                    self._user = {
+                        "id": self._user_id,
+                        "names": [item for item in names if item],
+                    }
+                    log_ok(
+                        logger,
+                        "azure current user",
+                        http=response.status_code,
+                        user_id=self._user_id,
+                        name=self._user["names"][0] if self._user["names"] else "-",
+                        url=redact_userinfo(url),
+                    )
+                    return self._user
+                last_exc = RuntimeError("no authenticatedUser.id")
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                continue
+        log_fail(logger, "azure current user", err=last_exc)
         return None
 
     def current_user_id(self) -> Optional[str]:

@@ -9,6 +9,14 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- Azure identity uses the TFS application root
+  (`https://<server>/tfs/_apis/connectionData`). A collection-scoped
+  `connectionData` call returned 400 and the bot user was unknown, so
+  assign and mention reviews did not start. `AZURE_DEVOPS_URL` can
+  be `https://<server>/tfs` again.
+
 ## 0.9.0 — 2026-09-10
 
 Webhook URLs are namespaced. A finished GitLab review can be
