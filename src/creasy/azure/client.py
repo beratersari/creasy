@@ -49,6 +49,7 @@ class AzureClient:
         self._http = httpx.Client(base_url=self.base_url, headers=headers, timeout=timeout, verify=False)
         self._user_id: Optional[str] = None
         self._user: Optional[dict[str, Any]] = None
+        self._user_resolved = False
 
     def close(self) -> None:
         self._http.close()
@@ -134,7 +135,7 @@ class AzureClient:
         raise RuntimeError("azure request had no paths")
 
     def _identity_roots(self) -> list[str]:
-        """connectionData lives on the TFS app root, not /tfs/<Collection>."""
+        """Try the TFS app root first, then the configured URL, then the host."""
         configured = (self.configured_url or self.base_url or "").rstrip("/")
         roots: list[str] = []
         ident = identity_root(configured)
@@ -148,58 +149,109 @@ class AzureClient:
             if not parts:
                 roots.append(host_root)
                 roots.append(tfs_root)
-            elif parts[0].lower() != "tfs":
-                roots.append(configured)
         if configured and configured not in roots:
             roots.append(configured)
         return list(dict.fromkeys(item for item in roots if item))
 
-    def current_user(self) -> Optional[dict[str, Any]]:
-        if self._user is not None:
-            return self._user
-        if not self.token:
+    def _identity_versions(self) -> list[str]:
+        preferred = (self.api_version or "7.1").strip() or "7.1"
+        versions = [preferred]
+        for item in ("6.0", "5.1", "5.0", "4.1", "3.0", "1.0"):
+            if item not in versions:
+                versions.append(item)
+        return versions
+
+    def _parse_authenticated_user(self, data: Any) -> Optional[dict[str, Any]]:
+        blob = data if isinstance(data, dict) else {}
+        user = blob.get("authenticatedUser") if isinstance(blob.get("authenticatedUser"), dict) else None
+        if user is None and blob.get("id"):
+            user = blob
+        if not isinstance(user, dict) or user.get("id") is None:
             return None
-        last_exc: Optional[Exception] = None
+        uid = str(user.get("id") or "").strip()
+        if not uid:
+            return None
+        names = [
+            str(user.get("providerDisplayName") or "").strip(),
+            str(user.get("displayName") or "").strip(),
+            str(user.get("customDisplayName") or "").strip(),
+            str(user.get("uniqueName") or "").strip(),
+            str(user.get("directoryAlias") or "").strip(),
+        ]
+        return {"id": uid, "names": [item for item in names if item]}
+
+    def current_user(self) -> Optional[dict[str, Any]]:
+        if self._user_resolved:
+            return self._user
+        self._user_resolved = True
+        if not self.token:
+            log_fail(logger, "azure current user", reason="AZURE_DEVOPS_PAT empty")
+            return None
+        last_status = 0
+        last_url = ""
+        last_body = ""
+        paths = ["/_apis/connectionData", "/_apis/profile/profiles/me"]
         for root in self._identity_roots():
-            url = f"{root}/_apis/connectionData"
-            try:
-                response = self._http.get(url, params={"api-version": self.api_version})
-                if response.status_code in {400, 404}:
-                    last_exc = httpx.HTTPStatusError(
-                        f"{response.status_code} {url}",
-                        request=response.request,
-                        response=response,
+            for path in paths:
+                url = f"{root}{path}"
+                for version in self._identity_versions():
+                    try:
+                        response = self._http.get(url, params={"api-version": version})
+                    except Exception as exc:  # noqa: BLE001
+                        log_fail(
+                            logger,
+                            "azure current user try",
+                            url=redact_userinfo(url),
+                            api=version,
+                            err=exc,
+                        )
+                        continue
+                    body = (response.text or "")[:240]
+                    if response.status_code in {200, 203}:
+                        try:
+                            data = response.json() if response.content else {}
+                        except Exception:
+                            data = {}
+                        user = self._parse_authenticated_user(data)
+                        if user:
+                            self._user_id = user["id"]
+                            self._user = user
+                            log_ok(
+                                logger,
+                                "azure current user",
+                                http=response.status_code,
+                                user_id=self._user_id,
+                                name=user["names"][0] if user["names"] else "-",
+                                url=redact_userinfo(url),
+                                api=version,
+                            )
+                            return self._user
+                        last_status, last_url, last_body = response.status_code, url, "no authenticatedUser.id"
+                        logger.info(
+                            "azure current user try url=%s api=%s http=%s reason=no authenticatedUser.id",
+                            redact_userinfo(url),
+                            version,
+                            response.status_code,
+                        )
+                        continue
+                    last_status, last_url, last_body = response.status_code, url, body
+                    logger.info(
+                        "azure current user try url=%s api=%s http=%s body=%s",
+                        redact_userinfo(url),
+                        version,
+                        response.status_code,
+                        redact_userinfo(body) or "-",
                     )
-                    continue
-                response.raise_for_status()
-                data = response.json()
-                user = data.get("authenticatedUser") if isinstance(data, dict) else None
-                if isinstance(user, dict) and user.get("id"):
-                    self._user_id = str(user["id"])
-                    names = [
-                        str(user.get("providerDisplayName") or "").strip(),
-                        str(user.get("displayName") or "").strip(),
-                        str(user.get("customDisplayName") or "").strip(),
-                        str(user.get("uniqueName") or "").strip(),
-                    ]
-                    self._user = {
-                        "id": self._user_id,
-                        "names": [item for item in names if item],
-                    }
-                    log_ok(
-                        logger,
-                        "azure current user",
-                        http=response.status_code,
-                        user_id=self._user_id,
-                        name=self._user["names"][0] if self._user["names"] else "-",
-                        url=redact_userinfo(url),
-                    )
-                    return self._user
-                last_exc = RuntimeError("no authenticatedUser.id")
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                continue
-        log_fail(logger, "azure current user", err=last_exc)
+                    if response.status_code not in {400, 404, 415}:
+                        break
+        log_fail(
+            logger,
+            "azure current user",
+            http=last_status,
+            url=redact_userinfo(last_url) or "-",
+            body=redact_userinfo(last_body) or "-",
+            reason="identity unknown; REVIEW_MENTION still matches uniqueName tail",
+        )
         return None
 
     def current_user_id(self) -> Optional[str]:

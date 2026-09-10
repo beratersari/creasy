@@ -80,6 +80,59 @@ def test_pr_created_stores_collection_from_containers() -> None:
     assert got.azure_collection == "https://tfs02.company.com.tr/tfs/ExampleCollection"
 
 
+def test_assigning_domain_unique_name_matches_mention_tail():
+    pr = _pr()
+    pr["reviewers"] = [
+        {
+            "id": "guid-1",
+            "displayName": "Berat Ersari",
+            "uniqueName": r"ORGANIZATION\mberatersari",
+        }
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {"text": r"Dev added ORGANIZATION\mberatersari as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id=None,
+        mention_names=["testuser", "mberatersari"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+
+
+def test_assigning_domain_unique_name_in_html_message():
+    pr = _pr()
+    pr["reviewers"] = [{"uniqueName": r"ORGANIZATION\mberatersari"}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {
+            "html": r'<div>Dev added <a>ORGANIZATION\mberatersari</a> as a reviewer</div>',
+        },
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, mention_names=["mberatersari"])
+    assert isinstance(got, ReviewTrigger)
+
+
+def test_self_assign_yourself_message_starts_review():
+    pr = _pr()
+    pr["reviewers"] = [{"uniqueName": r"ORGANIZATION\mberatersari"}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {"text": r"ORGANIZATION\mberatersari added yourself as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, mention_names=["mberatersari"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+
+
 def test_assigning_bot_as_reviewer_starts_review():
     pr = _pr()
     pr["reviewers"] = [{"id": "bot-guid", "displayName": "Creasy"}]
