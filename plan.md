@@ -33,7 +33,7 @@ POST /webhook  (ack immediately)
     ├─ Azure DevOps POST /webhook/azure (optional; GitLab /webhook unchanged)
     │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
     │          @mention /ask; abandoned or merged cleans up;
-    │          mention or command alone posts a usage note (no OpenCode)
+    │          mention or command alone is ignored (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │
@@ -277,6 +277,14 @@ anchors on `path` + line range (`x.cpp` 30–40), posted via
 finding overlaps an unresolved Creasy thread, reply on that
 thread unless the last Creasy note is ≥ 90% similar (then skip).
 A failed thread is logged and skipped; it does not fail the job.
+After a successful GitLab review or open note (not `/ask`, not a
+short error or cancel note), mark the token user as `reviewed`
+via `POST .../draft_notes/bulk_publish` with
+`reviewer_state=reviewed`. That does not record a formal
+approval. If the endpoint is missing or the reviewer is still
+`unreviewed`, post a `/submit_review` quick-action note. A
+failed submit is logged and skipped so Re-request can appear
+without the bot approving the MR. Azure is unchanged.
 
 The agent reply is the markdown review, plus an optional
 `opencoderman-findings` fence. Creasy strips that fence before posting

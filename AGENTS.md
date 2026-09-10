@@ -25,7 +25,10 @@ These look like bugs. They are not.
    note is ≥ 90% similar (Ratcliff-Obershelp / token Jaccard /
    3-gram Jaccard) — then skip the reply and do not open a new
    thread. Short error / cancelled notes have no threads. A failed
-   thread does not fail the job. No git push.
+   thread does not fail the job. After a successful GitLab review
+   or open job, mark the token user as `reviewed` (not approved)
+   so Re-request appears. A failed submit does not fail the job.
+   `/ask` and Azure jobs do not change reviewer state. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/ask` or a later review can resume `ses_*` on the same path.
@@ -208,6 +211,8 @@ note or discussion posting in `opencode/`.
   not in the path list.
 - Findings JSON is stripped from the MR note. Each valid finding is
   posted as a discussion. A failed thread does not fail the job.
+  After a successful GitLab review or open post, mark the reviewer
+  as reviewed (not approved). A failed submit does not fail the job.
 - Do not add tests that require network unless they are clearly marked
   and skipped by default.
 - Live OpenCode review coverage is `tests/test_opencode_review.py`.

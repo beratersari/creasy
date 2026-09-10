@@ -599,6 +599,25 @@ class OpenCodeRunner:
             return
         if findings:
             self._post_discussions(job, result, findings)
+        self._submit_gitlab_review(job)
+
+    def _submit_gitlab_review(self, job: JobRecord) -> None:
+        if self._is_azure(job):
+            return
+        if (job.trigger or "") == "ask":
+            return
+        submit = getattr(self.gitlab, "submit_review", None)
+        if not callable(submit):
+            return
+        try:
+            ok = submit(job.project_id, job.mr_iid)
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "submit review", job=job.job_id, mr=job.mr_iid, err=exc)
+            return
+        if ok:
+            log_ok(logger, "submit review", job=job.job_id, mr=job.mr_iid)
+        else:
+            log_fail(logger, "submit review", job=job.job_id, mr=job.mr_iid, reason="gitlab returned false")
 
     def _post_discussions(
         self,

@@ -100,6 +100,7 @@ class _GitlabState:
         self.deleted_notes: list[int] = []
         self.note_id = 100
         self.disc_id = 1
+        self.reviewer_state = "unreviewed"
 
 
 def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
@@ -146,6 +147,11 @@ def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
             if path.endswith("/merge_requests/7/pipelines"):
                 self._json([])
                 return
+            if path.endswith("/merge_requests/7/reviewers"):
+                self._json(
+                    [{"user": {"id": 99, "username": "creasy-bot"}, "state": st.reviewer_state}]
+                )
+                return
             if "/projects/" in path and path.count("/") == 4:
                 self._json({"id": 42, "http_url_to_repo": st.mr.get("http_url_to_repo") or ""})
                 return
@@ -157,6 +163,12 @@ def _gitlab_server(state: _GitlabState) -> ThreadingHTTPServer:
             body = self._read_json()
             st = holder["s"]
             with st.lock:
+                if path.endswith("/draft_notes/bulk_publish"):
+                    if str(body.get("reviewer_state") or "") == "reviewed":
+                        st.reviewer_state = "reviewed"
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if path.endswith("/merge_requests/7/notes") and "/discussions/" not in path:
                     st.note_id += 1
                     note = {
