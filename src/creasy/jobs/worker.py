@@ -443,6 +443,7 @@ class OpenCodeRunner:
                 sha_changed=sha_changed,
                 previous_sha=previous_sha,
                 include_context=created_new or not workspace.session_id,
+                parent_text=getattr(job, "parent_comment_text", "") or "",
             )
         extra = format_code_comment_prompt(
             job.comment_text,
@@ -622,7 +623,9 @@ class OpenCodeRunner:
     def _ensure_parent_comment(self, job: JobRecord) -> None:
         if (getattr(job, "parent_comment_text", "") or "").strip():
             return
-        if not str(getattr(job, "discussion_id", "") or "").strip():
+        if not str(getattr(job, "discussion_id", "") or "").strip() and not int(
+            getattr(job, "parent_comment_id", 0) or 0
+        ):
             return
         try:
             text = self._load_prior_thread_text(job)
@@ -632,38 +635,88 @@ class OpenCodeRunner:
         if text:
             job.parent_comment_text = text
             self._persist_job(job, "parent comment")
+            log_ok(logger, "prior thread text", job=job.job_id, chars=len(text))
+        else:
+            log_fail(
+                logger,
+                "prior thread text",
+                job=job.job_id,
+                discussion=getattr(job, "discussion_id", "") or "-",
+                parent=getattr(job, "parent_comment_id", 0) or 0,
+                reason="empty",
+            )
+
+    def _same_thread_id(self, raw: Any, wanted: str) -> bool:
+        left = str(raw or "").strip()
+        right = str(wanted or "").strip()
+        if not left or not right:
+            return False
+        if left == right:
+            return True
+        try:
+            return int(left) == int(right)
+        except ValueError:
+            return False
+
+    def _prior_from_comments(self, comments: list[dict], *, current_id: int, current_text: str) -> str:
+        current_text = (current_text or "").strip()
+        current = None
+        if current_id:
+            for comment in comments:
+                if int(comment.get("id") or 0) == current_id:
+                    current = comment
+                    break
+        if current is None and current_text:
+            for comment in reversed(comments):
+                body = str(comment.get("content") or comment.get("body") or "").strip()
+                if body and current_text in body:
+                    current = comment
+                    break
+        if current is not None:
+            parent_id = int(
+                current.get("parentCommentId")
+                or current.get("parent_comment_id")
+                or current.get("parentId")
+                or 0
+            )
+            if parent_id:
+                for comment in comments:
+                    if int(comment.get("id") or 0) == parent_id:
+                        return str(comment.get("content") or comment.get("body") or "").strip()
+        if len(comments) >= 2:
+            return str(comments[-2].get("content") or comments[-2].get("body") or "").strip()
+        if comments:
+            return str(comments[0].get("content") or comments[0].get("body") or "").strip()
+        return ""
 
     def _load_prior_thread_text(self, job: JobRecord) -> str:
         discussion_id = str(getattr(job, "discussion_id", "") or "").strip()
-        if not discussion_id:
-            return ""
+        current_id = int(getattr(job, "parent_comment_id", 0) or 0)
+        current_text = str(getattr(job, "comment_text", "") or "")
         if self._is_azure(job):
             if self.azure is None:
                 return ""
             threads = self.azure.list_threads(job.azure_project, job.azure_repo, job.mr_iid)
-            parent_id = int(getattr(job, "parent_comment_id", 0) or 0)
             for thread in threads:
-                if str(thread.get("id") or "") != discussion_id:
-                    continue
                 comments = [c for c in (thread.get("comments") or []) if isinstance(c, dict)]
-                if parent_id:
-                    for comment in comments:
-                        if int(comment.get("id") or 0) == parent_id:
-                            return str(comment.get("content") or "").strip()
-                if len(comments) >= 2:
-                    return str(comments[-2].get("content") or "").strip()
-                if comments:
-                    return str(comments[0].get("content") or "").strip()
+                if discussion_id and not self._same_thread_id(thread.get("id"), discussion_id):
+                    if not current_id or not any(int(c.get("id") or 0) == current_id for c in comments):
+                        continue
+                elif not discussion_id:
+                    if not current_id or not any(int(c.get("id") or 0) == current_id for c in comments):
+                        continue
+                text = self._prior_from_comments(comments, current_id=current_id, current_text=current_text)
+                if text:
+                    return text
+            return ""
+        if not discussion_id:
             return ""
         discussions = self.gitlab.list_discussions(job.project_id, job.mr_iid)
         for disc in discussions:
-            if str(disc.get("id") or "") != discussion_id:
+            if not self._same_thread_id(disc.get("id"), discussion_id):
                 continue
             notes = [n for n in (disc.get("notes") or []) if isinstance(n, dict)]
-            if len(notes) >= 2:
-                return str(notes[-2].get("body") or "").strip()
-            if notes:
-                return str(notes[0].get("body") or "").strip()
+            return self._prior_from_comments(notes, current_id=current_id, current_text=current_text)
         return ""
 
     def _submit_gitlab_review(self, job: JobRecord) -> None:

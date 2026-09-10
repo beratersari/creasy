@@ -5,6 +5,7 @@ from creasy.review.mention import (
     azure_mention_ids,
     collect_names,
     comment_intent,
+    extract_mentioned_names,
     is_usage_note,
     parse_mention_aliases,
 )
@@ -33,6 +34,30 @@ def test_comment_intent_requires_mention_and_command() -> None:
     assert ask == ("run", "ask", "why")
     domain = comment_intent(r"@company\mberatersari /ask asdfasf", ["mberatersari"])
     assert domain == ("run", "ask", "asdfasf")
+
+
+def test_extract_mentioned_names_from_plain_and_html() -> None:
+    assert extract_mentioned_names('@mberatersari /ask "why"') == ["mberatersari"]
+    assert extract_mentioned_names(r"@company\mberatersari /ask why") == [r"company\mberatersari"]
+    html = (
+        '<a href="#" data-vss-mention="version:2.0,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">'
+        '@Berat ERSARI</a>/ask "why this lock?"'
+    )
+    assert extract_mentioned_names(html) == ["Berat ERSARI"]
+
+
+def test_comment_intent_ask_without_space_after_mention() -> None:
+    assert comment_intent("@creasy/ask why", ["creasy"]) == ("run", "ask", "why")
+    quoted = comment_intent('@creasy /ask "question"', ["creasy"])
+    assert quoted == ("run", "ask", '"question"')
+    html = (
+        '<a href="#" data-vss-mention="version:2.0,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">'
+        '@Berat ERSARI</a>/ask "why this lock?"'
+    )
+    got = comment_intent(html, ["Berat ERSARI"])
+    assert got == ("run", "ask", '"why this lock?"')
+    display = comment_intent("@Berat ERSARI /ask why", ["mberatersari", "Berat ERSARI"])
+    assert display == ("run", "ask", "why")
 
 
 def test_azure_html_mention_needs_command() -> None:

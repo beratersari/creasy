@@ -347,6 +347,30 @@ def test_file_comment_keeps_range_and_question():
     assert got.kind == "ask"
     assert got.discussion_id == "9"
     assert got.parent_comment_id == 3
+    nested_parent = {
+        "eventType": "git.pullrequest.commented",
+        "resource": {
+            "comment": {
+                "id": 8,
+                "parentCommentId": 1,
+                "content": "@creasy /ask why dest?",
+                "author": {"id": "user-1"},
+                "_links": {
+                    "self": {
+                        "href": (
+                            "https://ado.example/_apis/git/repositories/"
+                            f"{REPO}/pullRequests/12/threads/9/comments/8"
+                        )
+                    }
+                },
+            },
+            "pullRequest": _pr(),
+        },
+    }
+    reply = classify_azure_webhook(nested_parent, mention_names=["creasy"])
+    assert isinstance(reply, ReviewTrigger)
+    assert reply.discussion_id == "9"
+    assert reply.parent_comment_id == 8
     assert got.comment_path == "src/lock.cpp"
     assert got.comment_start_line == 40
     assert got.comment_end_line == 52
@@ -409,6 +433,53 @@ def test_comment_vss_mention_uses_reviewer_id_not_connectiondata_id():
     )
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "ask"
+
+
+def test_comment_html_ask_without_space_after_mention():
+    payload = {
+        "eventType": "ms.vss-code.git-pullrequest-comment-event",
+        "resource": {
+            "comment": {
+                "content": (
+                    '<a href="#" data-vss-mention="version:2.0,71440e05-be9e-4768-897e-da81a889d26e">'
+                    '@Berat ERSARI</a>/ask "why this lock?"'
+                ),
+                "author": {"id": "someone-else"},
+            },
+            "pullRequest": _pr(
+                reviewers=[
+                    {
+                        "id": "71440e05-be9e-4768-897e-da81a889d26e",
+                        "displayName": "Berat ERSARI",
+                        "uniqueName": r"company\mberatersari",
+                    }
+                ]
+            ),
+        },
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
+    assert "why this lock" in got.comment_text
+
+
+def test_comment_plain_ask_quoted_question():
+    payload = {
+        "eventType": "ms.vss-code.git-pullrequest-comment-event",
+        "resource": {
+            "content": '@mberatersari /ask "question"',
+            "author": {"id": "user-1"},
+            "pullRequest": _pr(),
+        },
+    }
+    got = classify_azure_webhook(payload, mention_names=["mberatersari"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
+    assert "question" in got.comment_text
 
 
 def test_comment_review_and_ask():

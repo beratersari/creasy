@@ -29,7 +29,9 @@ These look like bugs. They are not.
    or open job, mark the token user as `reviewed` (not approved)
    so Re-request appears. A failed submit does not fail the job.
    `/ask` replies on the request thread only and does not open new
-   diff threads unless the question explicitly asks for a new review.
+   diff threads. Posted replies do not quote the previous comment
+   and do not @mention anyone. The previous comment is only in the
+   model prompt.
    `/ask` and Azure jobs do not change reviewer state. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next

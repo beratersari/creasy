@@ -61,6 +61,10 @@ def test_ask_prompt_is_question():
     text = build_ask_prompt("why this lock?")
     assert text.startswith("why this lock?")
     assert "opencoderman-findings" in text
+    with_parent = build_ask_prompt("why dest?", parent_text="Unbounded strcpy into dest.")
+    assert "Unbounded strcpy into dest." in with_parent
+    assert "Previous comment" in with_parent
+    assert "why dest?" in with_parent
     with_ctx = build_ask_prompt("why?", mr=_mr(), index=DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}), include_context=True)
     assert "why?" in with_ctx
     assert "Add login" in with_ctx

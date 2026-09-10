@@ -11,8 +11,25 @@ _VSS_MENTION = re.compile(
     re.IGNORECASE,
 )
 _HTML_MENTION = re.compile(r"<a\b[^>]*data-vss-mention[^>]*>.*?</a>", re.IGNORECASE | re.DOTALL)
-_CMD_RE = re.compile(r"(?:^|\s)/(ask|review)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
+_HTML_INNER = re.compile(
+    r"<a\b[^>]*data-vss-mention[^>]*>(.*?)</a>",
+    re.IGNORECASE | re.DOTALL,
+)
+_HTML_TAG = re.compile(r"<[^>]+>")
+# Azure mention picker often emits "</a>/ask" with no space. Typed
+# "@name/ask" has no space either. HTML tags are stripped to spaces
+# before this runs, so "</a>/ask" becomes " /ask".
+_CMD_RE = re.compile(
+    r"(?:^|\s|@[^\s@/]+)/(ask|review)(?=[\s\"'.,!?:;)]|$)",
+    re.IGNORECASE,
+)
 _CMD_TRAIL = ".,!?:;)"
+_AT_HANDLE = re.compile(
+    r"(?<![A-Za-z0-9._-])@("
+    r"(?:[^\s@<>/]+\\)?[^\s@<>/]+"
+    r"(?:\s+[A-Za-z][A-Za-z0-9.'-]*){0,4}"
+    r")"
+)
 
 
 def parse_mention_aliases(raw: str) -> list[str]:
@@ -44,9 +61,30 @@ def azure_mention_ids(text: str) -> list[str]:
     return [match.group(1) for match in _VSS_MENTION.finditer(text or "")]
 
 
+def _plain_comment(text: str) -> str:
+    return _HTML_TAG.sub(" ", text or "")
+
+
+def extract_mentioned_names(text: str) -> list[str]:
+    """@handles and Azure mention-link labels from a comment."""
+    raw = text or ""
+    found: list[str] = []
+
+    def add(name: str) -> None:
+        cleaned = str(name or "").strip().strip("<>").lstrip("@").strip()
+        if cleaned and cleaned not in found:
+            found.append(cleaned)
+
+    for match in _HTML_INNER.finditer(raw):
+        add(" ".join(_plain_comment(match.group(1)).split()))
+    for match in _AT_HANDLE.finditer(_plain_comment(raw)):
+        add(match.group(1))
+    return found
+
+
 def first_slash_command(body: str) -> Optional[tuple[str, str]]:
     """Return (command, remainder) for the first /ask or /review token."""
-    text = body or ""
+    text = _plain_comment(body or "")
     match = _CMD_RE.search(text)
     if not match:
         return None
@@ -69,7 +107,14 @@ def has_bot_mention(
     known.discard("")
     if known and any(str(item or "").strip().lower() in known for item in mentioned_ids):
         return True
-    return _mention_match(text, names) is not None
+    aliases = collect_names(names)
+    if _mention_match(text, aliases) is not None:
+        return True
+    if _mention_match(_plain_comment(text), aliases) is not None:
+        return True
+    mentioned = {item.lower() for item in collect_names(extract_mentioned_names(text))}
+    known_names = {item.lower() for item in aliases}
+    return bool(known_names and mentioned.intersection(known_names))
 
 
 def _mention_match(text: str, names: Sequence[str]) -> Optional[re.Match[str]]:
@@ -99,7 +144,7 @@ def strip_bot_mentions(text: str, names: Sequence[str]) -> str:
 
 def user_comment_text(body: str, names: Sequence[str]) -> str:
     """User words with the bot mention and slash command removed."""
-    text = strip_bot_mentions(body or "", names)
+    text = " ".join(_plain_comment(strip_bot_mentions(body or "", names)).split())
     parsed = first_slash_command(text)
     if parsed is None:
         return text
