@@ -9,6 +9,10 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.1 — 2026-09-10
+
+Azure identity works again with a TFS application-root URL.
+
 ### Fixed
 
 - Azure identity uses the TFS application root
