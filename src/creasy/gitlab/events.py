@@ -35,6 +35,7 @@ class ReviewTrigger:
     comment_side: str = ""
     comment_start_line: int = 0
     comment_end_line: int = 0
+    parent_comment_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -371,6 +372,7 @@ def _classify_note(
         comment_side=side,
         comment_start_line=start,
         comment_end_line=end,
+        parent_comment_text="",
     )
 
 

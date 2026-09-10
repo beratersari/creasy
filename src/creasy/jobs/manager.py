@@ -143,6 +143,7 @@ class Manager:
                 comment_side=getattr(trigger, "comment_side", None) or "",
                 comment_start_line=int(getattr(trigger, "comment_start_line", 0) or 0),
                 comment_end_line=int(getattr(trigger, "comment_end_line", 0) or 0),
+                parent_comment_text=str(getattr(trigger, "parent_comment_text", "") or ""),
                 model=self.config.opencode_model,
                 agent=self.config.opencode_agent,
                 accepted_at=utc_now(),

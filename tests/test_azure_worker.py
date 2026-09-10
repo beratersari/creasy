@@ -3,6 +3,7 @@ from __future__ import annotations
 from creasy.gitlab.client import MergeRequest
 from creasy.jobs.models import JobRecord, mint_job_id
 from creasy.jobs.worker import OpenCodeRunner, RunResult
+from creasy.review.findings import Finding
 from creasy.workspace.store import WorkspaceStore
 from test_azure_events import PROJECT, REPO
 from test_fixes import SpyGitlab
@@ -110,6 +111,72 @@ def test_gitlab_job_still_posts_to_gitlab(tmp_config):
     assert gitlab.notes
     assert azure.overviews == []
     assert gitlab.submit_calls == [(1, 2)]
+
+
+def test_ask_job_does_not_open_finding_threads(tmp_config):
+    gitlab = SpyGitlab()
+    gitlab.discussions = []
+
+    def post_discussion(project_id, mr_iid, body, position):
+        gitlab.discussions.append({"body": body, "position": position})
+        return {"id": "d"}
+
+    gitlab.post_discussion = post_discussion  # type: ignore[method-assign]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="ask",
+        comment_text="Does this assume C++17?",
+        text="Because dest is 8.",
+        model="opencode/x",
+    )
+    result = RunResult(text=job.text, clone_path=".")
+    finding = Finding(
+        path="src/app.py",
+        start_line=2,
+        end_line=2,
+        side="new",
+        severity="critical",
+        title="overflow",
+        body="bad",
+    )
+    runner._post_note(job, result, findings=[finding])
+    assert result.posted is True
+    assert gitlab.notes
+    assert gitlab.discussions == []
+
+
+def test_ask_never_opens_finding_threads_even_if_text_says_review(tmp_config):
+    gitlab = SpyGitlab()
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    posted: list[int] = []
+    runner._post_discussions = lambda job, result, findings: posted.append(len(findings))
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="ask",
+        comment_text="please do a new review",
+        text="### Summary\nbad copy",
+        model="opencode/x",
+    )
+    result = RunResult(text=job.text)
+    finding = Finding(
+        path="src/app.py",
+        start_line=2,
+        end_line=2,
+        side="new",
+        severity="critical",
+        title="overflow",
+        body="bad",
+    )
+    runner._post_note(job, result, findings=[finding])
+    assert result.posted is True
+    assert posted == []
 
 
 def test_ask_job_does_not_submit_gitlab_review(tmp_config):

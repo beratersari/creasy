@@ -27,7 +27,12 @@ from creasy.review.format import format_cancelled, format_failure, format_succes
 from creasy.review.position import build_position_variants, format_discussion
 from creasy.review.similarity import should_skip_similar_reply
 from creasy.review.threads import match_creasy_thread, parse_creasy_threads
-from creasy.review.prompt import build_ask_prompt, build_review_prompt, hang_resume_prompt
+from creasy.review.prompt import (
+    build_ask_prompt,
+    build_review_prompt,
+    build_thread_review_prompt,
+    hang_resume_prompt,
+)
 from creasy.workspace.diffmap import parse_unified_diff
 from creasy.workspace.gitops import (
     GitError,
@@ -231,6 +236,7 @@ class OpenCodeRunner:
             logger.info("diff stat for %s:\n%s", job.mr_key, index.stat)
 
             created_new = False
+            self._ensure_parent_comment(job)
             prompt = self._prompt(
                 job, mr, index, workspace, created_new=False, previous_sha=previous_sha
             )
@@ -445,6 +451,16 @@ class OpenCodeRunner:
             start_line=int(getattr(job, "comment_start_line", 0) or 0),
             end_line=int(getattr(job, "comment_end_line", 0) or 0),
         )
+        if str(getattr(job, "discussion_id", "") or "").strip():
+            return build_thread_review_prompt(
+                mr,
+                index,
+                user_text=extra or (job.comment_text or ""),
+                parent_text=getattr(job, "parent_comment_text", "") or "",
+                path=getattr(job, "comment_path", "") or "",
+                start_line=int(getattr(job, "comment_start_line", 0) or 0),
+                end_line=int(getattr(job, "comment_end_line", 0) or 0),
+            )
         return build_review_prompt(mr, index, extra_notes=extra)
 
     def _ensure_workspace(
@@ -597,9 +613,58 @@ class OpenCodeRunner:
             return
         if result.cancelled or (result.error and not result.text):
             return
-        if findings:
+        if findings and job.trigger != "ask":
             self._post_discussions(job, result, findings)
+        elif findings and job.trigger == "ask":
+            log_ok(logger, "ask skips finding threads", job=job.job_id, findings=len(findings))
         self._submit_gitlab_review(job)
+
+    def _ensure_parent_comment(self, job: JobRecord) -> None:
+        if (getattr(job, "parent_comment_text", "") or "").strip():
+            return
+        if not str(getattr(job, "discussion_id", "") or "").strip():
+            return
+        try:
+            text = self._load_prior_thread_text(job)
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "load prior thread text", job=job.job_id, err=exc)
+            return
+        if text:
+            job.parent_comment_text = text
+            self._persist_job(job, "parent comment")
+
+    def _load_prior_thread_text(self, job: JobRecord) -> str:
+        discussion_id = str(getattr(job, "discussion_id", "") or "").strip()
+        if not discussion_id:
+            return ""
+        if self._is_azure(job):
+            if self.azure is None:
+                return ""
+            threads = self.azure.list_threads(job.azure_project, job.azure_repo, job.mr_iid)
+            parent_id = int(getattr(job, "parent_comment_id", 0) or 0)
+            for thread in threads:
+                if str(thread.get("id") or "") != discussion_id:
+                    continue
+                comments = [c for c in (thread.get("comments") or []) if isinstance(c, dict)]
+                if parent_id:
+                    for comment in comments:
+                        if int(comment.get("id") or 0) == parent_id:
+                            return str(comment.get("content") or "").strip()
+                if len(comments) >= 2:
+                    return str(comments[-2].get("content") or "").strip()
+                if comments:
+                    return str(comments[0].get("content") or "").strip()
+            return ""
+        discussions = self.gitlab.list_discussions(job.project_id, job.mr_iid)
+        for disc in discussions:
+            if str(disc.get("id") or "") != discussion_id:
+                continue
+            notes = [n for n in (disc.get("notes") or []) if isinstance(n, dict)]
+            if len(notes) >= 2:
+                return str(notes[-2].get("body") or "").strip()
+            if notes:
+                return str(notes[0].get("body") or "").strip()
+        return ""
 
     def _submit_gitlab_review(self, job: JobRecord) -> None:
         if self._is_azure(job):

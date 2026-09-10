@@ -181,7 +181,7 @@ def test_current_user_retries_older_api_version_after_400() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         version = request.url.params.get("api-version") or ""
         seen.append((request.url.path, version))
-        if request.url.path == "/tfs/_apis/connectionData" and version == "4.1":
+        if request.url.path == "/tfs/_apis/connectionData" and version == "1.0":
             return httpx.Response(
                 200,
                 json={
@@ -205,7 +205,7 @@ def test_current_user_retries_older_api_version_after_400() -> None:
         assert user["id"] == "bot-guid"
         assert "ORGANIZATION\\mberatersari" in user["names"]
         assert ("/tfs/_apis/connectionData", "7.1") in seen
-        assert ("/tfs/_apis/connectionData", "4.1") in seen
+        assert ("/tfs/_apis/connectionData", "1.0") in seen
     finally:
         client.close()
 

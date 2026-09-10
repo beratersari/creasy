@@ -42,8 +42,7 @@ def _webhook_app(tmp_config):
     return app, manager, runner
 
 
-def test_leftover_review_command_is_ignored(tmp_config):
-    """Old `@name /review` comments do not start a job."""
+def test_review_command_starts_a_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
@@ -53,8 +52,11 @@ def test_leftover_review_command_is_ignored(tmp_config):
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["status"] == "ignored", body
-    assert manager.store.list_all() == []
+    assert body["status"] == "accepted", body
+    job = manager.store.get(body["job_id"])
+    assert job is not None
+    assert job.trigger == "review"
+    runner.release.set()
     manager.shutdown()
 
 
@@ -129,13 +131,8 @@ def test_job_search_matches_what_operators_type():
     assert not job_matches_query(job, "99")
 
 
-def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: Path):
-    """Daily (seen on 84969716-30): `/ask` 'Does this assume C++17?'
-    posted an Answer note *and* new unresolved diff threads.
-
-    The follow-up is a question. Findings in that answer still become
-    GitLab discussions the same way a /review does.
-    """
+def test_ask_answer_does_not_open_diff_threads(tmp_config, tmp_path: Path):
+    """A question replies on the request thread only. Findings stay off the MR."""
     client, manager, state, httpd = _boot(
         tmp_config, tmp_path, assistants=[ASK_WITH_FINDINGS]
     )
@@ -152,9 +149,7 @@ def test_ask_answer_with_findings_opens_new_diff_threads(tmp_config, tmp_path: P
         assert state.notes, "expected an Answer note"
         assert any("Answer" in n["body"] for n in state.notes)
         assert "opencoderman-findings" not in state.notes[0]["body"]
-        # This is the daily issue: a question opened Changes-tab threads.
-        assert state.discussions, " /ask posted diff threads, not just an Answer note"
-        assert "string_view" in state.discussions[0]["notes"][0]["body"]
+        assert state.discussions == []
     finally:
         _shutdown(manager, httpd)
 

@@ -211,9 +211,11 @@ def test_note_keeps_discussion_id_for_thread_reply():
     assert open_.discussion_id == ""
 
 
-def test_leftover_review_command_is_ignored():
-    leftover = classify_webhook(note_payload("@creasy /review focus on auth"), mention_names=["creasy"])
-    assert isinstance(leftover, Ignore)
+def test_review_command_starts_a_review():
+    got = classify_webhook(note_payload("@creasy /review focus on auth"), mention_names=["creasy"])
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+    assert "auth" in got.comment_text
 
 
 def test_ask_note():
@@ -255,7 +257,7 @@ def test_unrelated_and_preview_ignored():
     assert isinstance(classify_webhook(note_payload("looks good")), Ignore)
     assert isinstance(classify_webhook(note_payload("nice preview of the UI")), Ignore)
     assert isinstance(classify_webhook(note_payload("please reset this")), Ignore)
-    assert first_command("please /review this") is None
+    assert first_command("please /review this") == ("review", "this")
     assert first_command("please /ask this") == ("ask", "this")
     assert first_command("please /reset this") is None
 
@@ -311,9 +313,10 @@ def test_first_command_wins():
     assert got.kind == "ask"
     got2 = classify_webhook(note_payload("@creasy /review now /ask later"), mention_names=["creasy"])
     assert isinstance(got2, ReviewTrigger)
-    assert got2.kind == "ask"
+    assert got2.kind == "review"
     got3 = classify_webhook(note_payload("@creasy /reset then /review"), mention_names=["creasy"])
-    assert isinstance(got3, Ignore)
+    assert isinstance(got3, ReviewTrigger)
+    assert got3.kind == "review"
 
 
 def test_reopen_ignored():
@@ -324,15 +327,16 @@ def test_reopen_ignored():
 
 def test_trailing_punctuation_still_runs_the_command():
     """People type /ask? or /reset! at the end of a sentence."""
-    leftover = classify_webhook(note_payload("@creasy /review."), mention_names=["creasy"])
-    assert isinstance(leftover, Ignore)
+    review = classify_webhook(note_payload("@creasy /review."), mention_names=["creasy"])
+    assert isinstance(review, ReviewTrigger)
+    assert review.kind == "review"
     ask = classify_webhook(note_payload("@creasy /ask? why is this nullable?"), mention_names=["creasy"])
     assert isinstance(ask, ReviewTrigger)
     assert ask.kind == "ask"
     assert "nullable" in ask.comment_text
     assert isinstance(classify_webhook(note_payload("@creasy /ask?"), mention_names=["creasy"]), Ignore)
     assert isinstance(classify_webhook(note_payload("@creasy /reset!"), mention_names=["creasy"]), Ignore)
-    assert first_command("please /review.") is None
+    assert first_command("please /review.") == ("review", "")
     assert first_command("please /ask.") == ("ask", "")
     assert first_command("/asks") is None
 

@@ -115,7 +115,8 @@ def test_ask_prompt_uses_previous_sha_not_overwritten_last_sha(tmp_config):
     assert "newsha" in text
     assert "why this lock?" in text
     unchanged = runner._prompt(job, _mr(sha="newsha"), index, workspace, created_new=False, previous_sha="newsha")
-    assert unchanged == "why this lock?"
+    assert unchanged.startswith("why this lock?")
+    assert "opencoderman-findings" in unchanged
 
 
 class _IdleHandler(BaseHTTPRequestHandler):

@@ -6,6 +6,7 @@ from creasy.jobs.models import JobRecord, mint_job_id
 from creasy.review.format import (
     format_cancelled,
     format_failure,
+    format_reply_context,
     format_success,
     soften_markdown,
 )
@@ -172,6 +173,22 @@ def test_ask_note_uses_answer_label() -> None:
     body = format_success(job)
     assert body.startswith(f"**Creasy {__version__} — Answer**")
     assert first_command(body) is None
+
+
+def test_thread_reply_quotes_previous_comment() -> None:
+    job = _job(
+        trigger="ask",
+        text="Because dest is 8.",
+        discussion_id="disc_1",
+        comment_text="why dest?",
+        parent_comment_text="Unbounded strcpy into dest.",
+    )
+    body = format_success(job)
+    assert "**Replying to**" in body
+    assert "Unbounded strcpy into dest." in body
+    assert "**Your request**" in body
+    assert "why dest?" in body
+    assert format_reply_context(parent="old", request="why dest?").startswith("**Replying to**")
 
 
 def test_failure_and_cancel_notes_are_not_commands() -> None:
