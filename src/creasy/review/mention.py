@@ -61,10 +61,13 @@ def has_bot_mention(
     *,
     mentioned_ids: Sequence[str] = (),
     bot_id: str = "",
+    extra_ids: Sequence[str] = (),
 ) -> bool:
     text = body or ""
-    bot = str(bot_id or "").strip()
-    if bot and any(str(item or "").strip().lower() == bot.lower() for item in mentioned_ids):
+    known = {str(bot_id or "").strip().lower()}
+    known.update(str(item or "").strip().lower() for item in extra_ids)
+    known.discard("")
+    if known and any(str(item or "").strip().lower() in known for item in mentioned_ids):
         return True
     return _mention_match(text, names) is not None
 
@@ -75,7 +78,7 @@ def _mention_match(text: str, names: Sequence[str]) -> Optional[re.Match[str]]:
     for alias in aliases:
         pattern = re.escape(alias).replace(r"\ ", r"\s+")
         match = re.search(
-            rf"(?<![A-Za-z0-9._-])@{pattern}(?![A-Za-z0-9._-])",
+            rf"(?<![A-Za-z0-9._-])@(?:[^\s@]+\\)?{pattern}(?![A-Za-z0-9._-])",
             text,
             flags=re.IGNORECASE,
         )
@@ -113,13 +116,20 @@ def comment_intent(
     *,
     mentioned_ids: Sequence[str] = (),
     bot_id: str = "",
+    extra_ids: Sequence[str] = (),
 ) -> Optional[tuple[str, str, str]]:
     """Parse a comment.
 
     Returns ``("run", "ask", remainder)`` when the bot is mentioned and
     ``/ask`` is present. Otherwise ``None``.
     """
-    mentioned = has_bot_mention(body, names, mentioned_ids=mentioned_ids, bot_id=bot_id)
+    mentioned = has_bot_mention(
+        body,
+        names,
+        mentioned_ids=mentioned_ids,
+        bot_id=bot_id,
+        extra_ids=extra_ids,
+    )
     parsed = first_slash_command(body)
     if not mentioned or not parsed:
         return None

@@ -119,6 +119,52 @@ def test_assigning_domain_unique_name_in_html_message():
     assert isinstance(got, ReviewTrigger)
 
 
+def test_changed_reviewer_list_self_assign_starts_review():
+    pr = _pr()
+    pr["reviewers"] = [
+        {
+            "id": "71440e05-be9e-4768-897e-da81a889d26e",
+            "displayName": "Berat ERSARI",
+            "uniqueName": r"company\mberatersari",
+        }
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {
+            "text": (
+                "Berat ERSARI changed the reviewer list for pull request 26509 "
+                "(Added sacmalilkarr) in AKBGPIOCaller"
+            )
+        },
+        "resource": pr,
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["test", "mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
+
+
+def test_changed_reviewer_list_by_teammate_is_ignored():
+    pr = _pr()
+    pr["reviewers"] = [
+        {"id": "bot", "displayName": "Berat ERSARI", "uniqueName": r"company\mberatersari"},
+        {"id": "alice", "displayName": "Alice"},
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {"text": "Alice changed the reviewer list for pull request 26509"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(
+        payload,
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, Ignore)
+
+
 def test_self_assign_yourself_message_starts_review():
     pr = _pr()
     pr["reviewers"] = [{"uniqueName": r"ORGANIZATION\mberatersari"}]
@@ -305,6 +351,64 @@ def test_file_comment_keeps_range_and_question():
     assert got.comment_start_line == 40
     assert got.comment_end_line == 52
     assert "lock" in got.comment_text
+
+
+def test_comment_event_resource_is_the_comment():
+    payload = {
+        "eventType": "ms.vss-code.git-pullrequest-comment-event",
+        "resource": {
+            "id": 8,
+            "content": "@mberatersari /ask asdfasf",
+            "author": {"id": "71440e05-be9e-4768-897e-da81a889d26e"},
+            "pullRequest": _pr(
+                reviewers=[
+                    {
+                        "id": "71440e05-be9e-4768-897e-da81a889d26e",
+                        "uniqueName": r"company\mberatersari",
+                    }
+                ]
+            ),
+        },
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
+    assert "asdfasf" in got.comment_text
+
+
+def test_comment_vss_mention_uses_reviewer_id_not_connectiondata_id():
+    payload = {
+        "eventType": "ms.vss-code.git-pullrequest-comment-event",
+        "resource": {
+            "comment": {
+                "content": (
+                    '<a href="#" data-vss-mention="version:2.0,71440e05-be9e-4768-897e-da81a889d26e">'
+                    "@Berat ERSARI</a> /ask why this lock?"
+                ),
+                "author": {"id": "someone-else"},
+            },
+            "pullRequest": _pr(
+                reviewers=[
+                    {
+                        "id": "71440e05-be9e-4768-897e-da81a889d26e",
+                        "displayName": "Berat ERSARI",
+                        "uniqueName": r"company\mberatersari",
+                    }
+                ]
+            ),
+        },
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari"],
+    )
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "ask"
 
 
 def test_comment_review_and_ask():

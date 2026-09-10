@@ -156,7 +156,9 @@ class AzureClient:
     def _identity_versions(self) -> list[str]:
         preferred = (self.api_version or "7.1").strip() or "7.1"
         versions = [preferred]
-        for item in ("6.0", "5.1", "5.0", "4.1", "3.0", "1.0"):
+        if not preferred.endswith("-preview"):
+            versions.append(f"{preferred}-preview")
+        for item in ("1.0", "7.1-preview", "6.0-preview", "5.0-preview", "4.1-preview", "2.0"):
             if item not in versions:
                 versions.append(item)
         return versions

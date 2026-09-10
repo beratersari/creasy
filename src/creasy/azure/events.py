@@ -35,6 +35,10 @@ _ADDED_REVIEWER = re.compile(
     r"(?P<actor>.+?) added (?P<who>.+?) as an? (?:required )?reviewer",
     re.IGNORECASE,
 )
+_CHANGED_REVIEWER_LIST = re.compile(
+    r"^(?P<actor>.+?) changed the reviewer list\b",
+    re.IGNORECASE,
+)
 _SELF_WHO = frozenset({"yourself", "themselves", "himself", "herself", "myself"})
 _HTML_TAG = re.compile(r"<[^>]+>")
 _ABANDONED = frozenset({"abandoned", "completed", "closed"})
@@ -64,10 +68,14 @@ def _resource(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _comment(payload: dict[str, Any]) -> dict[str, Any]:
     resource = _resource(payload)
-    comment = _as_dict(resource.get("comment"))
-    if comment:
-        return comment
-    return _as_dict(payload.get("comment"))
+    for blob in (resource.get("comment"), payload.get("comment")):
+        comment = _as_dict(blob)
+        if comment:
+            return comment
+    # TFS comment Service Hook: the resource is the comment; PR is nested.
+    if isinstance(resource.get("content"), str):
+        return resource
+    return {}
 
 
 def _ids_from_links(blob: dict[str, Any]) -> tuple[str, Optional[int]]:
@@ -369,6 +377,22 @@ def _azure_reviewer_is_bot(row: dict[str, Any], bot_user_id: Optional[str], name
     return any(_names_match(value, aliases) for value in _reviewer_name_values(row))
 
 
+def _bot_identity_ids(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> list[str]:
+    ids: list[str] = []
+    if bot_user_id:
+        ids.append(str(bot_user_id).strip())
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    for row in reviewers:
+        if not isinstance(row, dict) or not _azure_reviewer_is_bot(row, bot_user_id, names):
+            continue
+        nested = row.get("user") if isinstance(row.get("user"), dict) else {}
+        for raw in (row.get("id"), (nested or {}).get("id")):
+            text = str(raw or "").strip()
+            if text and text not in ids:
+                ids.append(text)
+    return ids
+
+
 def _azure_bot_is_reviewer(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
     reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
     for row in reviewers:
@@ -420,11 +444,31 @@ def _azure_reviewer_assigned(
         if any(alias in lowered for alias in aliases):
             logger.info("azure assign yes reason=reviewers-update-alias-in-text")
             return True
+    changed = _CHANGED_REVIEWER_LIST.search(first_line) or _CHANGED_REVIEWER_LIST.search(text)
+    if changed and listed:
+        actor = changed.group("actor").strip()
+        only_bot = _only_bot_reviewers(pr, bot_user_id, mention_names)
+        if _names_match(actor, aliases) or only_bot:
+            logger.info(
+                "azure assign yes reason=changed-reviewer-list actor=%r only_bot=%s",
+                actor,
+                only_bot,
+            )
+            return True
+        logger.info("azure assign skip reason=reviewer-list-changed-by-someone-else actor=%r", actor)
+        return False
     if not listed:
         logger.info("azure assign skip reason=bot-not-in-reviewers")
         return False
     logger.info("azure assign skip reason=not-an-add-reviewer-message")
     return False
+
+
+def _only_bot_reviewers(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> bool:
+    reviewers = [row for row in (pr.get("reviewers") or []) if isinstance(row, dict)]
+    if not reviewers:
+        return False
+    return all(_azure_reviewer_is_bot(row, bot_user_id, names) for row in reviewers)
 
 
 def classify_azure_webhook(
@@ -586,11 +630,14 @@ def _review_from_comment(
     if is_usage_note(note_text):
         log_ok(logger, "azure classify Ignore", reason="usage note", author=author or "-")
         return Ignore("usage note")
+    known_ids = _bot_identity_ids(pr, bot_user_id, mention_names)
+    mention_ids = azure_mention_ids(note_text)
     intent = comment_intent(
         note_text,
         mention_names,
-        mentioned_ids=azure_mention_ids(note_text),
+        mentioned_ids=mention_ids,
         bot_id=str(bot_user_id or ""),
+        extra_ids=known_ids,
     )
     if intent is None:
         log_ok(
@@ -598,6 +645,10 @@ def _review_from_comment(
             "azure classify Ignore",
             reason="no mention+command",
             author=author or "-",
+            content=(note_text or "")[:160],
+            mention_ids=mention_ids or ["-"],
+            known_ids=known_ids or ["-"],
+            names=",".join(mention_names) or "-",
         )
         return Ignore("no mention+command")
     action, command, remainder = intent

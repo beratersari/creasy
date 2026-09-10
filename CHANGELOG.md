@@ -9,6 +9,15 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- TFS assign messages that say “changed the reviewer list” start a
+  review when the PAT user is the actor or the only reviewer.
+- Azure comment events that put the text on `resource` (not
+  `resource.comment`) still run `@name /ask`. A `data-vss-mention`
+  of the reviewer’s TFS id counts as mentioning the bot even when
+  that id differs from `connectionData`.
+
 ## 0.9.2 — 2026-09-10
 
 Azure assign recognizes TFS `ORGANIZATION\\user` names and

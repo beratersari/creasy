@@ -29,6 +29,8 @@ def test_comment_intent_requires_mention_and_command() -> None:
     assert comment_intent("/ask why", ["creasy"]) is None
     ask = comment_intent("/ask why @creasy", ["creasy"])
     assert ask == ("run", "ask", "why")
+    domain = comment_intent(r"@company\mberatersari /ask asdfasf", ["mberatersari"])
+    assert domain == ("run", "ask", "asdfasf")
 
 
 def test_azure_html_mention_needs_command() -> None:
