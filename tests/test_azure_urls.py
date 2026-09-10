@@ -1,6 +1,17 @@
 from __future__ import annotations
 
-from creasy.azure.urls import normalize_collection_url, resolve_collection_url
+from creasy.azure.urls import identity_root, normalize_collection_url, resolve_collection_url
+
+
+def test_identity_root_keeps_tfs_app_and_strips_collection() -> None:
+    assert identity_root("https://tfs02.company.com.tr/tfs") == "https://tfs02.company.com.tr/tfs"
+    assert (
+        identity_root("https://tfs02.company.com.tr/tfs/ExampleCollection")
+        == "https://tfs02.company.com.tr/tfs"
+    )
+    assert identity_root("https://tfs02.company.com.tr") == "https://tfs02.company.com.tr"
+    assert identity_root("https://dev.azure.com/contoso") == "https://dev.azure.com/contoso"
+    assert identity_root("https://dev.azure.com/contoso/proj") == "https://dev.azure.com/contoso"
 
 
 def test_normalize_server_pr_web_url() -> None:

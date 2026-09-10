@@ -196,7 +196,7 @@ def test_azure_secret_required_when_set(tmp_config):
 
 
 def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
-    """Comment classify runs before apply_collection. Host-only URL cannot see /tfs."""
+    """Comment classify resolves the bot before git APIs rebase onto /tfs/Collection."""
     tmp_config.azure_url = "https://tfs02.company.com.tr"
     tmp_config.azure_token = "pat-test"
     tmp_config.azure_webhook_password = ""

@@ -40,6 +40,29 @@ def normalize_collection_url(url: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
 
 
+def identity_root(url: str) -> str:
+    """Server root for ``connectionData``.
+
+    TFS rejects collection-scoped ``/_apis/connectionData`` with 400.
+    ``https://host/tfs/Collection`` and ``https://host/tfs`` both resolve
+    to ``https://host/tfs``. Azure DevOps Services keeps the org.
+    """
+    parsed = urlparse(str(url or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    host = parsed.netloc.lower()
+    parts = [item for item in unquote(parsed.path or "").split("/") if item]
+    if host == "dev.azure.com" or host.endswith(".dev.azure.com"):
+        path = f"/{parts[0]}" if parts else ""
+        return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+    if host.endswith(".visualstudio.com"):
+        return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+    if parts and parts[0].lower() == "tfs":
+        return urlunparse((parsed.scheme, parsed.netloc, "/tfs", "", "", ""))
+    path = f"/{parts[0]}" if len(parts) == 1 else ""
+    return urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+
+
 def resolve_collection_url(*, configured: str = "", collection: str = "", web_url: str = "") -> str:
     """Prefer the webhook collection, then the PR URL, then AZURE_DEVOPS_URL.
 
