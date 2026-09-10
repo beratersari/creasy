@@ -9,6 +9,21 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.7 — 2026-09-10
+
+Mentions without `/ask` or `/review` get a usage note. Azure and
+GitLab `/ask` follow-ups use the same prompt.
+
+### Changed
+
+- `/ask` on Azure and GitLab now feed OpenCode the same follow-up
+  prompt. Parent comments are HTML-stripped, Azure PR labels and
+  latest status fill the same context fields as GitLab, and a
+  top-level `/ask` no longer treats itself as the previous comment.
+- A mention without `/ask` or `/review` posts a usage note on that
+  thread and does not start OpenCode. `/ask` and `/review` are the
+  only comment commands. A command alone is still ignored.
+
 ## 0.9.6 — 2026-09-10
 
 TFS `@<VSID> /ask` comments start a job.

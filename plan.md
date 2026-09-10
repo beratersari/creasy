@@ -34,7 +34,7 @@ POST /creasy/webhook/gitlab  (ack immediately)
     │          (optional; GitLab routes stay GitLab-only)
     │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
     │          @mention /ask; abandoned or merged cleans up;
-    │          mention or command alone is ignored (no OpenCode)
+    │          mention without /ask or /review posts a usage note (no OpenCode)
     └─ MR close / merge
             └─ stop any live job for that MR, then delete its workspace
     │
@@ -99,8 +99,9 @@ OpenCode sessions live in the global `opencode.db`, keyed by workspace `director
 
 **Decision (user):** later comments continue the same session via
 `@mention /ask`. A full review starts when the token user is assigned
-or re-requested as reviewer. A mention or a slash command alone
-is ignored.
+or re-requested as reviewer. A mention without `/ask` or `/review`
+posts a usage note on that thread (no OpenCode). A slash command
+alone is ignored.
 Ordinary notes are ignored.
 
 Shared resume flow for both commands after a finished job:
@@ -118,7 +119,7 @@ Shared resume flow for both commands after a finished job:
 |---|---|---|
 | Assign / re-request the token user | Full review prompt: MR metadata, merge-base, `--stat`, file list, “analyze from the separation point” | Create a session and run the full review |
 | `@name /ask <question>` | Only the question (plus a one-line “SHA changed to …” if the branch moved). Do **not** rebuild the full review prompt. The previous review is already in chat history. | Still run: clone if needed, create a session, send a short context (title, source→target, changed-file list) + the question. Do not require a prior review. |
-`@name /ask` with no question text after the command: ignore the webhook (200) and do not start a job. A mention or `/ask` alone is ignored.
+`@name /ask` with no question text after the command: ignore the webhook (200) and do not start a job. A mention without `/ask` or `/review` posts a usage note on that thread. `/ask` or `/review` alone is ignored.
 
 Rules:
 
@@ -142,7 +143,8 @@ Taken from gitlab_code_reviewer, plus the close/merge cleanup the old service ne
 | `object_kind=merge_request`, `action` in `close`, `merge` | Cleanup workspace; do not review |
 | `object_kind=note`, `noteable_type=MergeRequest`, `@name /review` | Ignore |
 | `object_kind=note`, `noteable_type=MergeRequest`, `@name /ask` + question text | Enqueue follow-up on the same `ses_*` |
-| `object_kind=note`, mention xor slash command | Ignore |
+| `object_kind=note`, mention without `/ask` or `/review` | Usage note on that thread (no OpenCode) |
+| `object_kind=note`, slash command without mention | Ignore |
 | Everything else | 200 ignored |
 
 `/ask` is the only comment command. `/review` and `/reset` are ignored.

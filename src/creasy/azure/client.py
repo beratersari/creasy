@@ -13,6 +13,7 @@ from creasy.azure.auth import azure_basic_auth
 from creasy.azure.urls import identity_root, resolve_collection_url
 from creasy.gitlab.client import MergeRequest
 from creasy.logging import get_logger, log_fail, log_ok, redact_userinfo
+from creasy.review.mention import plain_comment
 
 logger = get_logger("azure")
 
@@ -298,6 +299,8 @@ class AzureClient:
             raise AzureError(f"fetch PR failed: {exc}") from exc
         data = response.json() if response.content else {}
         mr = _pr_to_merge_request(data)
+        if not mr.pipeline_status:
+            self._attach_latest_status(mr, project, repo, pr_id)
         if not mr.sha:
             _first, _second, sha = self.iteration_span(project, repo, pr_id)
             if sha:
@@ -328,6 +331,36 @@ class AzureClient:
             clone=redact_userinfo(mr.http_url) or "-",
         )
         return mr
+
+    def _attach_latest_status(self, mr: MergeRequest, project: str, repo: str, pr_id: int) -> None:
+        try:
+            response = self._send(
+                "GET",
+                self._git_paths(project, repo, f"/pullRequests/{int(pr_id)}/statuses"),
+                params={"api-version": self.api_version},
+            )
+        except Exception as exc:  # noqa: BLE001
+            log_fail(logger, "azure GET statuses", project=project, repo=repo, pr=pr_id, err=exc)
+            return
+        data = response.json() if response.content else {}
+        rows = data if isinstance(data, list) else (data.get("value") if isinstance(data, dict) else [])
+        latest: dict[str, Any] = {}
+        for item in rows or []:
+            if isinstance(item, dict) and (item.get("state") or item.get("status")):
+                latest = item
+        if not latest:
+            log_ok(logger, "azure GET statuses", project=project, repo=repo, pr=pr_id, count=0)
+            return
+        mr.pipeline_status = str(latest.get("state") or latest.get("status") or "").strip()
+        mr.pipeline_url = str(latest.get("targetUrl") or latest.get("target_url") or "").strip()
+        log_ok(
+            logger,
+            "azure GET statuses",
+            project=project,
+            repo=repo,
+            pr=pr_id,
+            status=mr.pipeline_status or "-",
+        )
 
     def resolve_clone_url(self, project: str, repo: str, fallback: str = "") -> str:
         if _is_git_http(fallback):
@@ -656,7 +689,7 @@ def _pr_to_merge_request(data: dict[str, Any]) -> MergeRequest:
         project_id=0,
         iid=int(data.get("pullRequestId") or 0),
         title=str(data.get("title") or ""),
-        description=str(data.get("description") or ""),
+        description=plain_comment(str(data.get("description") or "")),
         author=str(author.get("uniqueName") or author.get("displayName") or ""),
         source_branch=source,
         target_branch=target,
@@ -667,5 +700,23 @@ def _pr_to_merge_request(data: dict[str, Any]) -> MergeRequest:
         http_url=http_url,
         draft=bool(data.get("isDraft")),
         state=str(data.get("status") or ""),
-        labels=[],
+        labels=_pr_labels(data.get("labels")),
     )
+
+
+def _pr_labels(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if isinstance(item, dict):
+            if item.get("active") is False:
+                continue
+            name = str(item.get("name") or item.get("title") or "").strip()
+        else:
+            name = str(item or "").strip()
+        if name and name not in out:
+            out.append(name)
+        if len(out) >= 20:
+            break
+    return out

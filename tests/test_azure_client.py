@@ -24,6 +24,8 @@ def test_get_pr_fills_sha_from_iterations_and_https_clone() -> None:
                 json={
                     "pullRequestId": 12,
                     "title": "Add overflow",
+                    "description": "<div>Watch <b>dest</b>.</div>",
+                    "labels": [{"name": "backend", "active": True}, {"name": "old", "active": False}],
                     "sourceRefName": "refs/heads/feat",
                     "targetRefName": "refs/heads/main",
                     "repository": {
@@ -32,6 +34,19 @@ def test_get_pr_fills_sha_from_iterations_and_https_clone() -> None:
                         "remoteUrl": "ssh://git@ado.example/tfs/DefaultCollection/App/_git/app",
                         "project": {"id": "proj", "name": "App"},
                     },
+                },
+            )
+        if path.endswith("/statuses"):
+            return httpx.Response(
+                200,
+                json={
+                    "value": [
+                        {
+                            "state": "failed",
+                            "targetUrl": "http://ado/build/9",
+                            "context": {"name": "ci"},
+                        }
+                    ]
                 },
             )
         if path.endswith("/iterations"):
@@ -55,6 +70,10 @@ def test_get_pr_fills_sha_from_iterations_and_https_clone() -> None:
         mr = client.get_pull_request("proj", "repo", 12)
         assert mr.sha == "bbb"
         assert mr.http_url.startswith("https://")
+        assert mr.description == "Watch dest."
+        assert mr.labels == ["backend"]
+        assert mr.pipeline_status == "failed"
+        assert mr.pipeline_url == "http://ado/build/9"
         first, second, sha = client.iteration_span("proj", "repo", 12)
         assert first == 1
         assert second == 3

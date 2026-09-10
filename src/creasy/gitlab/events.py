@@ -368,12 +368,24 @@ def _classify_note(
         draft=_is_draft(payload, attrs),
         explicit=True,
         discussion_id=_gitlab_discussion_id(payload, attrs),
+        parent_comment_id=_gitlab_note_id(attrs),
         comment_path=path,
         comment_side=side,
         comment_start_line=start,
         comment_end_line=end,
         parent_comment_text="",
     )
+
+
+def _gitlab_note_id(attrs: dict[str, Any]) -> int:
+    for raw in (attrs.get("id"), attrs.get("note_id"), attrs.get("noteId")):
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if value:
+            return value
+    return 0
 
 
 def _gitlab_discussion_id(payload: dict[str, Any], attrs: dict[str, Any]) -> str:

@@ -676,14 +676,22 @@ def _review_from_comment(
         )
         return Ignore("no mention+command")
     action, command, remainder = intent
-    logger.info(
-        "azure comment intent=%s command=/%s author=%s mentioned=%s remainder=%r",
-        action,
-        command or "-",
-        author or "-",
-        mentioned or ["-"],
-        remainder[:80],
-    )
+    if command == "usage":
+        logger.info(
+            "azure comment intent=usage author=%s mentioned=%s leftover=%r",
+            author or "-",
+            mentioned or ["-"],
+            remainder[:80],
+        )
+    else:
+        logger.info(
+            "azure comment intent=%s command=/%s author=%s mentioned=%s remainder=%r",
+            action,
+            command or "-",
+            author or "-",
+            mentioned or ["-"],
+            remainder[:80],
+        )
     user_text = user_comment_text(note_text, names)
     if command == "ask" and not remainder and not user_text:
         log_ok(logger, "azure classify Ignore", reason="empty /ask", author=author or "-")

@@ -8,7 +8,18 @@ from creasy.review.mention import (
     extract_mentioned_names,
     is_usage_note,
     parse_mention_aliases,
+    plain_comment,
 )
+
+
+def test_plain_comment_strips_html_keeps_words() -> None:
+    html = (
+        '<div>Unbounded strcpy into dest.</div>'
+        '<a href="#" data-vss-mention="version:2.0,aaaa">@Creasy</a>'
+    )
+    assert plain_comment(html) == "Unbounded strcpy into dest. @Creasy"
+    assert plain_comment("<p>Watch <b>dest</b>.</p>") == "Watch dest."
+    assert plain_comment("  already   plain  ") == "already plain"
 
 
 def test_parse_and_collect_names() -> None:
@@ -23,7 +34,11 @@ def test_comment_intent_requires_mention_and_command() -> None:
     assert comment_intent("ping creasy@company.com", ["creasy"]) is None
     assert comment_intent("@other please", ["creasy"]) is None
     assert comment_intent("@creasy-bot", ["creasy"]) is None
-    assert comment_intent("hey @creasy check auth", ["creasy"]) is None
+    assert comment_intent("hey @creasy check auth", ["creasy"]) == (
+        "usage",
+        "usage",
+        "hey check auth",
+    )
     assert comment_intent("/review focus", ["creasy"]) is None
     leftover = comment_intent("hey @creasy /review check auth", ["creasy"])
     assert leftover == ("run", "review", "check auth")
@@ -77,7 +92,11 @@ def test_azure_html_mention_needs_command() -> None:
     html = '<a href="#" data-vss-mention="version:2.0,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">@X</a>'
     assert azure_mention_ids(html) == ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]
     ids = azure_mention_ids(html)
-    assert comment_intent(html, [], mentioned_ids=ids, bot_id="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE") is None
+    assert comment_intent(html, [], mentioned_ids=ids, bot_id="AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE") == (
+        "usage",
+        "usage",
+        "",
+    )
     paired = comment_intent(
         html + " /ask why",
         [],

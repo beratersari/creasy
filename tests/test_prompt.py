@@ -82,6 +82,16 @@ def test_ask_prompt_is_question():
     assert "oldsha" in moved
     assert "aaa" in moved
     assert "why?" in moved
+    assert "HEAD moved" in moved
+    assert "the MR HEAD" not in moved
+    html = build_ask_prompt(
+        "why?",
+        mr=_mr(description="<p>Watch <b>dest</b>.</p>"),
+        index=DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}),
+        include_context=True,
+    )
+    assert "Description: Watch dest." in html
+    assert "<p>" not in html
 
 
 def test_thread_review_prompt_includes_previous_comment() -> None:

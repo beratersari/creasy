@@ -179,6 +179,144 @@ def test_ask_never_opens_finding_threads_even_if_text_says_review(tmp_config):
     assert posted == []
 
 
+def test_azure_strips_html_from_prior_comment(tmp_config):
+    gitlab = SpyGitlab()
+    azure = SpyAzure()
+    azure.threads = [
+        {
+            "id": 9,
+            "comments": [
+                {
+                    "id": 1,
+                    "content": (
+                        '<div>Unbounded strcpy into dest.</div>'
+                        '<a data-vss-mention="version:2.0,aaaa">@Creasy</a>'
+                    ),
+                    "parentCommentId": 0,
+                },
+                {"id": 8, "content": "@creasy /ask why dest?", "parentCommentId": 1},
+            ],
+        }
+    ]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab, azure=azure)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="9-12",
+        project_id=9,
+        mr_iid=12,
+        trigger="ask",
+        provider="azure",
+        azure_project=PROJECT,
+        azure_repo=REPO,
+        discussion_id="9",
+        parent_comment_id=8,
+        comment_text="why dest?",
+    )
+    runner._ensure_parent_comment(job)
+    assert job.parent_comment_text == "Unbounded strcpy into dest. @Creasy"
+    assert "<div>" not in job.parent_comment_text
+
+
+def test_gitlab_loads_prior_comment_like_azure(tmp_config):
+    gitlab = SpyGitlab()
+    gitlab.discussions = [
+        {
+            "id": "abc123",
+            "notes": [
+                {"id": 1, "body": "Unbounded strcpy into dest."},
+                {"id": 8, "body": "@creasy /ask why dest?"},
+            ],
+        }
+    ]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="ask",
+        discussion_id="abc123",
+        parent_comment_id=8,
+        comment_text="why dest?",
+    )
+    runner._ensure_parent_comment(job)
+    assert job.parent_comment_text == "Unbounded strcpy into dest."
+
+
+def test_top_level_ask_does_not_use_itself_as_parent(tmp_config):
+    gitlab = SpyGitlab()
+    gitlab.discussions = [
+        {"id": "only", "notes": [{"id": 8, "body": "@creasy /ask why dest?"}]}
+    ]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="1-2",
+        project_id=1,
+        mr_iid=2,
+        trigger="ask",
+        discussion_id="only",
+        parent_comment_id=8,
+        comment_text="why dest?",
+    )
+    runner._ensure_parent_comment(job)
+    assert job.parent_comment_text == ""
+
+
+def test_ask_prompt_same_for_gitlab_and_azure(tmp_config):
+    from creasy.workspace.gitops import DiffIndex
+    from creasy.workspace.store import WorkspaceRecord
+
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), SpyGitlab())
+    mr = MergeRequest(
+        project_id=1,
+        iid=12,
+        title="Add overflow",
+        description="Watch dest.",
+        author="dev",
+        source_branch="feat",
+        target_branch="main",
+        sha="abc",
+        base_sha="def",
+        start_sha="def",
+        web_url="http://example/12",
+        http_url="http://example/repo.git",
+        draft=False,
+        state="opened",
+        labels=["backend"],
+        pipeline_status="failed",
+        pipeline_url="http://ci/9",
+    )
+    index = DiffIndex("def", "app.cpp | 1 +", ["app.cpp"], {"app.cpp": "M"})
+    workspace = WorkspaceRecord(mr_key="1-12", project_id=1, mr_iid=12, last_sha="abc", session_id="ses_1")
+    shared = dict(
+        comment_text="why dest?",
+        comment_path="src/app.cpp",
+        comment_side="new",
+        comment_start_line=2,
+        comment_end_line=2,
+        parent_comment_text="Unbounded strcpy into dest.",
+        trigger="ask",
+    )
+    gitlab_job = JobRecord(job_id=mint_job_id(), mr_key="1-12", project_id=1, mr_iid=12, **shared)
+    azure_job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="9-12",
+        project_id=9,
+        mr_iid=12,
+        provider="azure",
+        azure_project=PROJECT,
+        azure_repo=REPO,
+        **shared,
+    )
+    gitlab_prompt = runner._prompt(gitlab_job, mr, index, workspace, created_new=False)
+    azure_prompt = runner._prompt(azure_job, mr, index, workspace, created_new=False)
+    assert gitlab_prompt == azure_prompt
+    assert "why dest?" in gitlab_prompt
+    assert "Unbounded strcpy into dest." in gitlab_prompt
+    assert "src/app.cpp" in gitlab_prompt
+
+
 def test_azure_loads_prior_comment_not_the_users_ask(tmp_config):
     gitlab = SpyGitlab()
     azure = SpyAzure()

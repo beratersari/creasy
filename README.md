@@ -15,7 +15,7 @@ git clone --recurse-submodules https://github.com/beratersari/creasy.git
 git submodule update --init --recursive
 ```
 
-Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. A full review starts when the token user is assigned or re-requested as reviewer, or when someone writes `@mention /review`. Each `@mention /ask` is a follow-up reply on that thread only. A mention or a slash command alone is ignored. There is no `/reset` command.
+Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. A full review starts when the token user is assigned or re-requested as reviewer, or when someone writes `@mention /review`. Each `@mention /ask` is a follow-up reply on that thread only. A mention without `/ask` or `/review` gets a usage note on that thread. A slash command alone is ignored. There is no `/reset` command.
 
 ## Run
 
@@ -116,7 +116,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    | Service Hook event | What Creasy does |
    |---|---|
    | Pull request created | Enqueue a review if the PAT user is already a reviewer |
-   | Pull request commented | `@<bot> /ask` (lone mention or command is ignored) |
+   | Pull request commented | `@<bot> /ask` or `/review`; mention without a command posts usage |
    | Pull request updated | Ignored for new commits; assigning the PAT user starts a review; **abandoned** cancels jobs and deletes the clone |
    | Pull request merge attempted | Cancel jobs and delete the clone |
 
@@ -142,7 +142,8 @@ Same commands on a GitLab merge request or an Azure pull request.
 | MR / PR update (new commits) / reopen | Ignored — assign or re-request the bot to run again |
 | Comment `@<bot> /ask …` | Follow-up reply on that thread only (no new diff threads) |
 | Comment `@<bot> /review` | Full review, or a focused review when the comment is a thread reply |
-| Comment `@<bot>` or `/ask` / `/review` alone | Ignored |
+| Comment `@<bot>` without `/ask` or `/review` | Usage note on that thread (no OpenCode) |
+| Comment `/ask` or `/review` alone | Ignored |
 | MR close / merge, or Azure abandon / complete | Cancel jobs and delete the local clone |
 
 A comment job replies on that comment’s thread when GitLab or Azure
