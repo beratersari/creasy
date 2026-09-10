@@ -11,7 +11,7 @@ _VSS_MENTION = re.compile(
     re.IGNORECASE,
 )
 _HTML_MENTION = re.compile(r"<a\b[^>]*data-vss-mention[^>]*>.*?</a>", re.IGNORECASE | re.DOTALL)
-_CMD_RE = re.compile(r"(?:^|\s)/(ask)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
+_CMD_RE = re.compile(r"(?:^|\s)/(ask|review)(?=[\s.,!?:;)]|$)", re.IGNORECASE)
 _CMD_TRAIL = ".,!?:;)"
 
 
@@ -45,7 +45,7 @@ def azure_mention_ids(text: str) -> list[str]:
 
 
 def first_slash_command(body: str) -> Optional[tuple[str, str]]:
-    """Return (command, remainder) for the first /ask token."""
+    """Return (command, remainder) for the first /ask or /review token."""
     text = body or ""
     match = _CMD_RE.search(text)
     if not match:
@@ -135,6 +135,12 @@ def comment_intent(
         return None
     command, remainder = parsed
     remainder = strip_bot_mentions(remainder, names)
+    leftover = user_comment_text(body, names)
+    if command == "ask":
+        from creasy.review.ask import ask_wants_new_review
+
+        if ask_wants_new_review(leftover or remainder):
+            command = "review"
     return "run", command, remainder
 
 

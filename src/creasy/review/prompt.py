@@ -107,7 +107,54 @@ def build_ask_prompt(
         if index:
             parts.append(f"Separation point: `{index.merge_base}`. Use `git diff {index.merge_base}...HEAD` if needed.")
     parts.append(question.strip())
+    parts.append(
+        "Answer the question only. Do not emit an opencoderman-findings fence "
+        "and do not start a new review. The host will post this as a thread reply."
+    )
     return "\n\n".join(p for p in parts if p)
+
+
+def build_thread_review_prompt(
+    mr: MergeRequest,
+    index: DiffIndex,
+    *,
+    user_text: str = "",
+    parent_text: str = "",
+    path: str = "",
+    start_line: int = 0,
+    end_line: int = 0,
+) -> str:
+    """Focused review of the thread the user replied on."""
+    span = ""
+    if path:
+        if start_line and end_line and end_line != start_line:
+            span = f"`{path}` lines {start_line}–{end_line}"
+        elif start_line:
+            span = f"`{path}` line {start_line}"
+        else:
+            span = f"`{path}`"
+    parent = (parent_text or "").strip() or "(no previous comment loaded)"
+    request = (user_text or "").strip() or "(no extra notes)"
+    location = f"This thread is on {span}." if span else "This is a reply on an existing review thread."
+    return f"""You are continuing a code review on GitLab merge request !{mr.iid}: {mr.title}
+
+{location}
+The user replied on that thread. Do a focused review of this location in the current MR (HEAD `{mr.sha}`, merge-base `{index.merge_base}`). Read the file and nearby callers. You may emit an opencoderman-findings fence only for this area, unless the user asked for a full-MR review.
+
+## Previous comment (what they replied to)
+
+{parent}
+
+## User request
+
+{request}
+
+## Instructions
+
+1. Address the previous comment and the user request first.
+2. Run `git diff {index.merge_base}...HEAD` for this path if needed. Do not restate the whole MR.
+3. Do not commit, push, or edit files.
+"""
 
 
 HANG_RESUME = (

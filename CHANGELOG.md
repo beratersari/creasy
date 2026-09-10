@@ -9,6 +9,13 @@ section in the same change.
 
 ## Unreleased
 
+### Changed
+
+- `@name /ask` only replies on the request thread. It never opens
+  new diff threads, even if the model emits findings.
+- `@name /review` is back. A thread reply uses a focused review
+  prompt and quotes the previous comment plus the user’s request.
+
 ## 0.9.3 — 2026-09-10
 
 TFS reviewer-list changes and comment events start jobs.

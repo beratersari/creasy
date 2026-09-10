@@ -589,6 +589,7 @@ def _review_from_pr(
         comment_side=side,
         comment_start_line=start,
         comment_end_line=end,
+        parent_comment_text="",
     )
     log_ok(
         logger,

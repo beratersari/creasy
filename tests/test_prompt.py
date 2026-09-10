@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from creasy.gitlab.client import MergeRequest
-from creasy.review.prompt import build_ask_prompt, build_review_prompt
+from creasy.review.prompt import build_ask_prompt, build_review_prompt, build_thread_review_prompt
 from creasy.workspace.gitops import DiffIndex
 
 
@@ -59,7 +59,8 @@ def test_review_prompt_has_map_not_full_diff():
 
 def test_ask_prompt_is_question():
     text = build_ask_prompt("why this lock?")
-    assert text == "why this lock?"
+    assert text.startswith("why this lock?")
+    assert "opencoderman-findings" in text
     with_ctx = build_ask_prompt("why?", mr=_mr(), index=DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}), include_context=True)
     assert "why?" in with_ctx
     assert "Add login" in with_ctx
@@ -77,6 +78,22 @@ def test_ask_prompt_is_question():
     assert "oldsha" in moved
     assert "aaa" in moved
     assert "why?" in moved
+
+
+def test_thread_review_prompt_includes_previous_comment() -> None:
+    text = build_thread_review_prompt(
+        _mr(),
+        DiffIndex("b", "stat", ["a.py"], {"a.py": "M"}),
+        user_text="why dest?",
+        parent_text="Unbounded strcpy into dest.",
+        path="src/app.py",
+        start_line=2,
+        end_line=2,
+    )
+    assert "Unbounded strcpy into dest." in text
+    assert "why dest?" in text
+    assert "`src/app.py`" in text
+    assert "focused review" in text.lower()
 
 
 def test_review_prompt_omits_empty_description_and_pipeline():

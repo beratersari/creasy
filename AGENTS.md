@@ -28,16 +28,19 @@ These look like bugs. They are not.
    thread does not fail the job. After a successful GitLab review
    or open job, mark the token user as `reviewed` (not approved)
    so Re-request appears. A failed submit does not fail the job.
+   `/ask` replies on the request thread only and does not open new
+   diff threads unless the question explicitly asks for a new review.
    `/ask` and Azure jobs do not change reviewer state. No git push.
 2. **The clone lives with the MR, not the job.** Delete it only on MR
    `close` / `merge`. A finished review keeps the tree so the next
    `/ask` or a later review can resume `ses_*` on the same path.
 3. **Each comment is a new job.** New `job_id`. `@mention /ask`
-   starts a serve, one prompt, one note, then kill that serve.
-   There is no `/review` or `/reset` command. A full review starts
-   when the token user is assigned or re-requested as reviewer.
-   A mention or command alone is ignored. Do not hold a serve open
-   waiting for the next GitLab comment.
+   starts a serve, one prompt, one thread reply, then kill that serve.
+   `/ask` never opens new diff threads. `@mention /review` (or `/ask`
+   text that explicitly asks for a new review) is a full or
+   thread-focused review and may open findings threads. A mention or
+   command alone is ignored. Do not hold a serve open waiting for the
+   next GitLab comment.
 4. **Comments queue FIFO per MR.** A later `@mention /ask` while
    that MR is running is **queued**, not 409, not coalesced to
    “latest only”. Auto `open` is skipped if that MR already has a
@@ -72,9 +75,11 @@ These look like bugs. They are not.
   Jobs do not assign the token user.
   `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
-  `REVIEW_MENTION` alias) **and** `/ask` in the same comment.
-  `@name /ask <question>` → follow-up. Empty `@name /ask` → ignore.
-  Mention alone, `/ask` alone, `/review`, and `/reset` → ignore.
+  `REVIEW_MENTION` alias) **and** `/ask` or `/review` in the same
+  comment. `@name /ask <question>` → follow-up, reply only.
+  `@name /review` → review (thread-focused when the comment is a
+  reply). Empty `@name /ask` → ignore. Empty `@name /review` still
+  runs. Mention alone or a command alone → ignore. `/reset` → ignore.
   Notes from the token’s own user → ignore. Same pair on Azure
   comments (`@Name` or `data-vss-mention` of the PAT user).
 - Draft MRs: skip auto events when `SKIP_DRAFT_MRS` is true. Explicit
@@ -203,7 +208,7 @@ note or discussion posting in `opencode/`.
   binary. Fake the runner for manager/webhook tests.
 - Event tests cover open / update-with-and-without-`oldrev` ignored /
   reopen ignored / close / merge / assign reviewer / leftover
-  `@mention /review` ignored / `@mention /ask` / empty `@mention /ask` /
+  `@mention /review` / `@mention /ask` / empty `@mention /ask` /
   leftover `/reset` ignored / bot note / mention-or-command-alone ignored.
 - Manager tests cover FIFO queue, parallel MRs, skipped auto events,
   cancel running/queued, close drains the queue.

@@ -74,6 +74,7 @@ class JobRecord(BaseModel):
     comment_side: str = ""
     comment_start_line: int = 0
     comment_end_line: int = 0
+    parent_comment_text: str = ""
     diagnostics: dict[str, Any] = Field(default_factory=dict)
 
     def public_dict(self) -> dict[str, Any]:

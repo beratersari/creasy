@@ -115,12 +115,39 @@ def soften_markdown(text: str) -> str:
     return _drop_preamble("\n".join(out).strip())
 
 
+def _blockquote(text: str, *, limit: int = 800) -> str:
+    clipped = (text or "").strip()
+    if len(clipped) > limit:
+        clipped = clipped[:limit].rstrip() + "\n…"
+    return "\n".join(f"> {line}" if line else ">" for line in clipped.splitlines())
+
+
+def format_reply_context(*, parent: str = "", request: str = "") -> str:
+    """Quote the previous thread comment and the user's request."""
+    chunks: list[str] = []
+    parent = (parent or "").strip()
+    request = (request or "").strip()
+    if parent:
+        chunks.append("**Replying to**\n\n" + _blockquote(parent))
+    if request and request != parent:
+        chunks.append("**Your request**\n\n" + _blockquote(request))
+    return "\n\n".join(chunks)
+
+
 def format_success(job: JobRecord) -> str:
     kind = "Answer" if job.trigger == "ask" else "Review"
     model = job.model or "unknown"
     markdown, _findings = split_findings(job.text or "")
     body = soften_markdown(markdown.strip()) or "_(empty OpenCode response)_"
-    return f"**Creasy {__version__} — {kind}** · `{model}` · `{job.job_id}`\n\n{body}\n"
+    quoted = ""
+    if str(getattr(job, "discussion_id", "") or "").strip():
+        quoted = format_reply_context(
+            parent=getattr(job, "parent_comment_text", "") or "",
+            request=getattr(job, "comment_text", "") or "",
+        )
+        if quoted:
+            quoted = quoted + "\n\n"
+    return f"**Creasy {__version__} — {kind}** · `{model}` · `{job.job_id}`\n\n{quoted}{body}\n"
 
 
 def format_failure(job: JobRecord) -> str:

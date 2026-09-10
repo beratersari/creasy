@@ -15,7 +15,7 @@ git clone --recurse-submodules https://github.com/beratersari/creasy.git
 git submodule update --init --recursive
 ```
 
-Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. A full review starts when the token user is assigned or re-requested as reviewer. Each `@mention /ask` is a separate job that can resume the same OpenCode session. A mention or a slash command alone is ignored. There is no `/review` or `/reset` command.
+Clones live with the MR or PR. They are deleted only when it is closed, merged, or abandoned. A full review starts when the token user is assigned or re-requested as reviewer, or when someone writes `@mention /review`. Each `@mention /ask` is a follow-up reply on that thread only. A mention or a slash command alone is ignored. There is no `/reset` command.
 
 ## Run
 
@@ -140,8 +140,9 @@ Same commands on a GitLab merge request or an Azure pull request.
 | MR / PR open (created) | Enqueue a review only if the token user or a `REVIEW_MENTION` alias is already a reviewer |
 | Token user assigned or re-requested as reviewer | Enqueue a review |
 | MR / PR update (new commits) / reopen | Ignored — assign or re-request the bot to run again |
-| Comment `@<bot> /ask …` | Follow-up on the same `ses_*` |
-| Comment `@<bot>` or `/ask` alone | Ignored |
+| Comment `@<bot> /ask …` | Follow-up reply on that thread only (no new diff threads) |
+| Comment `@<bot> /review` | Full review, or a focused review when the comment is a thread reply |
+| Comment `@<bot>` or `/ask` / `/review` alone | Ignored |
 | MR close / merge, or Azure abandon / complete | Cancel jobs and delete the local clone |
 
 A comment job replies on that comment’s thread when GitLab or Azure
