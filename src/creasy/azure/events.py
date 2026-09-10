@@ -10,7 +10,14 @@ from creasy.azure.identity import azure_project_num
 from creasy.azure.urls import looks_like_azure_resource, normalize_collection_url
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
 from creasy.review.comment_range import parse_azure_thread_context
-from creasy.review.mention import azure_mention_ids, comment_intent, is_usage_note, user_comment_text
+from creasy.review.mention import (
+    azure_mention_ids,
+    collect_names,
+    comment_intent,
+    extract_mentioned_names,
+    is_usage_note,
+    user_comment_text,
+)
 from creasy.logging import get_logger, log_fail, log_ok
 
 logger = get_logger("azure.events")
@@ -100,23 +107,27 @@ def _ids_from_links(blob: dict[str, Any]) -> tuple[str, Optional[int]]:
 
 
 def _thread_ref(payload: dict[str, Any]) -> tuple[str, int]:
-    """Thread id + parent comment id from a comment Service Hook."""
+    """Thread id + the comment to reply to (the user's new comment)."""
     comment = _comment(payload)
     resource = _resource(payload)
-    for blob in (comment, resource):
-        thread = str(blob.get("threadId") or blob.get("thread_id") or "").strip()
-        parent = _int_id(blob.get("id") or blob.get("commentId") or blob.get("comment_id"))
-        if thread:
-            return thread, parent
-        for key in ("self", "threads", "replies"):
-            href = str(_as_dict(_as_dict(blob.get("_links")).get(key)).get("href") or "")
+    current = _int_id(comment.get("id") or comment.get("commentId") or comment.get("comment_id"))
+    thread = ""
+    for blob in (comment, resource, payload):
+        if not isinstance(blob, dict):
+            continue
+        thread = thread or str(blob.get("threadId") or blob.get("thread_id") or "").strip()
+        links = _as_dict(blob.get("_links"))
+        for key in ("self", "threads", "replies", "thread"):
+            href = str(_as_dict(links.get(key)).get("href") or "")
             match = _THREAD_LINK.search(href)
             if match:
-                return match.group(1), _int_id(match.group(2)) or parent
+                thread = thread or match.group(1)
+                current = current or _int_id(match.group(2))
         match = _THREAD_LINK.search(str(blob.get("url") or blob.get("href") or ""))
         if match:
-            return match.group(1), _int_id(match.group(2)) or parent
-    return "", 0
+            thread = thread or match.group(1)
+            current = current or _int_id(match.group(2))
+    return thread, current
 
 
 def _int_id(raw: Any) -> int:
@@ -377,6 +388,15 @@ def _azure_reviewer_is_bot(row: dict[str, Any], bot_user_id: Optional[str], name
     return any(_names_match(value, aliases) for value in _reviewer_name_values(row))
 
 
+def _bot_reviewer_names(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> list[str]:
+    extra: list[str] = []
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    for row in reviewers:
+        if isinstance(row, dict) and _azure_reviewer_is_bot(row, bot_user_id, names):
+            extra.extend(_reviewer_name_values(row))
+    return extra
+
+
 def _bot_identity_ids(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> list[str]:
     ids: list[str] = []
     if bot_user_id:
@@ -631,11 +651,13 @@ def _review_from_comment(
     if is_usage_note(note_text):
         log_ok(logger, "azure classify Ignore", reason="usage note", author=author or "-")
         return Ignore("usage note")
-    known_ids = _bot_identity_ids(pr, bot_user_id, mention_names)
+    names = collect_names(mention_names, _bot_reviewer_names(pr, bot_user_id, mention_names))
+    known_ids = _bot_identity_ids(pr, bot_user_id, names)
     mention_ids = azure_mention_ids(note_text)
+    mentioned = extract_mentioned_names(note_text)
     intent = comment_intent(
         note_text,
-        mention_names,
+        names,
         mentioned_ids=mention_ids,
         bot_id=str(bot_user_id or ""),
         extra_ids=known_ids,
@@ -647,20 +669,22 @@ def _review_from_comment(
             reason="no mention+command",
             author=author or "-",
             content=(note_text or "")[:160],
+            mentioned=mentioned or ["-"],
             mention_ids=mention_ids or ["-"],
             known_ids=known_ids or ["-"],
-            names=",".join(mention_names) or "-",
+            names=",".join(names) or "-",
         )
         return Ignore("no mention+command")
     action, command, remainder = intent
     logger.info(
-        "azure comment intent=%s command=/%s author=%s remainder=%r",
+        "azure comment intent=%s command=/%s author=%s mentioned=%s remainder=%r",
         action,
         command or "-",
         author or "-",
+        mentioned or ["-"],
         remainder[:80],
     )
-    user_text = user_comment_text(note_text, mention_names)
+    user_text = user_comment_text(note_text, names)
     if command == "ask" and not remainder and not user_text:
         log_ok(logger, "azure classify Ignore", reason="empty /ask", author=author or "-")
         return Ignore("empty /ask")

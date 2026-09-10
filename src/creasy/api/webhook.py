@@ -71,6 +71,13 @@ async def webhook(request: Request) -> JSONResponse:
     bot_id = _bot_user_id(request)
     mention_names = _mention_names(request)
     kind = str(payload.get("object_kind") or "").strip().lower()
+    if kind == "note":
+        logger.info(
+            "webhook identity bot_id=%s mention_names=%s review_mention=%s",
+            bot_id if bot_id is not None else "-",
+            ",".join(mention_names) or "-",
+            (config.review_mention or "").strip() or "-",
+        )
     if kind == "note" and bot_id is None and not mention_names:
         log_fail(logger, "webhook bot user", reason="GITLAB_TOKEN user unknown")
         return JSONResponse({"status": "ignored", "reason": "bot user unknown"})

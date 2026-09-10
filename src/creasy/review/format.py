@@ -115,23 +115,27 @@ def soften_markdown(text: str) -> str:
     return _drop_preamble("\n".join(out).strip())
 
 
-def _blockquote(text: str, *, limit: int = 800) -> str:
-    clipped = (text or "").strip()
-    if len(clipped) > limit:
-        clipped = clipped[:limit].rstrip() + "\n…"
-    return "\n".join(f"> {line}" if line else ">" for line in clipped.splitlines())
+_AT_MENTION = re.compile(r"(?<![A-Za-z0-9._-])@[A-Za-z0-9._\\-]+")
 
 
-def format_reply_context(*, parent: str = "", request: str = "") -> str:
-    """Quote the previous thread comment and the user's request."""
-    chunks: list[str] = []
-    parent = (parent or "").strip()
-    request = (request or "").strip()
-    if parent:
-        chunks.append("**Replying to**\n\n" + _blockquote(parent))
-    if request and request != parent:
-        chunks.append("**Your request**\n\n" + _blockquote(request))
-    return "\n\n".join(chunks)
+def strip_at_mentions(text: str) -> str:
+    """Drop @name pings from posted notes. Code fences are left alone."""
+    out: list[str] = []
+    fence: str | None = None
+    for raw in (text or "").splitlines():
+        stripped = raw.strip()
+        opened = _FENCE.match(stripped)
+        if fence:
+            out.append(raw)
+            if opened and stripped.startswith(fence):
+                fence = None
+            continue
+        if opened:
+            fence = opened.group(1)[0] * len(opened.group(1))
+            out.append(raw)
+            continue
+        out.append(_AT_MENTION.sub(lambda m: m.group(0)[1:], raw))
+    return "\n".join(out)
 
 
 def format_success(job: JobRecord) -> str:
@@ -139,15 +143,8 @@ def format_success(job: JobRecord) -> str:
     model = job.model or "unknown"
     markdown, _findings = split_findings(job.text or "")
     body = soften_markdown(markdown.strip()) or "_(empty OpenCode response)_"
-    quoted = ""
-    if str(getattr(job, "discussion_id", "") or "").strip():
-        quoted = format_reply_context(
-            parent=getattr(job, "parent_comment_text", "") or "",
-            request=getattr(job, "comment_text", "") or "",
-        )
-        if quoted:
-            quoted = quoted + "\n\n"
-    return f"**Creasy {__version__} — {kind}** · `{model}` · `{job.job_id}`\n\n{quoted}{body}\n"
+    body = strip_at_mentions(body)
+    return f"**Creasy {__version__} — {kind}** · `{model}` · `{job.job_id}`\n\n{body}\n"
 
 
 def format_failure(job: JobRecord) -> str:

@@ -30,6 +30,35 @@ def _seg(value: str) -> str:
     return quote(str(value or "").strip(), safe="")
 
 
+def _identity_name_values(user: dict[str, Any]) -> list[str]:
+    """Display / account names from connectionData or profile/me."""
+    names: list[str] = []
+
+    def add(raw: Any) -> None:
+        value = raw
+        if isinstance(value, dict):
+            value = value.get("$value") or value.get("value") or ""
+        text = str(value or "").strip()
+        if text and text not in names:
+            names.append(text)
+
+    for key in (
+        "providerDisplayName",
+        "displayName",
+        "customDisplayName",
+        "uniqueName",
+        "directoryAlias",
+        "mailAddress",
+        "principalName",
+    ):
+        add(user.get(key))
+    props = user.get("properties")
+    if isinstance(props, dict):
+        for key in ("Account", "AccountName", "DirectoryAlias", "SamAccountName", "Mail", "MailAddress"):
+            add(props.get(key))
+    return names
+
+
 class AzureClient:
     def __init__(self, base_url: str, token: str, *, api_version: str = "7.1", timeout: float = 30.0) -> None:
         self.configured_url = (base_url or "").rstrip("/")
@@ -173,14 +202,8 @@ class AzureClient:
         uid = str(user.get("id") or "").strip()
         if not uid:
             return None
-        names = [
-            str(user.get("providerDisplayName") or "").strip(),
-            str(user.get("displayName") or "").strip(),
-            str(user.get("customDisplayName") or "").strip(),
-            str(user.get("uniqueName") or "").strip(),
-            str(user.get("directoryAlias") or "").strip(),
-        ]
-        return {"id": uid, "names": [item for item in names if item]}
+        names = _identity_name_values(user)
+        return {"id": uid, "names": names}
 
     def current_user(self) -> Optional[dict[str, Any]]:
         if self._user_resolved:

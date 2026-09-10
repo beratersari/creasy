@@ -45,7 +45,7 @@ class SpyAzure:
         return {"id": 2}
 
     def list_threads(self, project: str, repo: str, pr_id: int) -> list:
-        return []
+        return list(self.threads)
 
     def reply_to_thread(
         self,
@@ -177,6 +177,43 @@ def test_ask_never_opens_finding_threads_even_if_text_says_review(tmp_config):
     runner._post_note(job, result, findings=[finding])
     assert result.posted is True
     assert posted == []
+
+
+def test_azure_loads_prior_comment_not_the_users_ask(tmp_config):
+    gitlab = SpyGitlab()
+    azure = SpyAzure()
+    azure.threads = [
+        {
+            "id": 9,
+            "comments": [
+                {"id": 1, "content": "Unbounded strcpy into dest.", "parentCommentId": 0},
+                {"id": 8, "content": "@creasy /ask why dest?", "parentCommentId": 1},
+            ],
+        }
+    ]
+    runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), gitlab, azure=azure)
+    job = JobRecord(
+        job_id=mint_job_id(),
+        mr_key="9-12",
+        project_id=9,
+        mr_iid=12,
+        trigger="ask",
+        provider="azure",
+        azure_project=PROJECT,
+        azure_repo=REPO,
+        discussion_id="9",
+        parent_comment_id=8,
+        comment_text="why dest?",
+    )
+    runner._ensure_parent_comment(job)
+    assert job.parent_comment_text == "Unbounded strcpy into dest."
+    result = RunResult(text="Because dest is 8.")
+    runner._post_note(job, result)
+    assert azure.replies
+    posted = azure.replies[0][1]
+    assert "**Replying to**" not in posted
+    assert "Unbounded strcpy into dest." not in posted
+    assert "Because dest is 8." in posted
 
 
 def test_ask_job_does_not_submit_gitlab_review(tmp_config):

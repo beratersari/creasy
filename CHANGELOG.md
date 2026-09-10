@@ -9,6 +9,28 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.5 — 2026-09-10
+
+`@mention /ask` is recognized from the comment text, including Azure
+mention links with no space before `/ask`.
+
+### Changed
+
+- Thread replies do not quote the previous comment or @mention
+  anyone. The previous comment is still given to the model in the
+  prompt only.
+
+### Fixed
+
+- Azure thread replies load the previous comment (not the user’s
+  new `/ask`) into the prompt so the answer can address it.
+- `@mention /ask` is recognized when Azure puts `/ask` against the
+  mention link with no space (`</a>/ask` or `@name/ask`). Typed
+  `@name` handles are parsed from the comment (not only
+  `data-vss-mention` GUIDs) and shown in the ignore log as
+  `mentioned=`. TFS `connectionData` account properties seed the
+  bot’s name list so `mention_names` is not empty after identity.
+
 ## 0.9.4 — 2026-09-10
 
 `/ask` is a thread reply only. `/review` is back for an explicit

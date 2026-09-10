@@ -93,9 +93,10 @@ async def webhook_azure(request: Request) -> JSONResponse:
     bot_id = _azure_bot_id(request)
     mention_names = _mention_names(request)
     logger.info(
-        "azure webhook identity bot_id=%s mention_names=%s eventType=%s",
+        "azure webhook identity bot_id=%s mention_names=%s review_mention=%s eventType=%s",
         bot_id or "-",
         ",".join(mention_names) or "-",
+        (config.review_mention or "").strip() or "-",
         payload.get("eventType") or payload.get("event_type") or "-",
     )
     classified = classify_azure_webhook(

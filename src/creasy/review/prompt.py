@@ -86,6 +86,7 @@ def build_ask_prompt(
     sha_changed: bool = False,
     previous_sha: str = "",
     include_context: bool = False,
+    parent_text: str = "",
 ) -> str:
     parts: list[str] = []
     if sha_changed and index is not None:
@@ -106,10 +107,14 @@ def build_ask_prompt(
             parts.append(f"Description: {desc}")
         if index:
             parts.append(f"Separation point: `{index.merge_base}`. Use `git diff {index.merge_base}...HEAD` if needed.")
+    parent = (parent_text or "").strip()
+    if parent:
+        parts.append("## Previous comment (what they replied to)\n\n" + parent)
     parts.append(question.strip())
     parts.append(
         "Answer the question only. Do not emit an opencoderman-findings fence "
-        "and do not start a new review. The host will post this as a thread reply."
+        "and do not start a new review. The host will post this as a thread reply. "
+        "Do not quote or restate the previous comment. Do not @mention or ping anyone."
     )
     return "\n\n".join(p for p in parts if p)
 
@@ -153,7 +158,8 @@ The user replied on that thread. Do a focused review of this location in the cur
 
 1. Address the previous comment and the user request first.
 2. Run `git diff {index.merge_base}...HEAD` for this path if needed. Do not restate the whole MR.
-3. Do not commit, push, or edit files.
+3. Do not quote or restate the previous comment in the posted answer. Do not @mention or ping anyone.
+4. Do not commit, push, or edit files.
 """
 
 
