@@ -9,6 +9,12 @@ section in the same change.
 
 ## Unreleased
 
+### Fixed
+
+- TFS comments that mention the bot as `@<VSID>` (not `@name` or a
+  `data-vss-mention` link) now start `/ask` when that id is the PAT
+  user’s reviewer id.
+
 ## 0.9.5 — 2026-09-10
 
 `@mention /ask` is recognized from the comment text, including Azure

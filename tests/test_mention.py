@@ -60,6 +60,19 @@ def test_comment_intent_ask_without_space_after_mention() -> None:
     assert display == ("run", "ask", "why")
 
 
+def test_tfs_angle_guid_mention_starts_ask() -> None:
+    text = "@<71440E05-BE9E-4768-897E-DA81A889D26E> /ask hey buradaki sorun ne"
+    assert azure_mention_ids(text) == ["71440E05-BE9E-4768-897E-DA81A889D26E"]
+    assert extract_mentioned_names(text) == ["71440E05-BE9E-4768-897E-DA81A889D26E"]
+    got = comment_intent(
+        text,
+        ["mberatersari"],
+        extra_ids=["71440e05-be9e-4768-897e-da81a889d26e"],
+    )
+    assert got == ("run", "ask", "hey buradaki sorun ne")
+    assert comment_intent(text, ["mberatersari"]) is None
+
+
 def test_azure_html_mention_needs_command() -> None:
     html = '<a href="#" data-vss-mention="version:2.0,aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">@X</a>'
     assert azure_mention_ids(html) == ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]

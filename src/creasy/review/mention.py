@@ -5,11 +5,16 @@ from __future__ import annotations
 import re
 from typing import Iterable, Optional, Sequence
 
+_GUID = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
 _VSS_MENTION = re.compile(
-    r'data-vss-mention\s*=\s*["\'][^"\']*?([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-'
-    r'[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
+    rf'data-vss-mention\s*=\s*["\'][^"\']*?({_GUID})',
     re.IGNORECASE,
 )
+# TFS mention picker often inserts "@<VSID>" as plain text, not HTML.
+_AT_GUID = re.compile(rf"@<({_GUID})>", re.IGNORECASE)
 _HTML_MENTION = re.compile(r"<a\b[^>]*data-vss-mention[^>]*>.*?</a>", re.IGNORECASE | re.DOTALL)
 _HTML_INNER = re.compile(
     r"<a\b[^>]*data-vss-mention[^>]*>(.*?)</a>",
@@ -58,7 +63,13 @@ def collect_names(*groups: Iterable[str]) -> list[str]:
 
 
 def azure_mention_ids(text: str) -> list[str]:
-    return [match.group(1) for match in _VSS_MENTION.finditer(text or "")]
+    found: list[str] = []
+    for regex in (_VSS_MENTION, _AT_GUID):
+        for match in regex.finditer(text or ""):
+            guid = match.group(1)
+            if guid not in found:
+                found.append(guid)
+    return found
 
 
 def _plain_comment(text: str) -> str:
@@ -77,6 +88,8 @@ def extract_mentioned_names(text: str) -> list[str]:
 
     for match in _HTML_INNER.finditer(raw):
         add(" ".join(_plain_comment(match.group(1)).split()))
+    for match in _AT_GUID.finditer(raw):
+        add(match.group(1))
     for match in _AT_HANDLE.finditer(_plain_comment(raw)):
         add(match.group(1))
     return found
@@ -105,7 +118,8 @@ def has_bot_mention(
     known = {str(bot_id or "").strip().lower()}
     known.update(str(item or "").strip().lower() for item in extra_ids)
     known.discard("")
-    if known and any(str(item or "").strip().lower() in known for item in mentioned_ids):
+    ids = [*(mentioned_ids or ()), *azure_mention_ids(text)]
+    if known and any(str(item or "").strip().lower() in known for item in ids):
         return True
     aliases = collect_names(names)
     if _mention_match(text, aliases) is not None:
@@ -134,6 +148,7 @@ def _mention_match(text: str, names: Sequence[str]) -> Optional[re.Match[str]]:
 
 def strip_bot_mentions(text: str, names: Sequence[str]) -> str:
     cleaned = _HTML_MENTION.sub(" ", text or "")
+    cleaned = _AT_GUID.sub(" ", cleaned)
     while True:
         match = _mention_match(cleaned, names)
         if not match:
