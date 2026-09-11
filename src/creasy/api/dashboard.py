@@ -21,7 +21,7 @@ from creasy.api.dashboard_auth import (
 )
 from creasy.api.report import build_report_context
 from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
-from creasy.jobs.models import ERROR_STATUSES
+from creasy.jobs.models import ERROR_STATUSES, dashboard_visible
 from creasy.logging import get_logger, log_ok, read_job_log_lines
 from creasy.settings import (
     SettingsError,
@@ -196,7 +196,7 @@ def api_jobs(
     page_size: int = Query(default=25, ge=1, le=100),
 ) -> dict:
     _check_token(request)
-    jobs = _mgr(request).store.list_all()
+    jobs = [j for j in _mgr(request).store.list_all() if dashboard_visible(j)]
     key = (mr_key or jira_id or "").strip()
     if key:
         jobs = [j for j in jobs if job_matches_query(j, key)]
@@ -228,7 +228,7 @@ def api_jobs(
 def api_job(job_id: str, request: Request) -> dict:
     _check_token(request)
     job = _mgr(request).store.get(job_id)
-    if not job:
+    if not job or not dashboard_visible(job):
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
     logs = read_job_log_lines(
         request.app.state.config.log_dir,
@@ -244,7 +244,7 @@ def api_job(job_id: str, request: Request) -> dict:
 def api_chat(job_id: str, request: Request) -> dict:
     _check_token(request)
     job = _mgr(request).store.get(job_id)
-    if not job:
+    if not job or not dashboard_visible(job):
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
     return _chat_payload(job)
 
@@ -253,7 +253,7 @@ def api_chat(job_id: str, request: Request) -> dict:
 def api_prompts(job_id: str, request: Request) -> dict:
     _check_token(request)
     job = _mgr(request).store.get(job_id)
-    if not job:
+    if not job or not dashboard_visible(job):
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
     prompts = []
     if job.prompt:
@@ -272,7 +272,7 @@ def api_logs(job_id: str, request: Request, limit: int = Query(default=2000, ge=
     _check_token(request)
     manager = _mgr(request)
     job = manager.store.get(job_id)
-    if not job:
+    if not job or not dashboard_visible(job):
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
     lines = read_job_log_lines(
         manager.config.log_dir,
@@ -289,7 +289,7 @@ def api_serve_log(job_id: str, request: Request) -> dict:
     _check_token(request)
     manager = _mgr(request)
     job = manager.store.get(job_id)
-    if not job:
+    if not job or not dashboard_visible(job):
         raise HTTPException(status_code=404, detail=f"No job {job_id}")
     path = serve_log_path(manager.config.serve_dir, job.job_id)
     return {"job_id": job.job_id, "missing": not path.is_file(), "text": read_serve_log(path)}
@@ -303,6 +303,8 @@ def api_queue(request: Request, mr_key: Optional[str] = None, jira_id: Optional[
     items = []
     for row in raw:
         job = _mgr(request).store.get(row["job_id"])
+        if job is not None and not dashboard_visible(job):
+            continue
         if key and job is not None and not job_matches_query(job, key):
             continue
         if key and job is None and row["mr_key"] != key:
@@ -310,6 +312,8 @@ def api_queue(request: Request, mr_key: Optional[str] = None, jira_id: Optional[
         items.append(job.public_dict() if job else {"job_id": row["job_id"], "jira_id": row["mr_key"], "mr_key": row["mr_key"], "status": "queued", "live": False})
     running = []
     for job in _mgr(request).store.list_all():
+        if not dashboard_visible(job):
+            continue
         if job.status == "running" and (key is None or job_matches_query(job, key)):
             running.append({"mr_key": job.mr_key, "job_id": job.job_id, "trigger": job.trigger})
     return {"items": items, "queued_count": len(items), "running": running}
@@ -422,7 +426,11 @@ def api_cancel_mr(project_id: int, mr_iid: int, request: Request) -> dict:
 def api_reviews(project_id: int, mr_iid: int, request: Request) -> dict:
     _check_token(request)
     key = mr_key(project_id, mr_iid)
-    jobs = [j.public_dict() for j in _mgr(request).store.list_all() if j.mr_key == key]
+    jobs = [
+        j.public_dict()
+        for j in _mgr(request).store.list_all()
+        if j.mr_key == key and dashboard_visible(j)
+    ]
     workspace = _mgr(request).workspaces.get(key)
     return {
         "mr_key": key,

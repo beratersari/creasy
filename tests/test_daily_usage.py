@@ -59,6 +59,10 @@ def test_mention_without_command_starts_usage_job(tmp_config):
     assert job is not None
     assert job.trigger == "usage"
     assert job.discussion_id == "disc_help"
+    listed = client.get("/api/jobs").json()
+    assert listed["jobs"] == []
+    assert listed["total"] == 0
+    assert client.get(f"/api/jobs/{job.job_id}").status_code == 404
     runner.release.set()
     manager.shutdown()
 

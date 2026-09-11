@@ -18,6 +18,11 @@ JobStatus = Literal[
 
 LIVE_STATUSES = frozenset({"queued", "running"})
 ERROR_STATUSES = frozenset({"error", "timeout"})
+HIDDEN_DASHBOARD_TRIGGERS = frozenset({"usage"})
+
+
+def dashboard_visible(job: "JobRecord") -> bool:
+    return (job.trigger or "") not in HIDDEN_DASHBOARD_TRIGGERS
 
 
 def utc_now() -> str:
