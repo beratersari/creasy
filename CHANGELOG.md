@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.9 — 2026-09-11
+
+TFS 2022.2 assign (`changed the reviewer list`) starts a review again.
+`@mention /yaver` is silent.
+
 ### Changed
 
 - `@mention /yaver` is ignored and does not post a usage note.
