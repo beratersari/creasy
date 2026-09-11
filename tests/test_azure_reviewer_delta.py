@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from creasy.azure.events import classify_azure_webhook
+from creasy.azure.events import classify_azure_webhook, reset_reviewer_cache
 from creasy.gitlab.events import Ignore, ReviewTrigger, classify_webhook
 from test_azure_events import _pr
 from test_azure_webhook import _app, _auth, _pr_with_bot
@@ -59,6 +59,13 @@ def _go(payload: dict):
 
 def _is_review(got) -> bool:
     return isinstance(got, ReviewTrigger) and got.kind == "review"
+
+
+@pytest.fixture(autouse=True)
+def _clear_reviewer_cache() -> None:
+    reset_reviewer_cache()
+    yield
+    reset_reviewer_cache()
 
 
 @pytest.mark.parametrize(

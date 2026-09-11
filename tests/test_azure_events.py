@@ -1,12 +1,21 @@
 from __future__ import annotations
 
-from creasy.azure.events import classify_azure_webhook
+import pytest
+
+from creasy.azure.events import classify_azure_webhook, reset_reviewer_cache
 from creasy.azure.identity import azure_mr_key, azure_project_num
 from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
 
 
 PROJECT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 REPO = "11111111-2222-3333-4444-555555555555"
+
+
+@pytest.fixture(autouse=True)
+def _clear_reviewer_cache() -> None:
+    reset_reviewer_cache()
+    yield
+    reset_reviewer_cache()
 
 
 def _pr(**extra):
@@ -182,6 +191,7 @@ def test_changed_reviewer_list_title_added_still_assigns_when_listed():
 
 
 def test_changed_reviewer_list_by_teammate_assigns_if_bot_still_listed():
+    """First sighting after boot has no cache — TFS 2022.2 assign sentence + listed."""
     pr = _pr()
     pr["reviewers"] = [
         {"id": "bot", "displayName": "Berat ERSARI", "uniqueName": r"company\mberatersari"},
@@ -198,6 +208,34 @@ def test_changed_reviewer_list_by_teammate_assigns_if_bot_still_listed():
     )
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "review"
+
+
+def test_changed_reviewer_list_after_cached_get_is_not_a_new_add():
+    pr = _pr()
+    pr["reviewers"] = [
+        {"id": "bot", "displayName": "Berat ERSARI", "uniqueName": r"company\mberatersari"},
+        {"id": "alice", "displayName": "Alice"},
+    ]
+    first = {
+        "eventType": "git.pullrequest.updated",
+        "message": {"text": "Berat ERSARI changed the reviewer list for pull request 12"},
+        "resource": pr,
+    }
+    assert isinstance(
+        classify_azure_webhook(first, mention_names=["mberatersari", "Berat ERSARI"]),
+        ReviewTrigger,
+    )
+    after = _pr()
+    after["reviewers"] = [
+        {"id": "bot", "displayName": "Berat ERSARI", "uniqueName": r"company\mberatersari"},
+    ]
+    second = {
+        "eventType": "git.pullrequest.updated",
+        "message": {"text": "Alice changed the reviewer list for pull request 12"},
+        "resource": after,
+    }
+    got = classify_azure_webhook(second, mention_names=["mberatersari", "Berat ERSARI"])
+    assert isinstance(got, Ignore)
 
 
 def test_self_assign_yourself_message_starts_review():
@@ -254,7 +292,7 @@ def test_removed_themselves_is_ignored():
     assert isinstance(got, Ignore)
 
 
-def test_changed_reviewer_list_after_created_still_assigns_when_listed():
+def test_changed_reviewer_list_after_created_is_ignored_when_bot_already_cached():
     listed = _pr()
     listed["reviewers"] = [
         {
@@ -293,8 +331,7 @@ def test_changed_reviewer_list_after_created_still_assigns_when_listed():
         bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
         mention_names=["mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, ReviewTrigger)
-    assert got.kind == "review"
+    assert isinstance(got, Ignore)
 
 
 def test_adding_another_reviewer_while_bot_listed_is_ignored():

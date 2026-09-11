@@ -9,6 +9,21 @@ section in the same change.
 
 ## Unreleased
 
+### Changed
+
+- After each Azure reviewer GET, Creasy keeps that list in process
+  cache and diffs the next GET. A TFS “changed the reviewer list”
+  hook starts a review only when the bot is newly in the list (or
+  there is no cache yet after boot). Removing someone else while
+  the bot stays no longer starts a review.
+
+### Known issues
+
+- Azure DevOps Server 2022.2 (on-prem TFS) does not send add vs
+  remove. The first hook after a process restart has no previous
+  GET, so `changed the reviewer list` + bot listed still starts a
+  review. After that, the in-memory cache tells those cases apart.
+
 ## 0.9.9 — 2026-09-11
 
 TFS 2022.2 assign (`changed the reviewer list`) starts a review again.

@@ -83,18 +83,21 @@ These look like bugs. They are not.
   `X changed the reviewer list for pull request N (Title) in Project`
   (`notificationType` is often empty). `(Added …)` in that sentence
   is the PR title, not an add verb. Do not require cloud-style
-  `added … as a reviewer` or that assign path dies. Do not cache
-  reviewer lists. On a reviewer-change hook, GET
-  `/pullRequests/{id}/reviewers` and start a review when that live
-  list still includes the bot **and** the message is an add **or**
-  that TFS “changed the reviewer list” sentence (not a remove).
-  Unassign of the bot: GET does not list them, so no review. A
-  second assign hook while that MR already has a running or queued
-  review is ignored (this TFS often sends the update twice). If
-  the first GET is empty after an add, retry twice (0.3s then
-  0.7s). Rebase the GET onto `/tfs/<Collection>` from the hook
-  collection or the PR web URL when `AZURE_DEVOPS_URL` is only the
-  host. A failed GET does not start a review.
+  `added … as a reviewer` or that assign path dies. On a
+  reviewer-change hook, GET `/pullRequests/{id}/reviewers`. Keep
+  that live list in process cache as the previous set (lost on
+  boot). If exactly one mention/bot identity is in the new GET,
+  compare to the previous GET: start a review only when the bot
+  was not in the previous set. If the bot was already there
+  (someone else was removed), ignore. First hook after boot has
+  no previous — then “changed the reviewer list” + listed still
+  starts a review. Unassign of the bot: GET does not list them.
+  A second assign hook while that MR already has a running or
+  queued review is ignored (this TFS often sends the update
+  twice). If the first GET is empty after an add, retry twice
+  (0.3s then 0.7s). Rebase the GET onto `/tfs/<Collection>` from
+  the hook collection or the PR web URL when `AZURE_DEVOPS_URL`
+  is only the host. A failed GET does not start a review.
   Jobs do not assign the token user.
   `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
