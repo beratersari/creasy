@@ -118,6 +118,14 @@ class Manager:
             if not trigger.explicit and (running or queued_ids):
                 log_ok(logger, "job submit skipped", reason="already busy", mr=key, kind=trigger.kind)
                 return "ignored", None, "MR already has a running or queued job"
+            assign_only = (
+                trigger.kind == "review"
+                and not (trigger.comment_text or "").strip()
+                and not (getattr(trigger, "discussion_id", "") or "").strip()
+            )
+            if assign_only and (running or queued_ids):
+                log_ok(logger, "job submit skipped", reason="review already busy", mr=key, kind=trigger.kind)
+                return "ignored", None, "MR already has a running or queued job"
             job = JobRecord(
                 job_id=mint_job_id(),
                 mr_key=key,

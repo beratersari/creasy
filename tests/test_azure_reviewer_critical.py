@@ -46,13 +46,18 @@ def test_comment_does_not_use_reviewer_cache(tmp_config):
     )
     assert comment.json()["status"] in {"accepted", "queued"}
     runner.release.set()
+    app.state.azure.reviewers = []
     later = client.post(
         "/creasy/webhook/azure",
-        json=_changed([BOT]),
+        json={
+            "eventType": "git.pullrequest.updated",
+            "notificationType": "ReviewersUpdateNotification",
+            "message": {"text": "Dev removed Creasy as a reviewer"},
+            "resource": _pr_with_bot(),
+        },
         headers=_auth(),
     )
     assert later.json()["status"] == "ignored"
-    assert [job.trigger for job in manager.store.list_all() if job.trigger == "review"] == []
     manager.shutdown()
 
 

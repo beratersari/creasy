@@ -57,6 +57,8 @@ _REMOVED_REVIEWER_HINT = re.compile(
     r"reviewer\s+(?:was\s+)?(?:removed|unassigned)",
     re.IGNORECASE,
 )
+# Azure DevOps Server 2022.2 (on-prem TFS) assign sentence. Do not drop
+# this: that server does not send "added X as a reviewer".
 _CHANGED_REVIEWER_LIST = re.compile(
     r"^(?P<actor>.+?) changed the reviewer list\b",
     re.IGNORECASE,
@@ -568,6 +570,9 @@ def _azure_reviewer_assigned(
         return False
     if azure_message_adds_bot(payload, bot_user_id, mention_names):
         logger.info("azure assign yes reason=add-message-and-listed")
+        return True
+    if _CHANGED_REVIEWER_LIST.search(first_line) or _CHANGED_REVIEWER_LIST.search(text):
+        logger.info("azure assign yes reason=changed-reviewer-list-and-listed")
         return True
     logger.info("azure assign skip reason=not-an-add-reviewer-message")
     return False

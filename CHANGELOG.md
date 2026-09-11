@@ -9,6 +9,28 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.9 — 2026-09-11
+
+TFS 2022.2 assign (`changed the reviewer list`) starts a review again.
+`@mention /yaver` is silent.
+
+### Changed
+
+- `@mention /yaver` is ignored and does not post a usage note.
+  Other invalid mentions still get the how-to note.
+- TFS “changed the reviewer list” plus a GET that still lists the
+  bot starts a review (that is the real assign sentence). Unassign
+  of the bot does not: GET no longer lists them. A second identical
+  assign hook while a review is already running is ignored.
+
+### Known issues
+
+- Azure DevOps Server 2022.2 (on-prem TFS) does not send add vs
+  remove. Assign and “someone else was removed, bot stays” use the
+  same sentence and the same GET. Removing another reviewer while
+  the bot stays on the PR can start another review. Unassign of
+  the bot does not.
+
 ## 0.9.8 — 2026-09-11
 
 Unassigning a reviewer no longer starts a review.

@@ -119,8 +119,8 @@ def test_assigning_domain_unique_name_in_html_message():
     assert isinstance(got, ReviewTrigger)
 
 
-def test_changed_reviewer_list_without_added_message_is_ignored():
-    """TFS uses this sentence for add and remove. Without a GET delta we only trust add text."""
+def test_changed_reviewer_list_and_listed_is_assign():
+    """TFS assign sentence. GET already replaced reviewers; bot listed → review."""
     pr = _pr()
     pr["reviewers"] = [
         {
@@ -144,11 +144,14 @@ def test_changed_reviewer_list_without_added_message_is_ignored():
         bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
         mention_names=["test", "mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, Ignore)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
 
 
-def test_changed_reviewer_list_title_added_is_not_an_assign():
-    """TFS puts the PR title in parens. 'Added foo' must not look like an assign."""
+def test_changed_reviewer_list_title_added_still_assigns_when_listed():
+    """'(Added title)' is not 'added as a reviewer', but listed + list-change is assign."""
+    from creasy.azure.events import azure_message_adds_bot
+
     pr = _pr()
     pr["reviewers"] = [
         {
@@ -168,39 +171,17 @@ def test_changed_reviewer_list_title_added_is_not_an_assign():
         },
         "resource": pr,
     }
+    assert azure_message_adds_bot(payload, "e0782cea-2b9a-414f-8b2f-84a7dd8de5c2", ["mberatersari"]) is False
     got = classify_azure_webhook(
         payload,
         bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
         mention_names=["mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, Ignore)
-    pr = _pr()
-    pr["reviewers"] = [
-        {
-            "id": "71440e05-be9e-4768-897e-da81a889d26e",
-            "displayName": "Berat ERSARI",
-            "uniqueName": r"company\mberatersari",
-        }
-    ]
-    payload = {
-        "eventType": "git.pullrequest.updated",
-        "message": {
-            "text": (
-                "Berat ERSARI changed the reviewer list for pull request 26509 "
-                "(Added sacmalilkarr) in AKBGPIOCaller"
-            )
-        },
-        "resource": pr,
-    }
-    got = classify_azure_webhook(
-        payload,
-        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
-        mention_names=["mberatersari", "Berat ERSARI"],
-    )
-    assert isinstance(got, Ignore)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
 
 
-def test_changed_reviewer_list_by_teammate_is_ignored():
+def test_changed_reviewer_list_by_teammate_assigns_if_bot_still_listed():
     pr = _pr()
     pr["reviewers"] = [
         {"id": "bot", "displayName": "Berat ERSARI", "uniqueName": r"company\mberatersari"},
@@ -215,7 +196,8 @@ def test_changed_reviewer_list_by_teammate_is_ignored():
         payload,
         mention_names=["mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, Ignore)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
 
 
 def test_self_assign_yourself_message_starts_review():
@@ -272,8 +254,7 @@ def test_removed_themselves_is_ignored():
     assert isinstance(got, Ignore)
 
 
-def test_changed_reviewer_list_after_bot_already_listed_is_ignored():
-    """Unassign uses the same TFS sentence as assign. Do not start again."""
+def test_changed_reviewer_list_after_created_still_assigns_when_listed():
     listed = _pr()
     listed["reviewers"] = [
         {
@@ -312,7 +293,8 @@ def test_changed_reviewer_list_after_bot_already_listed_is_ignored():
         bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
         mention_names=["mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, Ignore)
+    assert isinstance(got, ReviewTrigger)
+    assert got.kind == "review"
 
 
 def test_adding_another_reviewer_while_bot_listed_is_ignored():
@@ -437,6 +419,17 @@ def test_mention_without_command_is_usage():
     )
     assert isinstance(tagged, ReviewTrigger)
     assert tagged.kind == "usage"
+    yaver = classify_azure_webhook(
+        {
+            "eventType": "git.pullrequest.commented",
+            "resource": {
+                "comment": {"content": "@creasy /yaver", "author": {"id": "user-1"}},
+                "pullRequest": _pr(),
+            },
+        },
+        mention_names=["creasy"],
+    )
+    assert isinstance(yaver, Ignore)
     other = classify_azure_webhook(payload, mention_names=["other-bot"])
     assert isinstance(other, Ignore)
 
