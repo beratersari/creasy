@@ -39,6 +39,9 @@ def test_comment_intent_requires_mention_and_command() -> None:
         "usage",
         "hey check auth",
     )
+    assert comment_intent("@creasy /yaver", ["creasy"]) is None
+    assert comment_intent("@creasy /yaver look at dest", ["creasy"]) is None
+    assert comment_intent("@creasy/yaver", ["creasy"]) is None
     assert comment_intent("/review focus", ["creasy"]) is None
     leftover = comment_intent("hey @creasy /review check auth", ["creasy"])
     assert leftover == ("run", "review", "check auth")
