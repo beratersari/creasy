@@ -64,6 +64,8 @@ _CHANGED_REVIEWER_LIST = re.compile(
     re.IGNORECASE,
 )
 _SELF_WHO = frozenset({"yourself", "themselves", "himself", "herself", "myself"})
+# Process-local. Lost on boot — first hook after restart has no previous.
+_REVIEWER_CACHE: dict[str, frozenset[str]] = {}
 _HTML_TAG = re.compile(r"<[^>]+>")
 _ABANDONED = frozenset({"abandoned", "completed", "closed"})
 _PR_LINK = re.compile(
@@ -445,6 +447,64 @@ def _azure_bot_is_reviewer(pr: dict[str, Any], bot_user_id: Optional[str], names
     return False
 
 
+def reset_reviewer_cache() -> None:
+    """Test helper. Production cache is process-local and empty after boot."""
+    _REVIEWER_CACHE.clear()
+
+
+def _reviewer_cache_key(pr: dict[str, Any]) -> str:
+    project, repo = _repo_and_project(pr)
+    iid = _pr_id(pr)
+    if not project or not repo or iid is None:
+        return ""
+    return f"{project}/{repo}/{iid}"
+
+
+def _reviewer_ident_set(pr: dict[str, Any]) -> frozenset[str]:
+    found: set[str] = set()
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    for row in reviewers:
+        if not isinstance(row, dict):
+            continue
+        nested = row.get("user") if isinstance(row.get("user"), dict) else {}
+        for src in (row, nested):
+            if not isinstance(src, dict):
+                continue
+            for key in ("id", "displayName", "uniqueName", "name", "directoryAlias"):
+                value = str(src.get(key) or "").strip().lower()
+                if value:
+                    found.add(value)
+                    if "\\" in value:
+                        found.add(value.rsplit("\\", 1)[-1].strip())
+    return frozenset(found)
+
+
+def _bot_reviewer_row_count(pr: dict[str, Any], bot_user_id: Optional[str], names: list[str]) -> int:
+    reviewers = pr.get("reviewers") if isinstance(pr.get("reviewers"), list) else []
+    return sum(
+        1
+        for row in reviewers
+        if isinstance(row, dict) and _azure_reviewer_is_bot(row, bot_user_id, names)
+    )
+
+
+def _idents_include_bot(idents: frozenset[str], bot_user_id: Optional[str], names: list[str]) -> bool:
+    aliases = _name_aliases(names)
+    if bot_user_id:
+        aliases.add(str(bot_user_id).strip().lower())
+    aliases.discard("")
+    return any(_names_match(item, aliases) for item in idents)
+
+
+def _remember_reviewers(pr: dict[str, Any]) -> Optional[frozenset[str]]:
+    key = _reviewer_cache_key(pr)
+    if not key:
+        return None
+    previous = _REVIEWER_CACHE.get(key)
+    _REVIEWER_CACHE[key] = _reviewer_ident_set(pr)
+    return previous
+
+
 def azure_collection_hint(payload: dict[str, Any]) -> str:
     if not isinstance(payload, dict):
         return ""
@@ -545,16 +605,23 @@ def _azure_reviewer_assigned(
 ) -> bool:
     aliases = _name_aliases(mention_names)
     listed = _azure_bot_is_reviewer(pr, bot_user_id, mention_names)
+    previous = _remember_reviewers(pr)
+    bot_rows = _bot_reviewer_row_count(pr, bot_user_id, mention_names)
+    appeared = None
+    if previous is not None:
+        appeared = listed and not _idents_include_bot(previous, bot_user_id, mention_names)
     text = _message_text(payload)
     first_line = (text.splitlines() or [""])[0].strip()
     removed = _REMOVED_REVIEWER.search(first_line) or _REMOVED_REVIEWER.search(text)
     ntype = _notification_type(payload)
     reviewers = _reviewer_summaries(pr)
     logger.info(
-        "azure assign check bot_id=%s names=%s listed=%s notify=%s reviewers=%s message=%r",
+        "azure assign check bot_id=%s names=%s listed=%s bot_rows=%s appeared=%s notify=%s reviewers=%s message=%r",
         bot_user_id or "-",
         ",".join(mention_names) or "-",
         listed,
+        bot_rows,
+        appeared if appeared is not None else "unknown",
         ntype or "-",
         reviewers or ["-"],
         (first_line or text)[:180],
@@ -571,10 +638,20 @@ def _azure_reviewer_assigned(
     if azure_message_adds_bot(payload, bot_user_id, mention_names):
         logger.info("azure assign yes reason=add-message-and-listed")
         return True
-    if _CHANGED_REVIEWER_LIST.search(first_line) or _CHANGED_REVIEWER_LIST.search(text):
-        logger.info("azure assign yes reason=changed-reviewer-list-and-listed")
+    changed = _CHANGED_REVIEWER_LIST.search(first_line) or _CHANGED_REVIEWER_LIST.search(text)
+    if not changed:
+        logger.info("azure assign skip reason=not-an-add-reviewer-message")
+        return False
+    if previous is None:
+        logger.info("azure assign yes reason=changed-reviewer-list-boot-no-cache")
         return True
-    logger.info("azure assign skip reason=not-an-add-reviewer-message")
+    if bot_rows != 1:
+        logger.info("azure assign skip reason=mention-match-not-unique rows=%s", bot_rows)
+        return False
+    if appeared:
+        logger.info("azure assign yes reason=changed-reviewer-list-bot-added")
+        return True
+    logger.info("azure assign skip reason=bot-already-in-previous-get")
     return False
 
 
@@ -616,6 +693,7 @@ def classify_azure_webhook(
         log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewers unchanged")
         return Ignore("reviewers unchanged")
     if kind in _CREATED:
+        _remember_reviewers(pr)
         if not _azure_bot_is_reviewer(pr, bot_user_id, mention_names or []):
             log_ok(logger, "azure classify Ignore", eventType=kind, reason="reviewer not assigned")
             return Ignore("reviewer not assigned")

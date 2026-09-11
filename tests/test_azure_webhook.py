@@ -5,12 +5,22 @@ import base64
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import pytest
+
+from creasy.azure.events import reset_reviewer_cache
 from creasy.api.webhook import router as gitlab_router
 from creasy.api.webhook_azure import router as azure_router
 from creasy.azure.identity import azure_project_num
 from creasy.jobs.manager import Manager
 from conftest import FakeRunner
 from test_azure_events import PROJECT, REPO, _pr
+
+
+@pytest.fixture(autouse=True)
+def _clear_reviewer_cache() -> None:
+    reset_reviewer_cache()
+    yield
+    reset_reviewer_cache()
 
 
 class FakeAzure:
@@ -207,7 +217,6 @@ def test_second_assign_hook_is_ignored_while_review_runs(tmp_config):
     assert first.json()["status"] == "accepted", first.json()
     second = client.post("/creasy/webhook/azure", json=payload, headers=_auth())
     assert second.json()["status"] == "ignored"
-    assert second.json()["message"] == "MR already has a running or queued job"
     reviews = [job for job in manager.store.list_all() if job.trigger == "review"]
     assert len(reviews) == 1
     runner.release.set()

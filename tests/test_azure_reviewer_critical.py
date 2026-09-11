@@ -4,10 +4,20 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 from creasy.azure.client import AzureError
+from creasy.azure.events import reset_reviewer_cache
 from test_azure_events import _pr
 from test_azure_reviewer_delta import ADDED_BOT, BOT, CHANGED
 from test_azure_webhook import FakeAzure, _app, _auth, _pr_with_bot
+
+
+@pytest.fixture(autouse=True)
+def _clear_reviewer_cache() -> None:
+    reset_reviewer_cache()
+    yield
+    reset_reviewer_cache()
 
 
 def _changed(reviewers: list[dict]) -> dict:

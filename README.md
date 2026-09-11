@@ -128,12 +128,11 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
 6. Save and **Test** the created-PR subscription. Startup logs `azure_enabled=True` when the URL and PAT are set.
 
 **Known issue (Azure DevOps Server 2022.2):** TFS does not send add vs
-remove. Assign is `X changed the reviewer list for pull request N (Title)`.
-Creasy GETs the live reviewer list: if the PAT user is gone, it ignores
-the hook (unassign of the bot). If the PAT user is still listed, it
-starts a review. Removing **someone else** while the bot stays on the
-PR uses the same sentence and the same GET, so that can start another
-review. There is no 2022.2 API that tells those two cases apart.
+remove. Creasy GETs the live reviewer list and keeps it in process
+cache. After that, removing someone else while the bot stays does
+**not** start another review (the bot was already in the previous GET).
+The first hook after a process restart has no cache, so
+`changed the reviewer list` + bot listed still starts a review.
 
 Empty `@<bot> /ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `@<bot> /ask` or reviewer assign still runs.
 `@<bot>` is the GitLab username / Azure display name of the token user.
