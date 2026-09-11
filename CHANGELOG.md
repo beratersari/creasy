@@ -9,6 +9,10 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.8 — 2026-09-11
+
+Unassigning a reviewer no longer starts a review.
+
 ### Fixed
 
 - Unassigning a reviewer no longer starts a review. Azure TFS does
