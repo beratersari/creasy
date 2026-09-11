@@ -9,6 +9,10 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.10 — 2026-09-11
+
+TFS teammate-unassign no longer starts a review after the first GET.
+
 ### Changed
 
 - After each Azure reviewer GET, Creasy keeps that list in process
