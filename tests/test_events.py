@@ -109,6 +109,20 @@ def test_assigning_review_mention_username_starts_review():
     assert got.explicit is True
 
 
+def test_unassigning_bot_is_ignored():
+    payload = mr_payload("update")
+    payload["user"] = {"id": 7}
+    payload["changes"] = {
+        "reviewers": {
+            "previous": [{"id": 99, "username": "creasy"}, {"id": 4, "username": "alice"}],
+            "current": [{"id": 4, "username": "alice"}],
+        }
+    }
+    got = classify_webhook(payload, bot_user_id=99, mention_names=["creasy"])
+    assert isinstance(got, Ignore)
+    assert got.reason == "action=update"
+
+
 def test_adding_another_reviewer_while_bot_already_assigned_is_ignored():
     payload = mr_payload("update")
     payload["user"] = {"id": 7}

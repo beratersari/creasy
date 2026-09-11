@@ -13,13 +13,31 @@ from conftest import FakeRunner
 from test_azure_events import PROJECT, REPO, _pr
 
 
+class FakeAzure:
+    def __init__(self, reviewers: list | None = None) -> None:
+        self.reviewers = list(reviewers) if reviewers is not None else [{"id": "bot-id", "displayName": "creasy"}]
+        self.reviewer_queue: list[list] = []
+        self.list_calls: list[tuple[str, str, int]] = []
+        self.apply_calls: list[tuple[str, str]] = []
+
+    def list_reviewers(self, project: str, repo: str, pr_id: int, **kwargs) -> list:
+        self.list_calls.append((project, repo, int(pr_id)))
+        if self.reviewer_queue:
+            return list(self.reviewer_queue.pop(0))
+        return list(self.reviewers)
+
+    def apply_collection(self, collection: str = "", web_url: str = "") -> None:
+        self.apply_calls.append((collection or "", web_url or ""))
+        return None
+
+
 def _pr_with_bot(**extra):
     pr = _pr(**extra)
     pr["reviewers"] = [{"id": "bot-id", "displayName": "creasy"}]
     return pr
 
 
-def _app(tmp_config, *, azure=True):
+def _app(tmp_config, *, azure=True, reviewers=None):
     tmp_config.review_mention = tmp_config.review_mention or "creasy"
     if azure:
         tmp_config.azure_url = "https://ado.example/tfs/DefaultCollection"
@@ -31,7 +49,7 @@ def _app(tmp_config, *, azure=True):
     app = FastAPI()
     app.state.config = tmp_config
     app.state.manager = manager
-    app.state.azure = None
+    app.state.azure = FakeAzure(reviewers=reviewers) if azure else None
     app.state.azure_bot_user_id = "bot-id"
     app.include_router(gitlab_router)
     app.include_router(azure_router)
@@ -104,6 +122,70 @@ def test_azure_created_accepted(tmp_config):
     assert job.project_id == azure_project_num(PROJECT, REPO)
     assert job.trigger == "open"
     runner.release.set()
+    manager.shutdown()
+
+
+def test_reviewer_change_get_confirms_add(tmp_config):
+    app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
+    client = TestClient(app)
+    res = client.post(
+        "/creasy/webhook/azure",
+        json={
+            "eventType": "git.pullrequest.updated",
+            "notificationType": "ReviewersUpdateNotification",
+            "message": {"text": "Jamal Hartnett added creasy as a reviewer"},
+            "resource": _pr_with_bot(),
+        },
+        headers=_auth(),
+    )
+    assert res.json()["status"] == "accepted", res.json()
+    assert app.state.azure.list_calls
+    job = manager.store.get(res.json()["job_id"])
+    assert job is not None
+    assert job.trigger == "review"
+    runner.release.set()
+    manager.shutdown()
+
+
+def test_reviewer_change_get_without_bot_ignores_stale_add(tmp_config):
+    """Hook says added, live GET says the bot is gone → ignore."""
+    app, manager, runner = _app(tmp_config, reviewers=[{"id": "alice", "displayName": "Alice"}])
+    client = TestClient(app)
+    res = client.post(
+        "/creasy/webhook/azure",
+        json={
+            "eventType": "git.pullrequest.updated",
+            "notificationType": "ReviewersUpdateNotification",
+            "message": {"text": "Jamal Hartnett added creasy as a reviewer"},
+            "resource": _pr_with_bot(),
+        },
+        headers=_auth(),
+    )
+    assert res.json()["status"] == "ignored"
+    assert app.state.azure.list_calls
+    manager.shutdown()
+
+
+def test_reviewer_change_get_listed_generic_message_is_ignored(tmp_config):
+    app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
+    client = TestClient(app)
+    res = client.post(
+        "/creasy/webhook/azure",
+        json={
+            "eventType": "git.pullrequest.updated",
+            "notificationType": "ReviewersUpdateNotification",
+            "message": {
+                "text": (
+                    "Berat ERSARI changed the reviewer list for pull request 12 "
+                    "(Added overflow) in App"
+                )
+            },
+            "resource": _pr_with_bot(),
+        },
+        headers=_auth(),
+    )
+    assert res.json()["status"] == "ignored"
+    assert app.state.azure.list_calls
     manager.shutdown()
 
 

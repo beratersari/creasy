@@ -119,7 +119,8 @@ def test_assigning_domain_unique_name_in_html_message():
     assert isinstance(got, ReviewTrigger)
 
 
-def test_changed_reviewer_list_self_assign_starts_review():
+def test_changed_reviewer_list_without_added_message_is_ignored():
+    """TFS uses this sentence for add and remove. Without a GET delta we only trust add text."""
     pr = _pr()
     pr["reviewers"] = [
         {
@@ -143,8 +144,60 @@ def test_changed_reviewer_list_self_assign_starts_review():
         bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
         mention_names=["test", "mberatersari", "Berat ERSARI"],
     )
-    assert isinstance(got, ReviewTrigger)
-    assert got.kind == "review"
+    assert isinstance(got, Ignore)
+
+
+def test_changed_reviewer_list_title_added_is_not_an_assign():
+    """TFS puts the PR title in parens. 'Added foo' must not look like an assign."""
+    pr = _pr()
+    pr["reviewers"] = [
+        {
+            "id": "71440e05-be9e-4768-897e-da81a889d26e",
+            "displayName": "Berat ERSARI",
+            "uniqueName": r"company\mberatersari",
+        }
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {
+            "text": (
+                "Berat ERSARI changed the reviewer list for pull request 26509 "
+                "(Added sacmalilkarr) in AKBGPIOCaller"
+            )
+        },
+        "resource": pr,
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, Ignore)
+    pr = _pr()
+    pr["reviewers"] = [
+        {
+            "id": "71440e05-be9e-4768-897e-da81a889d26e",
+            "displayName": "Berat ERSARI",
+            "uniqueName": r"company\mberatersari",
+        }
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {
+            "text": (
+                "Berat ERSARI changed the reviewer list for pull request 26509 "
+                "(Added sacmalilkarr) in AKBGPIOCaller"
+            )
+        },
+        "resource": pr,
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, Ignore)
 
 
 def test_changed_reviewer_list_by_teammate_is_ignored():
@@ -192,6 +245,74 @@ def test_assigning_bot_as_reviewer_starts_review():
     assert isinstance(got, ReviewTrigger)
     assert got.kind == "review"
     assert got.explicit is True
+
+
+def test_removing_bot_as_reviewer_is_ignored():
+    pr = _pr()
+    pr["reviewers"] = [{"id": "alice-guid", "displayName": "Alice"}]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "notificationType": "ReviewersUpdateNotification",
+        "message": {"text": "Jamal Hartnett removed Creasy as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, bot_user_id="bot-guid", mention_names=["Creasy"])
+    assert isinstance(got, Ignore)
+
+
+def test_removed_themselves_is_ignored():
+    pr = _pr()
+    pr["reviewers"] = []
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {"text": r"ORGANIZATION\mberatersari removed themselves as a reviewer"},
+        "resource": pr,
+    }
+    got = classify_azure_webhook(payload, mention_names=["mberatersari"])
+    assert isinstance(got, Ignore)
+
+
+def test_changed_reviewer_list_after_bot_already_listed_is_ignored():
+    """Unassign uses the same TFS sentence as assign. Do not start again."""
+    listed = _pr()
+    listed["reviewers"] = [
+        {
+            "id": "71440e05-be9e-4768-897e-da81a889d26e",
+            "displayName": "Berat ERSARI",
+            "uniqueName": r"company\mberatersari",
+        },
+        {"id": "alice", "displayName": "Alice"},
+    ]
+    created = classify_azure_webhook(
+        {"eventType": "git.pullrequest.created", "resource": listed},
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(created, ReviewTrigger)
+    after = _pr()
+    after["reviewers"] = [
+        {
+            "id": "71440e05-be9e-4768-897e-da81a889d26e",
+            "displayName": "Berat ERSARI",
+            "uniqueName": r"company\mberatersari",
+        }
+    ]
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {
+            "text": (
+                "Berat ERSARI changed the reviewer list for pull request 26509 "
+                "(Added sacmalilkarr) in AKBGPIOCaller"
+            )
+        },
+        "resource": after,
+    }
+    got = classify_azure_webhook(
+        payload,
+        bot_user_id="e0782cea-2b9a-414f-8b2f-84a7dd8de5c2",
+        mention_names=["mberatersari", "Berat ERSARI"],
+    )
+    assert isinstance(got, Ignore)
 
 
 def test_adding_another_reviewer_while_bot_listed_is_ignored():

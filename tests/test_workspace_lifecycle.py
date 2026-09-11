@@ -129,3 +129,15 @@ def test_workspace_save_replaces_atomically(tmp_path: Path):
     again = store.get("2-3")
     assert again is not None
     assert again.session_id == "ses_b"
+
+
+def test_workspace_loads_old_json_without_new_fields(tmp_path: Path):
+    store = WorkspaceStore(tmp_path / "meta")
+    path = tmp_path / "meta" / "2-3.json"
+    path.write_text(
+        '{"mr_key": "2-3", "project_id": 2, "mr_iid": 3, "session_id": "ses_old"}',
+        encoding="utf-8",
+    )
+    got = store.get("2-3")
+    assert got is not None
+    assert got.session_id == "ses_old"

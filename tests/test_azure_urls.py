@@ -45,6 +45,14 @@ def test_resolve_fills_collection_when_env_is_only_the_host() -> None:
     assert got == "https://tfs02.company.com.tr/tfs/ExampleCollection"
 
 
+def test_looks_like_collection_root_without_git() -> None:
+    from creasy.azure.urls import looks_like_azure_resource
+
+    assert looks_like_azure_resource("https://tfs02.company.com.tr/tfs/ExampleCollection/")
+    assert not looks_like_azure_resource("https://tfs02.company.com.tr/tfs")
+    assert not looks_like_azure_resource("https://tfs02.company.com.tr")
+
+
 def test_resolve_prefers_hook_collection() -> None:
     got = resolve_collection_url(
         configured="https://tfs02.company.com.tr",
