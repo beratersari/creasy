@@ -200,6 +200,7 @@ These look like bugs. They are not.
 ### Dashboard
 
 - `GET /jobs` plus `/api/jobs`, chat, logs, queue, `/api/settings`.
+  Usage-note jobs are not listed (or opened) on the dashboard.
 - Writes: `POST /api/jobs/{id}/cancel`,
   `POST /api/mrs/{project}/{iid}/cancel`, and
   `PUT /api/settings` (model + timeout only; persist in
