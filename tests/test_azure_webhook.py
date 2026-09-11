@@ -166,7 +166,7 @@ def test_reviewer_change_get_without_bot_ignores_stale_add(tmp_config):
     manager.shutdown()
 
 
-def test_reviewer_change_get_listed_generic_message_is_ignored(tmp_config):
+def test_reviewer_change_get_listed_generic_message_starts_review(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
     client = TestClient(app)
     res = client.post(
@@ -184,8 +184,33 @@ def test_reviewer_change_get_listed_generic_message_is_ignored(tmp_config):
         },
         headers=_auth(),
     )
-    assert res.json()["status"] == "ignored"
+    assert res.json()["status"] == "accepted", res.json()
     assert app.state.azure.list_calls
+    runner.release.set()
+    manager.shutdown()
+
+
+def test_second_assign_hook_is_ignored_while_review_runs(tmp_config):
+    app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
+    client = TestClient(app)
+    payload = {
+        "eventType": "git.pullrequest.updated",
+        "message": {
+            "text": (
+                "Berat ERSARI changed the reviewer list for pull request 12 "
+                "(Added overflow) in App"
+            )
+        },
+        "resource": _pr_with_bot(),
+    }
+    first = client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    assert first.json()["status"] == "accepted", first.json()
+    second = client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    assert second.json()["status"] == "ignored"
+    assert second.json()["message"] == "MR already has a running or queued job"
+    reviews = [job for job in manager.store.list_all() if job.trigger == "review"]
+    assert len(reviews) == 1
+    runner.release.set()
     manager.shutdown()
 
 

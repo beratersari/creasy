@@ -42,7 +42,8 @@ These look like bugs. They are not.
    text that explicitly asks for a new review) is a full or
    thread-focused review and may open findings threads. A mention
    without `/ask` or `/review` posts a usage note on that thread
-   (no OpenCode). A command alone is ignored. Do not hold a serve
+   (no OpenCode). `@mention /yaver` is ignored and does not post
+   a usage note. A command alone is ignored. Do not hold a serve
    open waiting for the next GitLab comment.
 4. **Comments queue FIFO per MR.** A later `@mention /ask` while
    that MR is running is **queued**, not 409, not coalesced to
@@ -76,15 +77,24 @@ These look like bugs. They are not.
   `update` (new commits) and `reopen` do not enqueue, except
   assigning that same user later, which is an explicit review.
   Unassign / remove reviewer does not enqueue.
-  Azure TFS does not send add vs remove. Do not cache reviewer
-  lists. On a reviewer-change hook, GET
-  `/pullRequests/{id}/reviewers` and start a review only when that
-  live list still includes the bot **and** the message says the bot
-  was added. A generic “changed the reviewer list” sentence is
-  ignored. If the first GET is empty after an add, retry twice
-  (0.3s then 0.7s). Rebase the GET onto `/tfs/<Collection>` from
-  the hook collection or the PR web URL when `AZURE_DEVOPS_URL` is
-  only the host. A failed GET does not start a review.
+  **Azure DevOps Server 2022.2 (on-prem TFS, publisher `tfs`) is
+  the production box.** Assign does **not** say
+  `added X as a reviewer`. It says
+  `X changed the reviewer list for pull request N (Title) in Project`
+  (`notificationType` is often empty). `(Added …)` in that sentence
+  is the PR title, not an add verb. Do not require cloud-style
+  `added … as a reviewer` or that assign path dies. Do not cache
+  reviewer lists. On a reviewer-change hook, GET
+  `/pullRequests/{id}/reviewers` and start a review when that live
+  list still includes the bot **and** the message is an add **or**
+  that TFS “changed the reviewer list” sentence (not a remove).
+  Unassign of the bot: GET does not list them, so no review. A
+  second assign hook while that MR already has a running or queued
+  review is ignored (this TFS often sends the update twice). If
+  the first GET is empty after an add, retry twice (0.3s then
+  0.7s). Rebase the GET onto `/tfs/<Collection>` from the hook
+  collection or the PR web URL when `AZURE_DEVOPS_URL` is only the
+  host. A failed GET does not start a review.
   Jobs do not assign the token user.
   `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
@@ -93,8 +103,9 @@ These look like bugs. They are not.
   `@name /review` → review (thread-focused when the comment is a
   reply). Empty `@name /ask` → ignore. Empty `@name /review` still
   runs. Mention without `/ask` or `/review` → usage note on that
-  thread (no OpenCode). A command alone → ignore. `/reset` with a
-  mention → usage note; `/reset` alone → ignore.
+  thread (no OpenCode). `@name /yaver` → ignore (no usage note).
+  A command alone → ignore. `/reset` with a mention → usage note;
+  `/reset` alone → ignore.
   Notes from the token’s own user → ignore. Same pair on Azure
   comments (`@Name` or `data-vss-mention` of the PAT user).
 - Draft MRs: skip auto events when `SKIP_DRAFT_MRS` is true. Explicit
