@@ -9,6 +9,10 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.11 — 2026-09-11
+
+Usage notes stay off the dashboard. Reviews and `/ask` still show.
+
 ### Changed
 
 - Usage-note replies no longer appear on the dashboard job list.
