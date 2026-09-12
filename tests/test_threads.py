@@ -58,7 +58,8 @@ def _raw(
 def test_format_discussion_marks_creasy_thread() -> None:
     text = format_discussion(_finding())
     assert CREASY_FINDING_MARK in text
-    assert "**Critical**" in text
+    assert "**Kritik**" in text
+    assert "**Critical**" not in text
 
 
 def test_parse_skips_human_and_resolved_and_notes() -> None:

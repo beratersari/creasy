@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+### Changed
+
+- Finding threads use Turkish severity (`**Kritik**`, `**Önemli**`)
+  instead of English `**Critical**`.
+
 ### Fixed
 
 - A running usage-note job no longer drops a following TFS assign.
