@@ -263,7 +263,7 @@ new file mode 100644
     assert disc["position"]["new_path"] == "src/buf.cpp"
     assert disc["position"]["new_line"] == 2
     assert disc["position"]["head_sha"] == "newsha"
-    assert disc["position"]["base_sha"] == "oldsha"
+    assert disc["position"]["base_sha"] == "base"
 
 
 def test_worker_replies_to_overlapping_unresolved_thread(tmp_config, monkeypatch):
