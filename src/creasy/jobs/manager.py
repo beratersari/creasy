@@ -21,6 +21,19 @@ from creasy.workspace.store import WorkspaceStore
 
 logger = get_logger("manager")
 
+_NON_REVIEW_TRIGGERS = frozenset({"usage", "reset"})
+
+
+def _real_review_busy(store: JobStore, running: Optional[JobRecord], queued_ids: list[str]) -> bool:
+    """True when a review/ask/open is already live. Usage notes must not block assign."""
+    if running is not None and (running.trigger or "") not in _NON_REVIEW_TRIGGERS:
+        return True
+    for job_id in queued_ids:
+        job = store.get(job_id)
+        if job is not None and (job.trigger or "") not in _NON_REVIEW_TRIGGERS:
+            return True
+    return False
+
 
 class Manager:
     def __init__(
@@ -123,7 +136,7 @@ class Manager:
                 and not (trigger.comment_text or "").strip()
                 and not (getattr(trigger, "discussion_id", "") or "").strip()
             )
-            if assign_only and (running or queued_ids):
+            if assign_only and _real_review_busy(self.store, running, queued_ids):
                 log_ok(logger, "job submit skipped", reason="review already busy", mr=key, kind=trigger.kind)
                 return "ignored", None, "MR already has a running or queued job"
             job = JobRecord(

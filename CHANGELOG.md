@@ -9,6 +9,20 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.12 — 2026-09-12
+
+Finding threads match the Turkish review note. A usage reply no
+longer blocks assign.
+
+### Changed
+
+- Finding threads use Turkish severity (`**Kritik**`, `**Önemli**`)
+  instead of English `**Critical**`.
+
+### Fixed
+
+- A running usage-note job no longer drops a following TFS assign.
+
 ## 0.9.11 — 2026-09-11
 
 Usage notes stay off the dashboard. Reviews and `/ask` still show.
