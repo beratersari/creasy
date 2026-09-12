@@ -111,8 +111,11 @@ Shared resume flow for both commands after a finished job:
 3. Start a **new** `opencode serve` on that same absolute path.
 4. Resume the stored `session_id` (`GET /session/{id}` then continue).
 5. POST a new user message (shape depends on the command — see below).
-6. Post the new assistant reply as an MR note, then post any
-   structured findings as GitLab diff threads.
+6. Post the new assistant reply on the request thread when the
+   comment has a discussion/thread id. If that reply fails, post
+   the same body as a new Overview note. Then post any
+   structured findings as GitLab diff threads (`/ask` never opens
+   those).
 7. Persist the same (or replacement) `session_id` on the workspace.
 
 | Command | Prompt on resume | If no prior session |
@@ -480,7 +483,8 @@ OSM-like: `job_id`, `mr_key`, status, live, serve pid/port, clone_path, session_
 5. Create or resume `ses_*`. Send `x-opencode-directory: <clone>`.
 6. POST the review prompt once. Drive until idle / timeout / hang / serve-dead. Retry per `OPENCODE_RETRY_COUNT` with OSM hang/resume rules (do not invent a blank session mid-job).
 7. Split findings JSON out of the last assistant text, or scrape
-   `####` titles. Format and post the markdown as an MR note.
+   backticked `#### N. \`path:lines\`` titles only. Format and
+   post the markdown as an MR note.
    Then post each finding as a GitLab diff discussion (best
    effort). On hard failure, post a short error note and skip
    threads.
@@ -505,7 +509,7 @@ On `close`/`merge`:
 - Diff: prompt contains merge-base + `--stat` + paths, never the full unified diff; GitLab `/changes` is not required.
 - Webhook handler: secret 401, immediate 200, background enqueue.
 - Worker with a fake OpenCode client: success posts a note; failure posts an error note; clone still exists after finish.
-- Findings: `opencoderman-findings` JSON is stripped from the note when present; otherwise `####` titles supply path/lines. Each valid finding becomes a discussion; a 400 from GitLab does not fail the job. Rebase: merge-base is the **new** target tip for mapping, but discussion SHAs still come from MR `diff_refs`.
+- Findings: `opencoderman-findings` JSON is stripped from the note when present; otherwise only backticked `#### N. \`path:lines\`` titles supply path/lines. A heading without backticks is not a finding. Each valid finding becomes a discussion; a 400 from GitLab does not fail the job. Rebase: merge-base is the **new** target tip for mapping; discussion positions try that SHA first.
 - Large-file discussions: one thread per planted line in a 1000+ line file (no OpenCode).
 - Live OpenCode review (`tests/test_opencode_review.py`) is skipped unless `CREASY_LIVE_OPENCODE=1`.
 - Cancel: running job is killed and next queued job for that MR starts; cancelling a queued job does not touch the runner; cancel-all-for-MR leaves the clone on disk.

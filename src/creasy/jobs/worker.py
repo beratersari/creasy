@@ -71,6 +71,26 @@ class RunResult:
     findings_posted: int = 0
 
 
+def discussion_sha_attempts(result: RunResult) -> list[tuple[str, str]]:
+    """GitLab discussion SHAs. Live merge-base first so line numbers match the diff.
+
+    GitLab ``diff_refs`` can be empty, or still hold the previous version
+    for a moment after a rebase. The review itself is always
+    ``git diff <merge-base>...HEAD``. Positions must use that same left
+    side first. GitLab's stored pair is only a fallback.
+    """
+    merge = (result.merge_base or "").strip()
+    gitlab_base = (result.base_sha or "").strip()
+    gitlab_start = (result.start_sha or gitlab_base or "").strip()
+    pairs: list[tuple[str, str]] = []
+    if merge:
+        pairs.append((merge, merge))
+    gitlab = (gitlab_base, gitlab_start or gitlab_base)
+    if gitlab[0] and gitlab not in pairs:
+        pairs.append(gitlab)
+    return pairs
+
+
 class JobRunner(Protocol):
     def run(self, job: JobRecord, should_stop: Callable[[], bool]) -> RunResult: ...
 
@@ -828,13 +848,20 @@ class OpenCodeRunner:
                     continue
                 variants = [context]
             else:
-                variants = build_position_variants(
-                    finding,
-                    diffmap,
-                    base_sha=result.base_sha or result.merge_base,
-                    start_sha=result.start_sha or result.base_sha or result.merge_base,
-                    head_sha=result.sha,
-                )
+                variants = []
+                seen: list[dict] = []
+                for base_sha, start_sha in discussion_sha_attempts(result):
+                    for item in build_position_variants(
+                        finding,
+                        diffmap,
+                        base_sha=base_sha,
+                        start_sha=start_sha,
+                        head_sha=result.sha,
+                    ):
+                        if item in seen:
+                            continue
+                        seen.append(item)
+                        variants.append(item)
                 if not variants:
                     logger.warning(
                         "skip finding job=%s path=%s lines=%s-%s: no GitLab position",

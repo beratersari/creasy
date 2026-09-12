@@ -19,7 +19,9 @@ These look like bugs. They are not.
 1. **The product of a job is one MR note plus optional diff threads.**
    Last assistant markdown (findings JSON stripped) as the Overview
    note, or a reply on the request thread when the comment has a
-   discussion/thread id. Then one Discussions-API thread per structured finding
+   discussion/thread id. If that thread reply fails, post the same
+   body as a new Overview note (job still succeeds). Then one
+   Discussions-API thread per structured finding
    (`path` + line range). A later review that matches an existing
    unresolved Creasy thread replies there, unless the last Creasy
    note is ≥ 90% similar (Ratcliff-Obershelp / token Jaccard /
@@ -28,8 +30,9 @@ These look like bugs. They are not.
    thread does not fail the job. After a successful GitLab review
    or open job, mark the token user as `reviewed` (not approved)
    so Re-request appears. A failed submit does not fail the job.
-   `/ask` replies on the request thread only and does not open new
-   diff threads. Posted replies do not quote the previous comment
+   `/ask` prefers a reply on the request thread and does not open
+   new diff threads. A failed thread reply still posts an Overview
+   note. Posted replies do not quote the previous comment
    and do not @mention anyone. The previous comment is only in the
    model prompt.
    `/ask` and Azure jobs do not change reviewer state. No git push.
@@ -37,7 +40,8 @@ These look like bugs. They are not.
    `close` / `merge`. A finished review keeps the tree so the next
    `/ask` or a later review can resume `ses_*` on the same path.
 3. **Each comment is a new job.** New `job_id`. `@mention /ask`
-   starts a serve, one prompt, one thread reply, then kill that serve.
+   starts a serve, one prompt, one thread reply (Overview if that
+   reply fails), then kill that serve.
    `/ask` never opens new diff threads. `@mention /review` (or `/ask`
    text that explicitly asks for a new review) is a full or
    thread-focused review and may open findings threads. A mention
@@ -60,6 +64,15 @@ These look like bugs. They are not.
    boxes are expected. Every `httpx` client uses `verify=False`.
    Git uses `http.sslVerify=false` and `GIT_SSL_NO_VERIFY=1`.
    Do not turn verification back on without a custom-CA path.
+8. **Diff threads need a fence or backticked titles.** Prefer an
+   `opencoderman-findings` fence. Otherwise only
+   `#### N. \`path:lines\` — title` headings become threads.
+   A heading without backticks is Overview text only. Do not
+   scrape `#### 1. path — title`.
+9. **Azure PAT identity is resolved once per process.** A failed
+   `current_user` is not retried. Set `REVIEW_MENTION` if TFS
+   identity is flaky. Do not call identity on every webhook
+   after the first miss.
 
 ## Hard rules
 
@@ -102,7 +115,8 @@ These look like bugs. They are not.
   `close` / `merge` → cancel jobs and delete the clone.
 - Note on a merge request: require `@<token-username>` (or a
   `REVIEW_MENTION` alias) **and** `/ask` or `/review` in the same
-  comment. `@name /ask <question>` → follow-up, reply only.
+  comment. `@name /ask <question>` → follow-up, reply on that
+  thread, or a new Overview note if the reply fails.
   `@name /review` → review (thread-focused when the comment is a
   reply). Empty `@name /ask` → ignore. Empty `@name /review` still
   runs. Mention without `/ask` or `/review` → usage note on that
@@ -120,6 +134,9 @@ These look like bugs. They are not.
   `creasy.azure`, and `job.provider=azure`. Empty
   `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT` means Azure is off. Do
   not fold Azure classify into `creasy.gitlab.events`.
+  PAT identity (`current_user`) is resolved once per process. A
+  failed lookup is not retried; set `REVIEW_MENTION` if TFS
+  identity is flaky.
 
 ### Jobs and concurrency
 
