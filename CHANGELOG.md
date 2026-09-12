@@ -9,6 +9,39 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.13 — 2026-09-12
+
+Reviews stay on the live merge-base after a rebase. Finding threads
+follow the Turkish Overview.
+
+### Added
+
+- After a GitLab rebase, Creasy waits until the MR `sha` actually
+  moves before checking out the tree.
+
+### Changed
+
+- If a thread reply fails, the same answer is posted as an Overview
+  note. `/ask` still does not open new diff threads.
+- The code-reviewer agent writes Turkish `title` and `body` in the
+  findings fence so diff threads match the Overview.
+- Diff threads still require an `opencoderman-findings` fence or
+  backticked `#### N. \`path:lines\`` titles. Bare path headings
+  stay Overview-only.
+- Azure PAT identity is still resolved once per process. Set
+  `REVIEW_MENTION` if TFS identity fails at boot.
+
+### Fixed
+
+- Diff-thread positions use the live `git merge-base` first, not a
+  stale GitLab `diff_refs.base_sha`.
+- `@name /ask do a review of this lock?` stays a follow-up. Only
+  phrasing like `do a new review` or `do a full review` starts a
+  review.
+- A later review still matches an existing finding thread when the
+  `<!-- creasy-finding -->` mark is missing or HTML-escaped. Turkish
+  `**Kritik**` / `**Önemli**` headers count as Creasy threads.
+
 ## 0.9.12 — 2026-09-12
 
 Finding threads match the Turkish review note. A usage reply no
