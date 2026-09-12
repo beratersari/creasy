@@ -6,6 +6,7 @@ intercept; no custom-CA path yet).
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from urllib.parse import quote
@@ -15,6 +16,11 @@ import httpx
 from creasy.logging import get_logger, log_fail, log_ok
 
 logger = get_logger("gitlab")
+
+# After GitLab's rebase API, GET can report rebase_in_progress=false while
+# sha / diff_refs are still the pre-rebase commits for one poll.
+REBASE_SETTLE_TIMEOUT = 15.0
+REBASE_SETTLE_INTERVAL = 0.25
 
 
 def _http_detail(exc: Exception) -> tuple[int, str]:
@@ -136,17 +142,65 @@ class GitLabClient:
 
     def get_merge_request(self, project_id: int, mr_iid: int) -> MergeRequest:
         path = f"/projects/{project_id}/merge_requests/{mr_iid}"
-        try:
-            response = self._http.get(path)
-            response.raise_for_status()
-        except httpx.HTTPError as exc:
-            status, detail = _http_detail(exc)
-            log_fail(logger, "gitlab GET MR", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
-            raise GitLabError(f"fetch MR failed: {exc}") from exc
-        data = response.json()
-        refs = data.get("diff_refs") or {}
-        source = data.get("source") or {}
-        last = data.get("sha") or (data.get("diff_refs") or {}).get("head_sha") or ""
+        params = {"include_rebase_in_progress": "true"}
+        deadline = time.time() + max(0.0, float(REBASE_SETTLE_TIMEOUT))
+        sha_while_rebasing = ""
+        data: dict[str, Any] = {}
+        while True:
+            try:
+                response = self._http.get(path, params=params)
+                response.raise_for_status()
+            except httpx.HTTPError as exc:
+                status, detail = _http_detail(exc)
+                log_fail(logger, "gitlab GET MR", project=project_id, mr=mr_iid, http=status, err=exc, body=detail)
+                raise GitLabError(f"fetch MR failed: {exc}") from exc
+            data = response.json() if response.content else {}
+            if not isinstance(data, dict):
+                data = {}
+            sha = str(data.get("sha") or (data.get("diff_refs") or {}).get("head_sha") or "")
+            rebasing = bool(data.get("rebase_in_progress"))
+            if rebasing:
+                sha_while_rebasing = sha or sha_while_rebasing
+                if time.time() >= deadline:
+                    log_fail(logger, "gitlab GET MR", project=project_id, mr=mr_iid, reason="rebase still running")
+                    break
+                time.sleep(max(0.01, float(REBASE_SETTLE_INTERVAL)))
+                continue
+            if sha_while_rebasing and sha == sha_while_rebasing:
+                if time.time() >= deadline:
+                    log_fail(
+                        logger,
+                        "gitlab GET MR",
+                        project=project_id,
+                        mr=mr_iid,
+                        reason="rebase done but sha unchanged",
+                    )
+                    break
+                time.sleep(max(0.01, float(REBASE_SETTLE_INTERVAL)))
+                continue
+            break
+        mr = self._merge_request_from_payload(data, project_id)
+        if not mr.pipeline_status:
+            self._attach_latest_pipeline(mr)
+        log_ok(
+            logger,
+            "gitlab GET MR",
+            project=mr.project_id,
+            mr=mr.iid,
+            title=mr.title,
+            sha=mr.sha or "-",
+            source=mr.source_branch or "-",
+            target=mr.target_branch or "-",
+            draft=mr.draft,
+            state=mr.state or "-",
+            pipeline=mr.pipeline_status or "-",
+        )
+        return mr
+
+    def _merge_request_from_payload(self, data: dict[str, Any], project_id: int) -> MergeRequest:
+        refs = data.get("diff_refs") if isinstance(data.get("diff_refs"), dict) else {}
+        source = data.get("source") if isinstance(data.get("source"), dict) else {}
+        last = data.get("sha") or refs.get("head_sha") or ""
         http_url = (
             source.get("http_url_to_repo")
             or source.get("git_http_url")
@@ -156,7 +210,7 @@ class GitLabClient:
         pipe = data.get("head_pipeline") or data.get("pipeline") or {}
         if not isinstance(pipe, dict):
             pipe = {}
-        mr = MergeRequest(
+        return MergeRequest(
             project_id=int(data.get("target_project_id") or project_id),
             iid=int(data["iid"]),
             title=str(data.get("title") or ""),
@@ -175,22 +229,6 @@ class GitLabClient:
             pipeline_status=str(pipe.get("status") or "").strip(),
             pipeline_url=str(pipe.get("web_url") or "").strip(),
         )
-        if not mr.pipeline_status:
-            self._attach_latest_pipeline(mr)
-        log_ok(
-            logger,
-            "gitlab GET MR",
-            project=mr.project_id,
-            mr=mr.iid,
-            title=mr.title,
-            sha=mr.sha or "-",
-            source=mr.source_branch or "-",
-            target=mr.target_branch or "-",
-            draft=mr.draft,
-            state=mr.state or "-",
-            pipeline=mr.pipeline_status or "-",
-        )
-        return mr
 
     def _attach_latest_pipeline(self, mr: MergeRequest) -> None:
         path = f"/projects/{mr.project_id}/merge_requests/{mr.iid}/pipelines"
