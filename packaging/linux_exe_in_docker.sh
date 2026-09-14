@@ -20,10 +20,11 @@ curl -fsSL \
   -o "${UV_DIR}/uv.tgz"
 tar -xzf "${UV_DIR}/uv.tgz" -C "${UV_DIR}"
 UV_BIN="$(find "${UV_DIR}" -type f -name uv | head -n 1)"
-if [ -z "${UV_BIN}" ] || [ ! -x "${UV_BIN}" ]; then
+if [ -z "${UV_BIN}" ]; then
   echo "failed to unpack musl uv ${UV_VER}" >&2
   exit 1
 fi
+chmod +x "${UV_BIN}"
 
 docker run --rm \
   -e DEBIAN_FRONTEND=noninteractive \
