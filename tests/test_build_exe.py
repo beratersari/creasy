@@ -77,6 +77,45 @@ def test_zip_contains_exe_config_opencoderman_and_scripts(tmp_path: Path) -> Non
 
 def test_zip_name() -> None:
     assert _load().zip_name("0.3.0", "linux-x64") == "creasy-0.3.0-linux-x64.zip"
+    assert _load().zip_name("0.3.0", "linux-ubuntu-22.04-x64") == "creasy-0.3.0-linux-ubuntu-22.04-x64.zip"
+
+
+def test_drop_bundled_libz() -> None:
+    import importlib.util
+
+    path = REPO / "packaging" / "exe_zips.py"
+    spec = importlib.util.spec_from_file_location("creasy_exe_zips", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.drop_bundled_libz("libz.so.1")
+    assert mod.drop_bundled_libz("/usr/lib/x86_64-linux-gnu/libz.so.1")
+    assert mod.drop_bundled_libz("libz.so.1.2.11")
+    assert not mod.drop_bundled_libz("libssl.so.3")
+    assert not mod.drop_bundled_libz("libpython3.11.so.1.0")
+    assert mod.drop_portable_system_lib("libssl.so.3")
+    assert mod.drop_portable_system_lib("libcrypto.so.1.1")
+    assert not mod.drop_portable_system_lib("libpython3.11.so.1.0")
+    assert mod.release_suffixes() == [
+        "windows-x64",
+        "linux-ubuntu-18.04-x64",
+        "linux-ubuntu-20.04-x64",
+        "linux-ubuntu-22.04-x64",
+        "linux-ubuntu-24.04-x64",
+        "linux-x64",
+        "darwin-arm64",
+    ]
+
+
+def test_pyinstaller_spec_omits_libz_on_linux(tmp_path: Path) -> None:
+    spec = tmp_path / "creasy.spec"
+    _load().write_pyinstaller_spec(REPO, spec)
+    text = spec.read_text(encoding="utf-8")
+    if __import__("sys").platform.startswith("linux"):
+        assert "libz.so.1" in text
+        assert "runtime_tmpdir='.'" in text
+    else:
+        assert "runtime_tmpdir=None" in text
 
 
 def test_assert_rejects_extra_files(tmp_path: Path) -> None:

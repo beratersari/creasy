@@ -351,18 +351,22 @@ directly. Do not treat a git tag as the product.
 6. The `release` workflow (`packaging/build_exe.py --zip`) must
    publish a **GitHub Release**. The job is not done until
    `https://github.com/beratersari/creasy/releases/tag/vX.Y.Z`
-   exists, the body lists only these three executable zips, and
+   exists, the body lists only these executable zips, and
    each zip holds the binary, `.env.example`,
    `opencoderman/agents`, `opencoderman/skills`, and
    `install-review-agent.bat` / `.sh`:
    `creasy-X.Y.Z-windows-x64.zip` (`creasy.exe`),
-   `creasy-X.Y.Z-linux-x64.zip` (`creasy`),
+   `creasy-X.Y.Z-linux-ubuntu-18.04-x64.zip` (`creasy`),
+   `creasy-X.Y.Z-linux-ubuntu-20.04-x64.zip` (`creasy`),
+   `creasy-X.Y.Z-linux-ubuntu-22.04-x64.zip` (`creasy`),
+   `creasy-X.Y.Z-linux-ubuntu-24.04-x64.zip` (`creasy`),
+   `creasy-X.Y.Z-linux-x64.zip` (`creasy`, same as Ubuntu 22.04),
    `creasy-X.Y.Z-darwin-arm64.zip` (`creasy`).
    Do not attach the offline CPython/OpenCode/rg packs or the
    tag “Source code” zip as the operator download. Do not wait
    on `macos-13` / `darwin-x64` — GitHub no longer assigns that
    runner, and a queued Intel job blocks publish.
-7. Point operators at those three zips. **Never** expired Actions
+7. Point operators at those zips. **Never** expired Actions
    artifacts. Offline CPython packs stay CI-only
    (`packaging/build_dist.py`).
 
@@ -378,7 +382,11 @@ full `~/.opencode` replace installer in the exe zip.
 | Zip | Must contain |
 |---|---|
 | windows-x64 | `creasy.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-18.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-20.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-22.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-24.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-x64 | same contents as `linux-ubuntu-22.04-x64` |
 | darwin-arm64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
 
 ### Offline pack paths CI must assert

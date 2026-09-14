@@ -48,12 +48,17 @@ def test_release_notes_extract():
     notes = mod.downloads_body("0.3.0")
     assert "creasy-0.3.0-windows-x64.zip" in notes
     assert "creasy-0.3.0-linux-x64.zip" in notes
+    assert "creasy-0.3.0-linux-ubuntu-18.04-x64.zip" in notes
+    assert "creasy-0.3.0-linux-ubuntu-20.04-x64.zip" in notes
+    assert "creasy-0.3.0-linux-ubuntu-22.04-x64.zip" in notes
+    assert "creasy-0.3.0-linux-ubuntu-24.04-x64.zip" in notes
     assert "creasy-0.3.0-darwin-arm64.zip" in notes
     assert "creasy-0.3.0-darwin-x64.zip" not in notes
     assert "windows-linux" not in notes
     assert "Source code" not in notes
     assert "opencoderman" in notes
     assert "install-review-agent" in notes
+    assert "Ubuntu 22.04" in notes
 
 
 def test_write_version_roundtrip(tmp_path: Path):

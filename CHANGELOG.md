@@ -9,6 +9,25 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.15 — 2026-09-14
+
+Linux operators download a zip built on their Ubuntu. The old
+single `linux-x64` zip was Ubuntu 24.04 and failed to start on
+other hosts.
+
+### Added
+
+- Linux executable zips are built on Ubuntu 18.04, 20.04, 22.04,
+  and 24.04. Pick `creasy-*-linux-ubuntu-<version>-x64.zip`.
+  `linux-x64` is the Ubuntu 22.04 build.
+
+### Fixed
+
+- The Linux onefile no longer bundles `libz.so.1`. That library
+  failed to map on some hosts (`failed to map segment from shared
+  object`). Remaining `.so` files unpack next to the binary, not
+  on a noexec `/tmp`.
+
 ## 0.9.14 — 2026-09-14
 
 GitLab identity misses no longer stall later comment webhooks. A
