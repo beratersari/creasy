@@ -41,17 +41,17 @@ def _plant_root(tmp_path: Path) -> Path:
 
 
 def test_zip_contains_exe_config_opencoderman_and_scripts(tmp_path: Path) -> None:
-    exe = tmp_path / "creasy.exe"
+    exe = tmp_path / "mireviewer.exe"
     cfg = tmp_path / ".env.example"
     exe.write_bytes(b"exe")
     cfg.write_text("PORT=9001\n", encoding="utf-8")
-    dest = tmp_path / "creasy-0.3.0-windows-x64.zip"
+    dest = tmp_path / "mireviewer-0.3.0-windows-x64.zip"
     mod = _load()
     mod.write_exe_zip(exe, cfg, dest, root=_plant_root(tmp_path))
-    mod.assert_exe_zip(dest, expect_exe="creasy.exe")
+    mod.assert_exe_zip(dest, expect_exe="mireviewer.exe")
     with zipfile.ZipFile(dest) as zf:
         names = set(zf.namelist())
-    assert "creasy.exe" in names
+    assert "mireviewer.exe" in names
     assert ".env.example" in names
     assert "install-review-agent.bat" in names
     assert "install-review-agent.sh" in names
@@ -64,7 +64,7 @@ def test_zip_contains_exe_config_opencoderman_and_scripts(tmp_path: Path) -> Non
     assert not any(name.startswith("opencoderman/vendor/") for name in names)
     assert all(
         name in {
-            "creasy.exe",
+            "mireviewer.exe",
             ".env.example",
             "install-review-agent.bat",
             "install-review-agent.sh",
@@ -76,8 +76,8 @@ def test_zip_contains_exe_config_opencoderman_and_scripts(tmp_path: Path) -> Non
 
 
 def test_zip_name() -> None:
-    assert _load().zip_name("0.3.0", "linux-x64") == "creasy-0.3.0-linux-x64.zip"
-    assert _load().zip_name("0.3.0", "linux-ubuntu-22.04-x64") == "creasy-0.3.0-linux-ubuntu-22.04-x64.zip"
+    assert _load().zip_name("0.3.0", "linux-x64") == "mireviewer-0.3.0-linux-x64.zip"
+    assert _load().zip_name("0.3.0", "linux-ubuntu-22.04-x64") == "mireviewer-0.3.0-linux-ubuntu-22.04-x64.zip"
 
 
 def test_drop_bundled_libz() -> None:
@@ -108,7 +108,7 @@ def test_drop_bundled_libz() -> None:
 
 
 def test_pyinstaller_spec_omits_libz_on_linux(tmp_path: Path) -> None:
-    spec = tmp_path / "creasy.spec"
+    spec = tmp_path / "mireviewer.spec"
     _load().write_pyinstaller_spec(REPO, spec)
     text = spec.read_text(encoding="utf-8")
     if __import__("sys").platform.startswith("linux"):
@@ -121,7 +121,7 @@ def test_pyinstaller_spec_omits_libz_on_linux(tmp_path: Path) -> None:
 def test_assert_rejects_extra_files(tmp_path: Path) -> None:
     dest = tmp_path / "bad.zip"
     with zipfile.ZipFile(dest, "w") as zf:
-        zf.writestr("creasy", "x")
+        zf.writestr("mireviewer", "x")
         zf.writestr(".env.example", "y")
         zf.writestr("install-review-agent.bat", "b")
         zf.writestr("install-review-agent.sh", "s")
@@ -129,7 +129,7 @@ def test_assert_rejects_extra_files(tmp_path: Path) -> None:
         zf.writestr("opencoderman/skills/secrets/SKILL.md", "k")
         zf.writestr("README.txt", "no")
     try:
-        _load().assert_exe_zip(dest, expect_exe="creasy")
+        _load().assert_exe_zip(dest, expect_exe="mireviewer")
     except SystemExit:
         return
     raise AssertionError("expected SystemExit")
@@ -138,10 +138,10 @@ def test_assert_rejects_extra_files(tmp_path: Path) -> None:
 def test_assert_requires_review_agent(tmp_path: Path) -> None:
     dest = tmp_path / "bad.zip"
     with zipfile.ZipFile(dest, "w") as zf:
-        zf.writestr("creasy", "x")
+        zf.writestr("mireviewer", "x")
         zf.writestr(".env.example", "y")
     try:
-        _load().assert_exe_zip(dest, expect_exe="creasy")
+        _load().assert_exe_zip(dest, expect_exe="mireviewer")
     except SystemExit as exc:
         assert "code-reviewer.md" in str(exc)
         return

@@ -6,12 +6,12 @@ import ctypes
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.store import JobStore
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.review.findings import Finding
-from creasy.workspace.gitops import DiffIndex
-from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.store import JobStore
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.review.findings import Finding
+from mireviewer.workspace.gitops import DiffIndex
+from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 from test_fixes import SpyGitlab, _job, _mr
 
 
@@ -28,7 +28,7 @@ def _fake_os(monkeypatch, module, name: str) -> None:
 
 
 def test_windows_cwd_branches(monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     _fake_os(monkeypatch, k, "nt")
     monkeypatch.setattr(k, "protected_pids", lambda: set())
@@ -136,7 +136,7 @@ def test_windows_cwd_branches(monkeypatch):
 
 
 def test_rm_query_pids_branches(monkeypatch, tmp_path):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     _fake_os(monkeypatch, k, "nt")
     monkeypatch.setattr(k, "_win_rstrtmgr", lambda: (_ for _ in ()).throw(OSError("no")))
@@ -213,9 +213,9 @@ def test_worker_ensure_workspace_and_more(tmp_config, tmp_path, monkeypatch):
     dest = tmp_config.work_dir / job.mr_key
     dest.mkdir(parents=True)
     (dest / "junk").write_text("x", encoding="utf-8")
-    monkeypatch.setattr("creasy.jobs.worker.delete_clone", lambda p: None)
-    monkeypatch.setattr("creasy.jobs.worker.clone_repo", lambda *a, **k: None)
-    monkeypatch.setattr("creasy.jobs.worker.fetch_and_checkout", lambda *a, **k: "sha")
+    monkeypatch.setattr("mireviewer.jobs.worker.delete_clone", lambda p: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.clone_repo", lambda *a, **k: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.fetch_and_checkout", lambda *a, **k: "sha")
     rec = runner._ensure_workspace(job, _mr(http_url="https://gl/r.git"), lambda: False)
     assert rec.last_sha == "sha"
     az_job = _job(provider="azure", azure_project="p", azure_repo="r", mr_key="9-9")
@@ -232,7 +232,7 @@ def test_worker_ensure_workspace_and_more(tmp_config, tmp_path, monkeypatch):
     result = RunResult(posted=False, cancelled=True)
     runner._post_note(_job(), result)
     result = RunResult(text="ok", clone_path=str(dest), merge_base="b")
-    monkeypatch.setattr("creasy.jobs.worker.unified_diff", lambda *a, **k: "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-old\n+new\n")
+    monkeypatch.setattr("mireviewer.jobs.worker.unified_diff", lambda *a, **k: "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-old\n+new\n")
     gitlab.post_discussion = MagicMock(return_value={})
     gitlab.list_discussions = MagicMock(return_value=[])
     runner._post_discussions(
@@ -240,7 +240,7 @@ def test_worker_ensure_workspace_and_more(tmp_config, tmp_path, monkeypatch):
         result,
         [Finding(path="a.py", start_line=1, end_line=1, side="new", severity="low", title="t", body="b")],
     )
-    from creasy.review.position import CREASY_FINDING_MARK
+    from mireviewer.review.position import CREASY_FINDING_MARK
 
     gitlab.list_discussions = MagicMock(
         return_value=[
@@ -265,8 +265,8 @@ def test_worker_ensure_workspace_and_more(tmp_config, tmp_path, monkeypatch):
 
 
 def test_end_and_manager_remainders(tmp_config, tmp_path, monkeypatch):
-    from creasy.cleanup import end as endmod
-    from creasy.jobs.manager import Manager
+    from mireviewer.cleanup import end as endmod
+    from mireviewer.jobs.manager import Manager
     from conftest import FakeRunner
 
     job = JobRecord(job_id="job_e", mr_key="1-1", project_id=1, mr_iid=1, trigger="review", extra_pids=[1])
@@ -312,7 +312,7 @@ def test_end_and_manager_remainders(tmp_config, tmp_path, monkeypatch):
 
 
 def test_azure_events_and_webhook_remainders():
-    from creasy.azure.events import (
+    from mireviewer.azure.events import (
         apply_live_reviewers,
         azure_collection_hint,
         azure_is_reviewer_list_event,

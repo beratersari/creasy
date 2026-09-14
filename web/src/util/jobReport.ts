@@ -119,7 +119,7 @@ function partMarkdown(part: ChatPart): string[] {
 
 function gitExplanation(job: JobItem): string {
   return [
-    'Creasy keeps the clone with the MR until close or merge.',
+    'MIReviewer keeps the clone with the MR until close or merge.',
     'A finished job kills the serve but leaves the tree so a later review or /ask can resume ses_*.',
     '',
     `clone_path: ${job.clone_path || '(none recorded)'}`,
@@ -176,7 +176,7 @@ function processFiles(input: JobReportInput): Record<string, string> {
 
 function readme(kind: 'job' | 'general', job?: JobItem | null): string {
   const lines = [
-    'Creasy issue report',
+    'MIReviewer issue report',
     '',
     `Kind: ${kind}`,
     '',

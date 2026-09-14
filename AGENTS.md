@@ -1,10 +1,16 @@
-# AGENTS.md — Creasy
+# AGENTS.md — MIReviewer
 
 This file is binding for anyone implementing or changing this repo.
 The longer design lives in [plan.md](plan.md). If this file and the
 plan disagree, **fix the plan** — do not invent a third design.
 
-Creasy is a GitLab-triggered code review service. A webhook starts a
+The product brand is **MIReviewer**. The Python package is
+`mireviewer`. Webhooks are `POST /mireviewer/webhook/gitlab` and
+`POST /mireviewer/webhook/azure` (old `/creasy/webhook/*` paths
+still work). Executable zips are `mireviewer-X.Y.Z-*.zip`. Scripts
+may send `X-MIReviewer-Token` (`X-Creasy-Token` is still accepted).
+
+MIReviewer is a GitLab-triggered code review service. A webhook starts a
 job. The job clones the MR branch, runs one `opencode serve`, and posts
 the last assistant message as an MR note plus one GitLab diff thread
 per structured finding.
@@ -78,11 +84,11 @@ These look like bugs. They are not.
 
 ### Webhook
 
-- `POST /creasy/webhook/gitlab` acks immediately. Never hold that
+- `POST /mireviewer/webhook/gitlab` acks immediately. Never hold that
   socket for clone or OpenCode.
 - Verify `X-Gitlab-Token` against `WEBHOOK_SECRET` when the secret is
   set. Missing/wrong → **401**.
-- Classify in `creasy.gitlab.events`. Do not re-parse payloads in the
+- Classify in `mireviewer.gitlab.events`. Do not re-parse payloads in the
   worker.
 - MR `open` → enqueue review only if the token user (`.env`
   `GITLAB_TOKEN` / `AZURE_DEVOPS_PAT`) or a `REVIEW_MENTION` alias
@@ -130,10 +136,10 @@ These look like bugs. They are not.
 - The webhook is the **only** job producer. The dashboard must not
   start a review.
 - Azure DevOps Server is optional and isolated. GitLab routes stay
-  GitLab-only. Azure uses `POST /creasy/webhook/azure`,
-  `creasy.azure`, and `job.provider=azure`. Empty
+  GitLab-only. Azure uses `POST /mireviewer/webhook/azure`,
+  `mireviewer.azure`, and `job.provider=azure`. Empty
   `AZURE_DEVOPS_URL` / `AZURE_DEVOPS_PAT` means Azure is off. Do
-  not fold Azure classify into `creasy.gitlab.events`.
+  not fold Azure classify into `mireviewer.gitlab.events`.
   PAT identity (`current_user`) is resolved once per process. A
   failed lookup is not retried; set `REVIEW_MENTION` if TFS
   identity is flaky.
@@ -230,7 +236,7 @@ These look like bugs. They are not.
   `DASHBOARD_TOKEN` alone), require login on dashboard routes.
   The SPA shows a login page. A successful login sets an httpOnly
   session cookie. Do not put the password in the URL or localStorage.
-  `DASHBOARD_TOKEN` remains an optional `X-Creasy-Token` / Bearer
+  `DASHBOARD_TOKEN` remains an optional `X-MIReviewer-Token` / Bearer
   header for scripts. Do not send `GITLAB_TOKEN` to the browser.
 
 ### Code layout
@@ -239,12 +245,12 @@ Keep packages honest:
 
 | Package | Owns |
 |---|---|
-| `creasy.gitlab` | Webhook classify, GitLab HTTP |
-| `creasy.workspace` | `mr_key`, clone path, fetch/checkout, merge-base, delete |
-| `creasy.jobs` | Store, FIFO, dispatch, worker |
-| `creasy.opencode` | Serve + session drive |
-| `creasy.review` | Prompt text, MR note markdown, findings JSON |
-| `creasy.api` | HTTP only — no review logic |
+| `mireviewer.gitlab` | Webhook classify, GitLab HTTP |
+| `mireviewer.workspace` | `mr_key`, clone path, fetch/checkout, merge-base, delete |
+| `mireviewer.jobs` | Store, FIFO, dispatch, worker |
+| `mireviewer.opencode` | Serve + session drive |
+| `mireviewer.review` | Prompt text, MR note markdown, findings JSON |
+| `mireviewer.api` | HTTP only — no review logic |
 
 Do not put OpenCode calls in the webhook handler. Do not put GitLab
 note or discussion posting in `opencode/`.
@@ -346,7 +352,7 @@ directly. Do not treat a git tag as the product.
    doc/CI tweak that belongs to that version).
 4. Open a PR/MR into `main`. Merge it.
 5. On the merged `main` tip: annotated tag only
-   `git tag -a vX.Y.Z -m "Creasy X.Y.Z"` then
+   `git tag -a vX.Y.Z -m "MIReviewer X.Y.Z"` then
    `git push origin vX.Y.Z`. Tag name matches `VERSION`.
 6. The `release` workflow (`packaging/build_exe.py --zip`) must
    publish a **GitHub Release**. The job is not done until
@@ -355,13 +361,13 @@ directly. Do not treat a git tag as the product.
    each zip holds the binary, `.env.example`,
    `opencoderman/agents`, `opencoderman/skills`, and
    `install-review-agent.bat` / `.sh`:
-   `creasy-X.Y.Z-windows-x64.zip` (`creasy.exe`),
-   `creasy-X.Y.Z-linux-ubuntu-18.04-x64.zip` (`creasy`),
-   `creasy-X.Y.Z-linux-ubuntu-20.04-x64.zip` (`creasy`),
-   `creasy-X.Y.Z-linux-ubuntu-22.04-x64.zip` (`creasy`),
-   `creasy-X.Y.Z-linux-ubuntu-24.04-x64.zip` (`creasy`),
-   `creasy-X.Y.Z-linux-x64.zip` (`creasy`, same as Ubuntu 22.04),
-   `creasy-X.Y.Z-darwin-arm64.zip` (`creasy`).
+   `mireviewer-X.Y.Z-windows-x64.zip` (`mireviewer.exe`),
+   `mireviewer-X.Y.Z-linux-ubuntu-18.04-x64.zip` (`mireviewer`),
+   `mireviewer-X.Y.Z-linux-ubuntu-20.04-x64.zip` (`mireviewer`),
+   `mireviewer-X.Y.Z-linux-ubuntu-22.04-x64.zip` (`mireviewer`),
+   `mireviewer-X.Y.Z-linux-ubuntu-24.04-x64.zip` (`mireviewer`),
+   `mireviewer-X.Y.Z-linux-x64.zip` (`mireviewer`, same as Ubuntu 22.04),
+   `mireviewer-X.Y.Z-darwin-arm64.zip` (`mireviewer`).
    Do not attach the offline CPython/OpenCode/rg packs or the
    tag “Source code” zip as the operator download. Do not wait
    on `macos-13` / `darwin-x64` — GitHub no longer assigns that
@@ -381,13 +387,13 @@ full `~/.opencode` replace installer in the exe zip.
 
 | Zip | Must contain |
 |---|---|
-| windows-x64 | `creasy.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-ubuntu-18.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-ubuntu-20.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-ubuntu-22.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
-| linux-ubuntu-24.04-x64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| windows-x64 | `mireviewer.exe`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-18.04-x64 | `mireviewer`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-20.04-x64 | `mireviewer`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-22.04-x64 | `mireviewer`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| linux-ubuntu-24.04-x64 | `mireviewer`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
 | linux-x64 | same contents as `linux-ubuntu-22.04-x64` |
-| darwin-arm64 | `creasy`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
+| darwin-arm64 | `mireviewer`, `.env.example`, `install-review-agent.bat`, `install-review-agent.sh`, `opencoderman/agents/code-reviewer.md`, `opencoderman/skills/*/SKILL.md` |
 
 ### Offline pack paths CI must assert
 

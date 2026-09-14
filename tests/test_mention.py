@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from creasy.review.mention import (
+from mireviewer.review.mention import (
     USAGE_MARKER,
     azure_mention_ids,
     collect_names,

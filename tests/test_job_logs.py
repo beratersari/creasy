@@ -5,11 +5,11 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.log_context import bound
-from creasy.logging import get_logger, log_fail, log_ok, read_job_log_lines, setup_logging
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.log_context import bound
+from mireviewer.logging import get_logger, log_fail, log_ok, read_job_log_lines, setup_logging
 from conftest import FakeRunner
 
 

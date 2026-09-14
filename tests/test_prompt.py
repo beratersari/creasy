@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from creasy.gitlab.client import MergeRequest
-from creasy.review.prompt import build_ask_prompt, build_review_prompt, build_thread_review_prompt
-from creasy.workspace.gitops import DiffIndex
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.review.prompt import build_ask_prompt, build_review_prompt, build_thread_review_prompt
+from mireviewer.workspace.gitops import DiffIndex
 
 
 def _mr(**kwargs) -> MergeRequest:
@@ -128,7 +128,7 @@ def test_review_prompt_marks_draft_and_clips_long_description():
 
 
 def test_hang_resume_is_not_the_review_prompt():
-    from creasy.review.prompt import hang_resume_prompt
+    from mireviewer.review.prompt import hang_resume_prompt
 
     text = hang_resume_prompt()
     assert "already posted" in text.lower()

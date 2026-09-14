@@ -21,11 +21,11 @@ from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.webhook import router as webhook_router
-from creasy.gitlab.client import GitLabClient
-from creasy.jobs.manager import Manager
-from creasy.jobs.worker import OpenCodeRunner, RunResult, discussion_sha_attempts
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.gitlab.client import GitLabClient
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult, discussion_sha_attempts
+from mireviewer.workspace.store import WorkspaceStore
 
 STUB = Path(__file__).resolve().parent / "support" / "opencode_serve_stub.py"
 
@@ -407,7 +407,7 @@ def test_rebase_stale_gitlab_sha_prompt_and_thread_use_live_merge_base(tmp_confi
     )
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -441,7 +441,7 @@ def test_matching_gitlab_sha_still_posts_on_the_feature_line(tmp_config, tmp_pat
     )
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -467,7 +467,7 @@ def test_empty_diff_refs_still_threads_from_live_merge_base(tmp_config, tmp_path
     client, manager, state, httpd = _boot(tmp_config, origin, shas, with_refs=False)
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -504,7 +504,7 @@ def test_target_moved_without_rebase_uses_old_fork_not_new_target_tip(tmp_config
     )
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )

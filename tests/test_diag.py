@@ -1,4 +1,4 @@
-from creasy.diag import merge_job_diag, safe_fields, safe_url
+from mireviewer.diag import merge_job_diag, safe_fields, safe_url
 
 
 def test_safe_url_strips_userinfo_and_query() -> None:

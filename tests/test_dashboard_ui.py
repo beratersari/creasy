@@ -7,9 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_osm_shell_branded_creasy() -> None:
     shell = (ROOT / "web" / "src" / "app" / "Shell.tsx").read_text(encoding="utf-8")
-    assert "Creasy" in shell
+    assert "MIReviewer" in shell
     assert "v{version}" in shell
-    assert 'vd-mark">CR' in shell
+    assert 'vd-mark">MI' in shell
     assert "Jobs" in shell
     assert "Settings" in shell
     assert shell.count("connectionLabel(") == 1
@@ -68,12 +68,12 @@ def test_dashboard_does_not_start_reviews() -> None:
 def test_vite_source_html_is_not_the_served_dashboard() -> None:
     src = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     assert "/src/main.tsx" in src
-    from creasy.api.dashboard import spa_dir
+    from mireviewer.api.dashboard import spa_dir
 
     assert spa_dir() == ROOT / "web" / "dist"
     dist = spa_dir() / "index.html"
     if dist.is_file():
         built = dist.read_text(encoding="utf-8")
-        assert "Creasy" in built
+        assert "MIReviewer" in built
         assert "/assets/" in built
         assert "/src/main.tsx" not in built

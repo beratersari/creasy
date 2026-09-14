@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 
 import pytest
 
-from creasy.azure.client import AzureError
-from creasy.azure.events import reset_reviewer_cache
+from mireviewer.azure.client import AzureError
+from mireviewer.azure.events import reset_reviewer_cache
 from test_azure_events import _pr
 from test_azure_reviewer_delta import ADDED_BOT, BOT, CHANGED
 from test_azure_webhook import FakeAzure, _app, _auth, _pr_with_bot
@@ -35,7 +35,7 @@ def test_comment_does_not_use_reviewer_cache(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     created = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
         headers=_auth(),
     )
@@ -44,7 +44,7 @@ def test_comment_does_not_use_reviewer_cache(tmp_config):
     thin = _pr()
     thin.pop("reviewers", None)
     comment = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {
@@ -58,7 +58,7 @@ def test_comment_does_not_use_reviewer_cache(tmp_config):
     runner.release.set()
     app.state.azure.reviewers = []
     later = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -80,7 +80,7 @@ def test_get_failure_does_not_start_a_review(tmp_config):
     app.state.azure.list_reviewers = boom
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -98,7 +98,7 @@ def test_removed_in_pr_title_does_not_block_real_assign(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[BOT])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -122,7 +122,7 @@ def test_fake_azure_is_used_for_get(tmp_config):
 
 
 def test_reviewer_get_retries_until_bot_listed(tmp_config, monkeypatch):
-    import creasy.api.webhook_azure as hook
+    import mireviewer.api.webhook_azure as hook
 
     monkeypatch.setattr(hook, "REVIEWER_GET_RETRY_DELAYS", (0, 0))
     app, manager, runner = _app(tmp_config)
@@ -132,7 +132,7 @@ def test_reviewer_get_retries_until_bot_listed(tmp_config, monkeypatch):
     ]
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -148,13 +148,13 @@ def test_reviewer_get_retries_until_bot_listed(tmp_config, monkeypatch):
 
 
 def test_reviewer_get_does_not_retry_remove(tmp_config, monkeypatch):
-    import creasy.api.webhook_azure as hook
+    import mireviewer.api.webhook_azure as hook
 
     monkeypatch.setattr(hook, "REVIEWER_GET_RETRY_DELAYS", (0, 0))
     app, manager, runner = _app(tmp_config, reviewers=[{"id": "alice", "displayName": "Alice"}])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -169,7 +169,7 @@ def test_reviewer_get_does_not_retry_remove(tmp_config, monkeypatch):
 
 
 def test_reviewer_get_retries_transient_failure(tmp_config, monkeypatch):
-    import creasy.api.webhook_azure as hook
+    import mireviewer.api.webhook_azure as hook
 
     monkeypatch.setattr(hook, "REVIEWER_GET_RETRY_DELAYS", (0,))
     app, manager, runner = _app(tmp_config)
@@ -184,7 +184,7 @@ def test_reviewer_get_retries_transient_failure(tmp_config, monkeypatch):
     app.state.azure.list_reviewers = flaky
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -216,7 +216,7 @@ def test_host_only_env_rebases_from_pr_web_url(tmp_config):
     )
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",

@@ -77,12 +77,12 @@ if [[ -f "$ROOT/.env.example" && ! -f "$ROOT/.env" ]]; then
   echo "[WARNING] Wrote .env from .env.example. Set GITLAB_TOKEN and WEBHOOK_SECRET."
 fi
 
-echo "Starting Creasy (Ctrl+C to stop)..."
+echo "Starting MIReviewer (Ctrl+C to stop)..."
 mkdir -p "$ROOT/logs"
 set +e
-"$CREASY_PY" -m creasy
+"$CREASY_PY" -m mireviewer
 ec=$?
 set -e
-echo "Creasy exited. code=${ec}"
+echo "MIReviewer exited. code=${ec}"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) exit=${ec}" >> "$ROOT/logs/wrapper-exit.log"
 exit "$ec"

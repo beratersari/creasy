@@ -1,4 +1,4 @@
-from creasy.review.ask import ask_wants_new_review
+from mireviewer.review.ask import ask_wants_new_review
 
 
 def test_plain_question_is_not_a_new_review() -> None:

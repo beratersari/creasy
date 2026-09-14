@@ -24,17 +24,17 @@ from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.webhook import router as webhook_router
-from creasy.gitlab.client import GitLabClient
-from creasy.gitlab.events import ReviewTrigger
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.queue import JobQueue
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.review.ask import ask_wants_new_review
-from creasy.review.findings import split_findings
-from creasy.review.mention import comment_intent
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.gitlab.client import GitLabClient
+from mireviewer.gitlab.events import ReviewTrigger
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.queue import JobQueue
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.review.ask import ask_wants_new_review
+from mireviewer.review.findings import split_findings
+from mireviewer.review.mention import comment_intent
+from mireviewer.workspace.store import WorkspaceStore
 
 STUB = Path(__file__).resolve().parent / "support" / "opencode_persist_delay_serve.py"
 
@@ -404,7 +404,7 @@ def test_finding_discussion_position_uses_stale_gitlab_base_sha_after_rebase(
     try:
         assert shas["stale"] != shas["live"]
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -433,7 +433,7 @@ def test_finding_ask_reply_failure_posts_a_new_overview(tmp_config, tmp_path: Pa
     state.reply_status = 404
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_note_body("@creasy-bot /ask why is dest 8 bytes?", discussion_id="disc_user"),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -446,7 +446,7 @@ def test_finding_ask_reply_failure_posts_a_new_overview(tmp_config, tmp_path: Pa
         assert state.replies == []
         assert state.notes, "failed thread reply fell back to a new overview note"
         assert "ASK_ANSWER_MARKER" in state.notes[0]["body"]
-        assert "Creasy" in state.notes[0]["body"]
+        assert "MIReviewer" in state.notes[0]["body"]
     finally:
         _shutdown(manager, httpd)
 
@@ -466,7 +466,7 @@ def test_ask_do_a_review_of_this_lock_stays_an_ask(tmp_config, tmp_path: Path):
     )
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_note_body(
                 f"@creasy-bot /ask {question}",
                 discussion_id="disc_user",
@@ -497,7 +497,7 @@ def test_finding_markdown_title_without_backticks_opens_no_thread(
     )
     try:
         res = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -526,7 +526,7 @@ def test_finding_resumed_session_posts_previous_review_when_prompt_async_is_slow
     )
     try:
         first = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_assign_body(),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -536,7 +536,7 @@ def test_finding_resumed_session_posts_previous_review_when_prompt_async_is_slow
         assert "FIRST_REVIEW_MARKER" in state.notes[0]["body"]
 
         second = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_note_body("@creasy-bot /review", discussion_id="disc_user"),
             headers={"X-Gitlab-Token": "secret"},
         )
@@ -556,7 +556,7 @@ def test_finding_azure_current_user_never_retries_after_first_failure() -> None:
     """Intentional: Azure current_user is once per process (AGENTS.md).
     A failed first lookup is not retried.
     """
-    from creasy.azure.client import AzureClient
+    from mireviewer.azure.client import AzureClient
 
     hits = {"n": 0, "fail": True}
 

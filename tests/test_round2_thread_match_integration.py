@@ -15,15 +15,15 @@ from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.webhook import router as webhook_router
-from creasy.gitlab.client import GitLabClient
-from creasy.jobs.manager import Manager
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.opencode.session import looks_like_review
-from creasy.review.position import CREASY_FINDING_MARK, format_discussion
-from creasy.review.findings import Finding
-from creasy.review.threads import is_creasy_finding_body, parse_creasy_thread
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.gitlab.client import GitLabClient
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.opencode.session import looks_like_review
+from mireviewer.review.position import CREASY_FINDING_MARK, format_discussion
+from mireviewer.review.findings import Finding
+from mireviewer.review.threads import is_creasy_finding_body, parse_creasy_thread
+from mireviewer.workspace.store import WorkspaceStore
 
 STUB = Path(__file__).resolve().parent / "support" / "opencode_serve_stub.py"
 
@@ -322,7 +322,7 @@ def _shutdown(manager, httpd):
 def test_second_review_reuses_thread_when_kritik_mark_is_stripped(tmp_config, tmp_path: Path):
     client, manager, state, httpd = _boot(tmp_config, tmp_path, strip_mark=True)
     try:
-        first = client.post("/creasy/webhook/gitlab", json=_assign(), headers={"X-Gitlab-Token": "secret"})
+        first = client.post("/mireviewer/webhook/gitlab", json=_assign(), headers={"X-Gitlab-Token": "secret"})
         job1 = _wait(manager, first.json()["job_id"])
         assert job1.status == "success", job1.error_message
         assert len(state.discussions) == 1
@@ -331,7 +331,7 @@ def test_second_review_reuses_thread_when_kritik_mark_is_stripped(tmp_config, tm
         assert CREASY_FINDING_MARK not in body
 
         second = client.post(
-            "/creasy/webhook/gitlab", json=_note_review(), headers={"X-Gitlab-Token": "secret"}
+            "/mireviewer/webhook/gitlab", json=_note_review(), headers={"X-Gitlab-Token": "secret"}
         )
         job2 = _wait(manager, second.json()["job_id"])
         assert job2.status == "success", job2.error_message
@@ -343,14 +343,14 @@ def test_second_review_reuses_thread_when_kritik_mark_is_stripped(tmp_config, tm
 def test_second_review_reuses_thread_when_html_mark_is_kept(tmp_config, tmp_path: Path):
     client, manager, state, httpd = _boot(tmp_config, tmp_path, strip_mark=False)
     try:
-        first = client.post("/creasy/webhook/gitlab", json=_assign(), headers={"X-Gitlab-Token": "secret"})
+        first = client.post("/mireviewer/webhook/gitlab", json=_assign(), headers={"X-Gitlab-Token": "secret"})
         job1 = _wait(manager, first.json()["job_id"])
         assert job1.status == "success", job1.error_message
         assert len(state.discussions) == 1
         assert CREASY_FINDING_MARK in state.discussions[0]["notes"][0]["body"]
 
         second = client.post(
-            "/creasy/webhook/gitlab", json=_note_review(), headers={"X-Gitlab-Token": "secret"}
+            "/mireviewer/webhook/gitlab", json=_note_review(), headers={"X-Gitlab-Token": "secret"}
         )
         job2 = _wait(manager, second.json()["job_id"])
         assert job2.status == "success", job2.error_message

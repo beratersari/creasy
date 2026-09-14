@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from creasy.gitlab.client import MergeRequest
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.review.findings import extract_markdown_findings
-from creasy.workspace.gitops import clone_repo, fetch_and_checkout, resolve_merge_base, unified_diff
-from creasy.workspace.identity import clone_path_for
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.review.findings import extract_markdown_findings
+from mireviewer.workspace.gitops import clone_repo, fetch_and_checkout, resolve_merge_base, unified_diff
+from mireviewer.workspace.identity import clone_path_for
+from mireviewer.workspace.store import WorkspaceStore
 from planted import init_planted_origin, review_markdown_for
 
 

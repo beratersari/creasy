@@ -28,10 +28,10 @@ export function Shell({ showLogout = false }: { showLogout?: boolean }) {
     <div className="vd-app">
       <aside className="vd-sidebar">
         <div className="vd-brand">
-          <div className="vd-mark">CR</div>
+          <div className="vd-mark">MI</div>
           <div>
             <div className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
-              <span>Creasy</span>
+              <span>MIReviewer</span>
               {version ? <span className="font-mono text-xs font-medium text-text-muted">v{version}</span> : null}
             </div>
             <div className="text-[11px] text-text-muted">

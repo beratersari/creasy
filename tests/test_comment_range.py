@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from creasy.review.comment_range import (
+from mireviewer.review.comment_range import (
     format_code_comment_prompt,
     parse_azure_thread_context,
     parse_gitlab_position,
 )
-from creasy.review.mention import user_comment_text
+from mireviewer.review.mention import user_comment_text
 
 
 def test_parse_gitlab_line_range() -> None:

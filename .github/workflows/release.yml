@@ -51,8 +51,8 @@ jobs:
       - name: Upload zip
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
           if-no-files-found: error
 
   exe-linux:
@@ -85,19 +85,19 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          cp "dist/exe/creasy-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/creasy-${v}-linux-x64.zip"
+          cp "dist/exe/mireviewer-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/mireviewer-${v}-linux-x64.zip"
       - name: Upload Ubuntu zip
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
           if-no-files-found: error
       - name: Upload linux-x64 alias
         if: matrix.ubuntu == '22.04'
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-x64.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-linux-x64.zip
           if-no-files-found: error
 
   publish:
@@ -114,7 +114,7 @@ jobs:
       - name: Download executable zips
         uses: actions/download-artifact@v4
         with:
-          pattern: creasy-${{ steps.ver.outputs.version }}-*
+          pattern: mireviewer-${{ steps.ver.outputs.version }}-*
           path: dist/exe
           merge-multiple: true
       - name: Assert only exe zips
@@ -124,7 +124,7 @@ jobs:
           for suffix in windows-x64 darwin-arm64 linux-x64 \
             linux-ubuntu-18.04-x64 linux-ubuntu-20.04-x64 \
             linux-ubuntu-22.04-x64 linux-ubuntu-24.04-x64; do
-            test -f "dist/exe/creasy-${v}-${suffix}.zip"
+            test -f "dist/exe/mireviewer-${v}-${suffix}.zip"
           done
           test "$(ls -1 dist/exe/*.zip | wc -l)" = "7"
       - name: Write release notes
@@ -133,13 +133,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          name: Creasy ${{ steps.ver.outputs.version }}
+          name: MIReviewer ${{ steps.ver.outputs.version }}
           body_path: release-notes.md
           files: |
-            dist/exe/creasy-*-windows-x64.zip
-            dist/exe/creasy-*-linux-x64.zip
-            dist/exe/creasy-*-linux-ubuntu-*-x64.zip
-            dist/exe/creasy-*-darwin-arm64.zip
+            dist/exe/mireviewer-*-windows-x64.zip
+            dist/exe/mireviewer-*-linux-x64.zip
+            dist/exe/mireviewer-*-linux-ubuntu-*-x64.zip
+            dist/exe/mireviewer-*-darwin-arm64.zip
           fail_on_unmatched_files: true
           make_latest: true
           generate_release_notes: false

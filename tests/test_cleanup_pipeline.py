@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from creasy.cleanup.end import delete_clone_path, stop_job_holders
-from creasy.cleanup.kill import (
+from mireviewer.cleanup.end import delete_clone_path, stop_job_holders
+from mireviewer.cleanup.kill import (
     drop_git_locks,
     kill_job_tree,
     kill_pid,
@@ -26,8 +26,8 @@ from creasy.cleanup.kill import (
     text_mentions_root,
     windows_cwd_candidate,
 )
-from creasy.cleanup.rmtree import hard_delete, win_extended_path, win_reserved_stem, windows_rd_cmd
-from creasy.jobs.models import JobRecord
+from mireviewer.cleanup.rmtree import hard_delete, win_extended_path, win_reserved_stem, windows_rd_cmd
+from mireviewer.jobs.models import JobRecord
 
 
 def _fake_windows_os(monkeypatch, module) -> None:
@@ -138,7 +138,7 @@ def test_may_kill_never_allows_manager_or_system() -> None:
 
 
 def test_kill_pid_never_sends_signal_to_manager(monkeypatch) -> None:
-    import creasy.cleanup.kill as killmod
+    import mireviewer.cleanup.kill as killmod
 
     spawned: list[object] = []
     monkeypatch.setattr(
@@ -160,7 +160,7 @@ def test_kill_pid_never_sends_signal_to_manager(monkeypatch) -> None:
 
 def test_kill_job_tree_refuses_self_ppid_and_junk(monkeypatch) -> None:
     killed: list[int] = []
-    import creasy.cleanup.kill as killmod
+    import mireviewer.cleanup.kill as killmod
 
     monkeypatch.setattr(killmod, "kill_pid", lambda pid: killed.append(int(pid)))
     kill_job_tree([None, 0, 1, 4, os.getpid(), os.getppid(), "nope", -3])
@@ -183,7 +183,7 @@ def test_windows_cwd_candidate_is_clone_tools_only() -> None:
 
 
 def test_iter_windows_processes_does_not_snapshot(monkeypatch, tmp_path: Path) -> None:
-    from creasy.cleanup import kill as killmod
+    from mireviewer.cleanup import kill as killmod
 
     spawned: list[object] = []
 
@@ -210,7 +210,7 @@ def test_iter_windows_processes_does_not_snapshot(monkeypatch, tmp_path: Path) -
 
 
 def test_rm_session_key_buffer_is_cch_plus_one() -> None:
-    from creasy.cleanup import kill as killmod
+    from mireviewer.cleanup import kill as killmod
 
     assert killmod._CCH_RM_SESSION_KEY == 32
     assert killmod._RM_SESSION_KEY_CHARS == 33
@@ -220,7 +220,7 @@ def test_rm_session_key_buffer_is_cch_plus_one() -> None:
 
 @pytest.mark.skipif(os.name != "nt", reason="Restart Manager is Windows-only")
 def test_windows_restart_manager_session_key_does_not_av(tmp_path: Path) -> None:
-    from creasy.cleanup.kill import _rm_query_pids, _windows_restart_manager_pids
+    from mireviewer.cleanup.kill import _rm_query_pids, _windows_restart_manager_pids
 
     clone = tmp_path / "9-17"
     clone.mkdir()
@@ -229,7 +229,7 @@ def test_windows_restart_manager_session_key_does_not_av(tmp_path: Path) -> None
 
 
 def test_restart_manager_helper_failure_does_not_raise(tmp_path: Path, monkeypatch) -> None:
-    from creasy.cleanup import kill as killmod
+    from mireviewer.cleanup import kill as killmod
 
     _fake_windows_os(monkeypatch, killmod)
     monkeypatch.delenv("OSM_RM_INPROCESS", raising=False)
@@ -242,7 +242,7 @@ def test_restart_manager_helper_failure_does_not_raise(tmp_path: Path, monkeypat
 
 
 def test_stop_job_holders_windows_skips_rm_until_delete(tmp_path: Path, monkeypatch) -> None:
-    from creasy.cleanup import end as endmod
+    from mireviewer.cleanup import end as endmod
 
     called: list[str] = []
     _fake_windows_os(monkeypatch, endmod)
@@ -304,11 +304,11 @@ def test_stop_job_holders_survives_reap_error(tmp_path: Path, monkeypatch) -> No
         called["holders"] = True
         return 0
 
-    monkeypatch.setattr("creasy.cleanup.end.reap_path", boom)
-    monkeypatch.setattr("creasy.cleanup.end.kill_file_holders", holders)
-    monkeypatch.setattr("creasy.cleanup.end.path_has_holders", lambda *_a, **_k: False)
+    monkeypatch.setattr("mireviewer.cleanup.end.reap_path", boom)
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_file_holders", holders)
+    monkeypatch.setattr("mireviewer.cleanup.end.path_has_holders", lambda *_a, **_k: False)
     monkeypatch.setattr(
-        "creasy.cleanup.end.drop_git_locks",
+        "mireviewer.cleanup.end.drop_git_locks",
         lambda *_a, **_k: called.setdefault("locks", True),
     )
     clone = tmp_path / "X-1"
@@ -332,8 +332,8 @@ def test_hard_delete_removes_tree(tmp_path: Path) -> None:
 
 
 def test_delete_skips_rm_when_folder_already_gone(tmp_path: Path, monkeypatch) -> None:
-    from creasy.cleanup import end as endmod
-    from creasy.cleanup.kill import RmHelperResult
+    from mireviewer.cleanup import end as endmod
+    from mireviewer.cleanup.kill import RmHelperResult
 
     dest = tmp_path / "gone"
     dest.mkdir()
@@ -351,8 +351,8 @@ def test_delete_skips_rm_when_folder_already_gone(tmp_path: Path, monkeypatch) -
 def test_rm_retry_only_when_helper_died_and_folder_remains(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from creasy.cleanup import end as endmod
-    from creasy.cleanup.kill import RmHelperResult
+    from mireviewer.cleanup import end as endmod
+    from mireviewer.cleanup.kill import RmHelperResult
 
     dest = tmp_path / "stuck"
     dest.mkdir()
@@ -390,8 +390,8 @@ def test_rm_retry_only_when_helper_died_and_folder_remains(
 def test_rm_no_second_child_when_helper_survives_empty(
     tmp_path: Path, monkeypatch
 ) -> None:
-    from creasy.cleanup import end as endmod
-    from creasy.cleanup.kill import RmHelperResult
+    from mireviewer.cleanup import end as endmod
+    from mireviewer.cleanup.kill import RmHelperResult
 
     dest = tmp_path / "stuck2"
     dest.mkdir()

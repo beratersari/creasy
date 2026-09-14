@@ -11,21 +11,21 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.report import (
+from mireviewer.api.report import (
     read_capped_text,
     _cli_version,
     _opencode_cli_logs,
     _recent_fail_lines,
     _serve_log_names,
 )
-from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
-from creasy.api.webhook_azure import router as azure_router
-from creasy.jobs.manager import Manager
-from creasy.review.comment_range import parse_azure_thread_context, parse_gitlab_position
-from creasy.review.findings import Finding, extract_markdown_findings, split_findings, _coerce, _parse_block
-from creasy.review.position import build_position_variants, format_discussion, line_code
-from creasy.review.similarity import _char_ngrams, _jaccard, should_skip_similar_reply, text_similarity
-from creasy.review.threads import (
+from mireviewer.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
+from mireviewer.api.webhook_azure import router as azure_router
+from mireviewer.jobs.manager import Manager
+from mireviewer.review.comment_range import parse_azure_thread_context, parse_gitlab_position
+from mireviewer.review.findings import Finding, extract_markdown_findings, split_findings, _coerce, _parse_block
+from mireviewer.review.position import build_position_variants, format_discussion, line_code
+from mireviewer.review.similarity import _char_ngrams, _jaccard, should_skip_similar_reply, text_similarity
+from mireviewer.review.threads import (
     is_creasy_finding_body,
     match_creasy_thread,
     parse_creasy_thread,
@@ -33,9 +33,9 @@ from creasy.review.threads import (
     _as_line,
     _range_from_position,
 )
-from creasy.workspace.diffmap import parse_unified_diff
-from creasy.workspace.gitops import GitError, _run_git, clone_repo, delete_clone, fetch_and_checkout, resolve_merge_base
-from creasy.workspace.identity import IdentityError, clone_path_for, mr_key
+from mireviewer.workspace.diffmap import parse_unified_diff
+from mireviewer.workspace.gitops import GitError, _run_git, clone_repo, delete_clone, fetch_and_checkout, resolve_merge_base
+from mireviewer.workspace.identity import IdentityError, clone_path_for, mr_key
 from conftest import FakeRunner
 from test_azure_webhook import FakeAzure, _auth
 
@@ -144,14 +144,14 @@ def test_report_and_mimetypes(tmp_config, tmp_path, monkeypatch):
     blob = read_capped_text(big, max_bytes=5)
     assert blob["truncated"]
     read_capped_text(None, max_bytes=10)
-    monkeypatch.setattr("creasy.api.report.shutil.which", lambda b: "/bin/x")
+    monkeypatch.setattr("mireviewer.api.report.shutil.which", lambda b: "/bin/x")
     monkeypatch.setattr(
-        "creasy.api.report.subprocess.run",
+        "mireviewer.api.report.subprocess.run",
         lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError()),
     )
     assert "error" in _cli_version("nope")
     monkeypatch.setattr(
-        "creasy.api.report.subprocess.run",
+        "mireviewer.api.report.subprocess.run",
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")),
     )
     assert "error" in _cli_version("git")
@@ -159,7 +159,7 @@ def test_report_and_mimetypes(tmp_config, tmp_path, monkeypatch):
     logs.mkdir()
     (logs / "a.log").write_text("x", encoding="utf-8")
     (logs / "b.log").write_text("y", encoding="utf-8")
-    monkeypatch.setattr("creasy.api.report.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("mireviewer.api.report.Path.home", lambda: tmp_path)
     (tmp_path / ".opencode" / "log").mkdir(parents=True)
     (tmp_path / ".opencode" / "log" / "c.log").write_text("z", encoding="utf-8")
     _opencode_cli_logs()
@@ -186,39 +186,39 @@ def test_webhook_azure_auth_and_bot(tmp_config):
     app.state.azure_bot_user_id = None
     app.include_router(azure_router)
     client = TestClient(app)
-    assert client.post("/creasy/webhook/azure", json={}).status_code == 401
-    assert client.post("/creasy/webhook/azure", json={}, headers={"Authorization": "Basic !!!"}).status_code == 401
-    assert client.post("/creasy/webhook/azure", json={}, headers=_auth("wrong")).status_code == 401
-    assert client.post("/creasy/webhook/azure", json={}, headers=_auth("secret", "wrong")).status_code == 401
+    assert client.post("/mireviewer/webhook/azure", json={}).status_code == 401
+    assert client.post("/mireviewer/webhook/azure", json={}, headers={"Authorization": "Basic !!!"}).status_code == 401
+    assert client.post("/mireviewer/webhook/azure", json={}, headers=_auth("wrong")).status_code == 401
+    assert client.post("/mireviewer/webhook/azure", json={}, headers=_auth("secret", "wrong")).status_code == 401
     app.state.azure = None
     app.state.azure_bot_user_id = None
-    client.post("/creasy/webhook/azure", json={"eventType": "x"}, headers=_auth("secret", "hook"))
+    client.post("/mireviewer/webhook/azure", json={"eventType": "x"}, headers=_auth("secret", "hook"))
     az = FakeAzure()
     az.current_user_id = lambda: "bot-id"
     az.current_user = lambda: {"names": ["creasy"]}
     app.state.azure = az
     app.state.azure_bot_user_id = None
     app.state.azure_bot_mention_names = []
-    client.post("/creasy/webhook/azure", json={"eventType": "git.pullrequest.updated"}, headers=_auth("secret", "hook"))
+    client.post("/mireviewer/webhook/azure", json={"eventType": "git.pullrequest.updated"}, headers=_auth("secret", "hook"))
     runner.release.set()
     manager.shutdown()
 
 
 def test_gitops_errors(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "creasy.workspace.gitops.subprocess.run",
+        "mireviewer.workspace.gitops.subprocess.run",
         lambda *a, **k: (_ for _ in ()).throw(__import__("subprocess").TimeoutExpired("git", 1)),
     )
     with pytest.raises(GitError):
         _run_git(["status"], cwd=tmp_path, timeout=1)
     monkeypatch.setattr(
-        "creasy.workspace.gitops.subprocess.run",
+        "mireviewer.workspace.gitops.subprocess.run",
         lambda *a, **k: (_ for _ in ()).throw(OSError("no git")),
     )
     with pytest.raises(GitError):
         _run_git(["status"], cwd=tmp_path, timeout=1)
     monkeypatch.setattr(
-        "creasy.workspace.gitops.subprocess.run",
+        "mireviewer.workspace.gitops.subprocess.run",
         lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="boom"),
     )
     with pytest.raises(GitError):
@@ -227,13 +227,13 @@ def test_gitops_errors(tmp_path, monkeypatch):
     with pytest.raises(GitError):
         _run_git(["status"], cwd=tmp_path, env=env, timeout=1)
     monkeypatch.setattr(
-        "creasy.workspace.gitops._run_git_killable",
+        "mireviewer.workspace.gitops._run_git_killable",
         lambda *a, **k: (_ for _ in ()).throw(GitError("cancelled")),
     )
     with pytest.raises(GitError):
         _run_git(["status"], cwd=tmp_path, timeout=1, should_stop=lambda: True)
     monkeypatch.setattr(
-        "creasy.workspace.gitops._run_git_killable",
+        "mireviewer.workspace.gitops._run_git_killable",
         lambda *a, **k: (_ for _ in ()).throw(GitError("other")),
     )
     with pytest.raises(GitError):
@@ -242,16 +242,16 @@ def test_gitops_errors(tmp_path, monkeypatch):
     dest.mkdir()
     with pytest.raises(GitError):
         clone_repo("https://h/r.git", dest, "tok", timeout=1)
-    monkeypatch.setattr("creasy.workspace.gitops._run_git", lambda *a, **k: (_ for _ in ()).throw(GitError("clone fail")))
-    monkeypatch.setattr("creasy.workspace.gitops.delete_clone", lambda p: None)
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git", lambda *a, **k: (_ for _ in ()).throw(GitError("clone fail")))
+    monkeypatch.setattr("mireviewer.workspace.gitops.delete_clone", lambda p: None)
     with pytest.raises(GitError):
         clone_repo("https://h/r.git", tmp_path / "new", "tok", timeout=1, auth_scheme="azure")
-    monkeypatch.setattr("creasy.cleanup.end.delete_clone_path", lambda *a, **k: False)
+    monkeypatch.setattr("mireviewer.cleanup.end.delete_clone_path", lambda *a, **k: False)
     stay = tmp_path / "stay"
     stay.mkdir()
     with pytest.raises(GitError):
         delete_clone(stay)
-    monkeypatch.setattr("creasy.workspace.gitops._run_git", lambda *a, **k: SimpleNamespace(returncode=0, stdout="base\n", stderr=""))
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git", lambda *a, **k: SimpleNamespace(returncode=0, stdout="base\n", stderr=""))
     try:
         resolve_merge_base(tmp_path, target_branch="main", preferred_base="", timeout=1)
     except Exception:
@@ -263,7 +263,7 @@ def test_gitops_errors(tmp_path, monkeypatch):
 
 
 def test_gitops_killable(tmp_path, monkeypatch):
-    from creasy.workspace import gitops as g
+    from mireviewer.workspace import gitops as g
 
     class FakeProc:
         pid = 99
@@ -302,8 +302,8 @@ def test_gitops_killable(tmp_path, monkeypatch):
 
 
 def test_dashboard_login_json_and_ws(tmp_config):
-    from creasy.api.dashboard import router
-    from creasy.jobs.models import JobRecord, mint_job_id
+    from mireviewer.api.dashboard import router
+    from mireviewer.jobs.models import JobRecord, mint_job_id
 
     tmp_config.dashboard_user = "u"
     tmp_config.dashboard_password = "p"

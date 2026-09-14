@@ -4,13 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from creasy.version import bump_version, parse_version, read_version, write_version
+from mireviewer.version import bump_version, parse_version, read_version, write_version
 
 
 def test_read_version_matches_repo_file():
     expected = (Path(__file__).resolve().parents[1] / "VERSION").read_text(encoding="utf-8").strip()
     assert read_version() == expected
-    from creasy import __version__
+    from mireviewer import __version__
 
     assert __version__ == expected
 
@@ -46,14 +46,14 @@ def test_release_notes_extract():
     text = "## 0.2.0 — x\n\nHello.\n\n## 0.1.0\n\nOld.\n"
     assert mod.extract(text, "0.2.0") == "## 0.2.0 — x\n\nHello.\n"
     notes = mod.downloads_body("0.3.0")
-    assert "creasy-0.3.0-windows-x64.zip" in notes
-    assert "creasy-0.3.0-linux-x64.zip" in notes
-    assert "creasy-0.3.0-linux-ubuntu-18.04-x64.zip" in notes
-    assert "creasy-0.3.0-linux-ubuntu-20.04-x64.zip" in notes
-    assert "creasy-0.3.0-linux-ubuntu-22.04-x64.zip" in notes
-    assert "creasy-0.3.0-linux-ubuntu-24.04-x64.zip" in notes
-    assert "creasy-0.3.0-darwin-arm64.zip" in notes
-    assert "creasy-0.3.0-darwin-x64.zip" not in notes
+    assert "mireviewer-0.3.0-windows-x64.zip" in notes
+    assert "mireviewer-0.3.0-linux-x64.zip" in notes
+    assert "mireviewer-0.3.0-linux-ubuntu-18.04-x64.zip" in notes
+    assert "mireviewer-0.3.0-linux-ubuntu-20.04-x64.zip" in notes
+    assert "mireviewer-0.3.0-linux-ubuntu-22.04-x64.zip" in notes
+    assert "mireviewer-0.3.0-linux-ubuntu-24.04-x64.zip" in notes
+    assert "mireviewer-0.3.0-darwin-arm64.zip" in notes
+    assert "mireviewer-0.3.0-darwin-x64.zip" not in notes
     assert "windows-linux" not in notes
     assert "Source code" not in notes
     assert "opencoderman" in notes

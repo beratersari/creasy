@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from creasy.review.findings import Finding
-from creasy.review.position import CREASY_FINDING_MARK, format_discussion
-from creasy.review.similarity import should_skip_similar_reply, text_similarity
-from creasy.review.threads import match_creasy_thread, parse_creasy_thread, parse_creasy_threads
+from mireviewer.review.findings import Finding
+from mireviewer.review.position import CREASY_FINDING_MARK, format_discussion
+from mireviewer.review.similarity import should_skip_similar_reply, text_similarity
+from mireviewer.review.threads import match_creasy_thread, parse_creasy_thread, parse_creasy_threads
 
 
 def _finding(**kwargs) -> Finding:

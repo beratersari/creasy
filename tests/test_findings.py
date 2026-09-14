@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.review.findings import split_findings
-from creasy.review.format import format_success
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.review.findings import split_findings
+from mireviewer.review.format import format_success
 
 
 def test_split_strips_opencoderman_findings_fence() -> None:

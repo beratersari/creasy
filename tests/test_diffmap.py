@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 
-from creasy.review.findings import Finding
-from creasy.review.position import build_position_variants, line_code
-from creasy.workspace.diffmap import parse_unified_diff
+from mireviewer.review.findings import Finding
+from mireviewer.review.position import build_position_variants, line_code
+from mireviewer.workspace.diffmap import parse_unified_diff
 
 ADDED = """diff --git a/src/buf.cpp b/src/buf.cpp
 new file mode 100644

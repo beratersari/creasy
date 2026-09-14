@@ -16,9 +16,9 @@ def test_start_scripts_match_osm_backend_pattern() -> None:
     assert "->" not in "\n".join(
         line for line in win.splitlines() if not line.strip().upper().startswith("REM")
     )
-    assert "-m creasy" in runner
+    assert "-m mireviewer" in runner
     assert "wrapper-exit.log" in runner
-    assert "-m creasy" in sh
+    assert "-m mireviewer" in sh
     assert "install-opencode" in win
     assert "install-opencode" in sh
     assert r"web\dist\index.html" in win

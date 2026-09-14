@@ -1,6 +1,6 @@
-# Creasy
+# MIReviewer
 
-Code review easy. GitLab or Azure DevOps webhooks trigger a deep OpenCode review of a merge request or pull request against the cloned codebase.
+GitLab or Azure DevOps webhooks trigger a deep OpenCode review of a merge request or pull request against the cloned codebase. The product is **MIReviewer** (`python -m mireviewer`). Old `/creasy/webhook/*` URLs and `X-Creasy-Token` still work.
 
 Agent rules and commit conventions: [AGENTS.md](AGENTS.md).
 OpenCode agents and skills live in
@@ -42,7 +42,7 @@ copy .env.example .env
 # set GITLAB_TOKEN, WEBHOOK_SECRET, OPENCODE_MODEL
 npm --prefix web install
 npm --prefix web run build
-python -m creasy
+python -m mireviewer
 ```
 
 Dashboard: http://127.0.0.1:9001/jobs  
@@ -51,8 +51,8 @@ Set `DASHBOARD_USER` and `DASHBOARD_PASSWORD` in `.env` so the
 dashboard shows a login page. Webhooks do not use those values.
 Model and timeout can be changed on Settings without editing `.env`;
 they persist in `DATA_DIR/settings.json` and apply to new jobs.  
-GitLab webhook: `POST /creasy/webhook/gitlab`  
-Azure webhook: `POST /creasy/webhook/azure`  
+GitLab webhook: `POST /mireviewer/webhook/gitlab`  
+Azure webhook: `POST /mireviewer/webhook/azure`  
 Health: `GET /health`
 
 The product version is the `VERSION` file (`/health` and `/api/meta` expose it).
@@ -60,12 +60,12 @@ Bump with `python scripts/bump_version.py minor`. What changed is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 Download **GitHub Release** executable zips
-(`creasy-<version>-windows-x64.zip`, `linux-ubuntu-22.04-x64`,
+(`mireviewer-<version>-windows-x64.zip`, `linux-ubuntu-22.04-x64`,
 `linux-ubuntu-24.04-x64`, `linux-ubuntu-20.04-x64`,
 `linux-ubuntu-18.04-x64`, `linux-x64` for Ubuntu 22.04,
 `darwin-arm64`), not the tag’s “Source code” zip. Pick the Linux
-zip that matches your Ubuntu. Each zip is one `creasy` /
-`creasy.exe`, `.env.example`, `opencoderman/agents`,
+zip that matches your Ubuntu. Each zip is one `mireviewer` /
+`mireviewer.exe`, `.env.example`, `opencoderman/agents`,
 `opencoderman/skills`, and `install-review-agent` scripts. Copy the
 example to `.env` next to the binary and run it. Reviews still need
 `opencode` on `PATH`. Run `install-review-agent.bat` (or `.sh`) once
@@ -75,29 +75,29 @@ replacing an existing OpenCode install.
 ## Webhooks
 
 The dashboard cannot start a review. GitLab and Azure each post to
-their own URL. Creasy must be reachable from the GitLab or Azure
+their own URL. MIReviewer must be reachable from the GitLab or Azure
 host, not only from your laptop.
 
 ### GitLab
 
 1. In the project or group: **Settings → Webhooks**.
-2. **URL:** `http://<creasy-host>:9001/creasy/webhook/gitlab`  
-   Use `https://` if Creasy is behind TLS. Do not use the Azure path.
+2. **URL:** `http://<host>:9001/mireviewer/webhook/gitlab`  
+   Use `https://` if MIReviewer is behind TLS. Do not use the Azure path.
 3. **Secret token:** the same value as `WEBHOOK_SECRET` in `.env`.  
    GitLab sends it as `X-Gitlab-Token`. A missing or wrong secret is **401**.
 4. Enable these triggers only:
    - **Merge request events** — `open` starts a review; `close` / `merge` cancel jobs and delete the clone; `update` and `reopen` are ignored.
    - **Comments** — `@<bot> /ask <question>`.
-5. If Creasy is plain HTTP or uses an intercept certificate, leave **Enable SSL verification** unchecked.
-6. Save, then **Test** with a Merge request hook. Creasy should answer immediately (`accepted`, `queued`, or `ignored`).
+5. If MIReviewer is plain HTTP or uses an intercept certificate, leave **Enable SSL verification** unchecked.
+6. Save, then **Test** with a Merge request hook. MIReviewer should answer immediately (`accepted`, `queued`, or `ignored`).
 
-`GITLAB_TOKEN` needs the `api` scope so Creasy can clone over HTTPS, post the overview note, and open diff threads. Use a dedicated bot user: notes from that user are ignored.
+`GITLAB_TOKEN` needs the `api` scope so MIReviewer can clone over HTTPS, post the overview note, and open diff threads. Use a dedicated bot user: notes from that user are ignored.
 
 ### Azure DevOps Server
 
 Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-only. GitLab webhook routes stay GitLab-only.
 
-1. In `.env` set the TFS application root and a PAT, then restart Creasy:
+1. In `.env` set the TFS application root and a PAT, then restart MIReviewer:
 
    ```env
    AZURE_DEVOPS_URL=https://tfs02.company.com.tr/tfs
@@ -106,7 +106,7 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    AZURE_WEBHOOK_PASSWORD=<independent-of-WEBHOOK_SECRET>
    ```
 
-   On-prem TFS: `https://<server>/tfs` is enough. Creasy reads the
+   On-prem TFS: `https://<server>/tfs` is enough. MIReviewer reads the
    collection from the webhook or PR URL. A collection URL still
    works. Do not use a project or `_git` URL.  
    The PAT needs **Code (Read)** and **Pull Request Threads (Read & write)**.  
@@ -114,9 +114,9 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
 2. In the Azure project: **Project settings → Service hooks → Create subscription**.
 3. Service: **Web Hooks**.
 4. Create **one subscription per event**, all with the same URL
-   `http://<creasy-host>:9001/creasy/webhook/azure`:
+   `http://<host>:9001/mireviewer/webhook/azure`:
 
-   | Service Hook event | What Creasy does |
+   | Service Hook event | What MIReviewer does |
    |---|---|
    | Pull request created | Enqueue a review if the PAT user is already a reviewer |
    | Pull request commented | `@<bot> /ask` or `/review`; mention without a command posts usage |
@@ -124,14 +124,14 @@ Optional. Leave `AZURE_DEVOPS_URL` and `AZURE_DEVOPS_PAT` empty to stay GitLab-o
    | Pull request merge attempted | Cancel jobs and delete the clone |
 
 5. On each subscription’s action page:
-   - **URL:** `http://<creasy-host>:9001/creasy/webhook/azure` — never a GitLab path.
+   - **URL:** `http://<host>:9001/mireviewer/webhook/azure` — never a GitLab path.
    - **Basic authentication username / password:** `AZURE_WEBHOOK_USER` and `AZURE_WEBHOOK_PASSWORD`.  
      If the password is set, a missing or wrong `Authorization` header is **401**.
    - Resource: the repo to review, or all repos in the project.
 6. Save and **Test** the created-PR subscription. Startup logs `azure_enabled=True` when the URL and PAT are set.
 
 **Known issue (Azure DevOps Server 2022.2):** TFS does not send add vs
-remove. Creasy GETs the live reviewer list and keeps it in process
+remove. MIReviewer GETs the live reviewer list and keeps it in process
 cache. After that, removing someone else while the bot stays does
 **not** start another review (the bot was already in the previous GET).
 The first hook after a process restart has no cache, so
@@ -139,7 +139,7 @@ The first hook after a process restart has no cache, so
 
 Empty `@<bot> /ask` is ignored. Draft MRs and PRs skip auto review when `SKIP_DRAFT_MRS=true`; an explicit `@<bot> /ask` or reviewer assign still runs.
 `@<bot>` is the GitLab username / Azure display name of the token user.
-Set `REVIEW_MENTION=creasy,Creasy Bot` to accept extra aliases.
+Set `REVIEW_MENTION=MIReviewer,MIReviewer Bot` to accept extra aliases.
 
 ## Triggers
 
@@ -158,7 +158,7 @@ Same commands on a GitLab merge request or an Azure pull request.
 
 A comment job replies on that comment’s thread when GitLab or Azure
 sends a discussion/thread id. Auto-open reviews still post the
-Overview on the MR/PR. If the thread reply fails, Creasy posts the
+Overview on the MR/PR. If the thread reply fails, MIReviewer posts the
 Overview instead.
 
 OpenCode is told the merge-base and `git diff --stat`. It is **not** given the full unified diff; it inspects the tree from the separation point itself.

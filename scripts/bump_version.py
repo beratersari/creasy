@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from creasy.version import bump_version, parse_version, read_version, version_path, write_version
+from mireviewer.version import bump_version, parse_version, read_version, version_path, write_version
 
 
 def main() -> int:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from creasy.azure.urls import identity_root, normalize_collection_url, resolve_collection_url
+from mireviewer.azure.urls import identity_root, normalize_collection_url, resolve_collection_url
 
 
 def test_identity_root_keeps_tfs_app_and_strips_collection() -> None:
@@ -46,7 +46,7 @@ def test_resolve_fills_collection_when_env_is_only_the_host() -> None:
 
 
 def test_looks_like_collection_root_without_git() -> None:
-    from creasy.azure.urls import looks_like_azure_resource
+    from mireviewer.azure.urls import looks_like_azure_resource
 
     assert looks_like_azure_resource("https://tfs02.company.com.tr/tfs/ExampleCollection/")
     assert not looks_like_azure_resource("https://tfs02.company.com.tr/tfs")

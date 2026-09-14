@@ -1,4 +1,7 @@
-# Creasy — Code Review Easy
+# MIReviewer
+
+The product brand is **MIReviewer**. The Python package is
+`mireviewer`. Webhooks live under `/mireviewer/webhook/`.
 
 A new GitLab-triggered code review service. It receives merge-request webhooks, runs a deep OpenCode analysis of the MR against the full cloned codebase, and posts the result as an MR comment plus optional inline diff threads. Concurrency and OpenCode process handling follow [opencode_manager](https://github.com/beratersari/opencode_manager). Webhook classification follows [gitlab_code_reviewer](https://github.com/beratersari/gitlab_code_reviewer). The clone is **not** deleted when a review job ends; it is deleted only when the MR is closed or merged.
 
@@ -25,14 +28,14 @@ The binding checklist is in [AGENTS.md](AGENTS.md)
 GitLab webhook
     │
     ▼
-POST /creasy/webhook/gitlab  (ack immediately)
+POST /mireviewer/webhook/gitlab  (ack immediately)
     │
     ├─ MR open
     │       └─ enqueue a review only if the token user / REVIEW_MENTION
     │          is already assigned as a reviewer
     ├─ Note on an MR that is `@mention /ask`
     │       └─ enqueue a follow-up on the same ses_* (question only, no full review prompt)
-    ├─ Azure DevOps POST /creasy/webhook/azure
+    ├─ Azure DevOps POST /mireviewer/webhook/azure
     │          (optional; GitLab routes stay GitLab-only)
     │       └─ PR created only if the PAT user / REVIEW_MENTION is a reviewer;
     │          @mention /ask; abandoned or merged cleans up;
@@ -358,7 +361,7 @@ Auth: dashboard routes require a login when `DASHBOARD_USER` +
 `DASHBOARD_PASSWORD` are set (or `DASHBOARD_TOKEN` alone). The SPA
 shows a username/password page; success sets an httpOnly session
 cookie. Scripts may still send `Authorization: Bearer …` or
-`X-Creasy-Token` matching `DASHBOARD_TOKEN`. If unset, the dashboard
+`X-MIReviewer-Token` matching `DASHBOARD_TOKEN`. If unset, the dashboard
 binds as open (dev only). Do not reuse `GITLAB_TOKEN` in the browser.
 Do not put the password in the URL.
 
@@ -373,12 +376,12 @@ creasy/
   pyproject.toml
   README.md
   .env.example
-  src/creasy/
+  src/mireviewer/
     __init__.py
     app.py                 # FastAPI + lifespan (boot / shutdown)
     config.py
     api/
-      webhook.py           # POST /creasy/webhook/gitlab
+      webhook.py           # POST /mireviewer/webhook/gitlab
       health.py            # GET /health
       dashboard.py         # GET /api/jobs, cancel
     dashboard/             # SPA adapter (OSM jobs-tab look)
@@ -447,8 +450,8 @@ Reference OSM modules while implementing `opencode/` and `jobs/`, then write Cre
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | ready, running/queued counts, workspace count |
-| `POST` | `/creasy/webhook/gitlab` | GitLab hook |
-| `POST` | `/creasy/webhook/azure` | Azure hook |
+| `POST` | `/mireviewer/webhook/gitlab` | GitLab hook |
+| `POST` | `/mireviewer/webhook/azure` | Azure hook |
 | `GET` | `/jobs` | Dashboard SPA |
 | `GET` | `/api/jobs` | List/filter jobs (`filter`, `mr_key`, page) |
 | `GET` | `/api/jobs/{job_id}` | Job detail + system logs |

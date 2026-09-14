@@ -18,11 +18,11 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
-import creasy.gitlab.client as gitlab_client
-from creasy.gitlab.client import GitLabClient
-from creasy.jobs.manager import Manager
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.workspace.store import WorkspaceStore
+import mireviewer.gitlab.client as gitlab_client
+from mireviewer.gitlab.client import GitLabClient
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.workspace.store import WorkspaceStore
 
 STUB = Path(__file__).resolve().parent / "support" / "opencode_serve_stub.py"
 
@@ -315,7 +315,7 @@ def test_worker_reviews_rebased_sha_not_the_stale_get(tmp_config, tmp_path: Path
     manager = Manager(tmp_config, runner, workspaces=workspaces)
     manager.boot()
     try:
-        from creasy.gitlab.events import ReviewTrigger
+        from mireviewer.gitlab.events import ReviewTrigger
 
         ack, job, _ = manager.submit(
             ReviewTrigger(

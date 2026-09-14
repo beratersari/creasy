@@ -6,16 +6,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from creasy.azure.client import AzureError
-from creasy.gitlab.client import MergeRequest
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.store import JobStore
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.opencode.serve import ServeHandle
-from creasy.opencode.session import OpenCodeError
-from creasy.review.findings import Finding
-from creasy.workspace.gitops import DiffIndex, GitError
-from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+from mireviewer.azure.client import AzureError
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.store import JobStore
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.opencode.serve import ServeHandle
+from mireviewer.opencode.session import OpenCodeError
+from mireviewer.review.findings import Finding
+from mireviewer.workspace.gitops import DiffIndex, GitError
+from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 from test_fixes import SpyGitlab, _job, _mr
 
 
@@ -259,17 +259,17 @@ def test_worker_post_discussions(tmp_config, tmp_path, monkeypatch):
     clone = tmp_path / "ws" / "1-1"
     clone.mkdir(parents=True)
     result = RunResult(clone_path=str(clone), merge_base="abc", sha="def", base_sha="abc", start_sha="abc")
-    monkeypatch.setattr("creasy.jobs.worker.unified_diff", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("diff")))
+    monkeypatch.setattr("mireviewer.jobs.worker.unified_diff", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("diff")))
     runner._post_discussions(
         job,
         result,
         [Finding(path="a.py", start_line=1, end_line=1, side="new", severity="low", title="t", body="b")],
     )
     monkeypatch.setattr(
-        "creasy.jobs.worker.unified_diff",
+        "mireviewer.jobs.worker.unified_diff",
         lambda *a, **k: "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,1 +1,1 @@\n-old\n+new\n",
     )
-    monkeypatch.setattr("creasy.jobs.worker.parse_unified_diff", lambda text: __import__("creasy.workspace.diffmap", fromlist=["parse_unified_diff"]).parse_unified_diff(text))
+    monkeypatch.setattr("mireviewer.jobs.worker.parse_unified_diff", lambda text: __import__("mireviewer.workspace.diffmap", fromlist=["parse_unified_diff"]).parse_unified_diff(text))
     runner._post_discussions(
         job,
         result,
@@ -338,17 +338,17 @@ def test_worker_run_mocked(tmp_config, tmp_path, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr("creasy.jobs.worker.start_serve", lambda **k: handle)
-    monkeypatch.setattr("creasy.jobs.worker.stop_serve", lambda h: None)
-    monkeypatch.setattr("creasy.jobs.worker.stop_job_holders", lambda *a, **k: None)
-    monkeypatch.setattr("creasy.jobs.worker.OpenCodeClient", FakeClient)
-    monkeypatch.setattr("creasy.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
-    monkeypatch.setattr("creasy.jobs.worker.diff_stat", lambda *a, **k: DiffIndex(merge_base="base", stat="a | 1", paths=["a.py"], statuses={}))
+    monkeypatch.setattr("mireviewer.jobs.worker.start_serve", lambda **k: handle)
+    monkeypatch.setattr("mireviewer.jobs.worker.stop_serve", lambda h: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.stop_job_holders", lambda *a, **k: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.OpenCodeClient", FakeClient)
+    monkeypatch.setattr("mireviewer.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
+    monkeypatch.setattr("mireviewer.jobs.worker.diff_stat", lambda *a, **k: DiffIndex(merge_base="base", stat="a | 1", paths=["a.py"], statuses={}))
     monkeypatch.setattr(
-        "creasy.jobs.worker.fetch_and_checkout",
+        "mireviewer.jobs.worker.fetch_and_checkout",
         lambda *a, **k: "newsha",
     )
-    monkeypatch.setattr("creasy.jobs.worker.clone_repo", lambda *a, **k: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.clone_repo", lambda *a, **k: None)
     job = _job()
     out = runner.run(job, lambda: False)
     assert out.session_id == "ses_1"
@@ -363,7 +363,7 @@ def test_worker_run_mocked(tmp_config, tmp_path, monkeypatch):
     out = runner.run(_job(), lambda: True)
     assert out.cancelled
     runner.gitlab = SpyGitlab()
-    monkeypatch.setattr("creasy.jobs.worker.resolve_merge_base", lambda *a, **k: (_ for _ in ()).throw(GitError("bad git")))
+    monkeypatch.setattr("mireviewer.jobs.worker.resolve_merge_base", lambda *a, **k: (_ for _ in ()).throw(GitError("bad git")))
     out = runner.run(_job(), lambda: False)
     assert "git" in out.error
     job = _job(provider="azure", azure_project="p", azure_repo="r")
@@ -382,7 +382,7 @@ def test_worker_run_mocked(tmp_config, tmp_path, monkeypatch):
 
     runner.azure.bind = lambda *a, **k: BoomBind()
     runner.gitlab = SpyGitlab()
-    monkeypatch.setattr("creasy.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
+    monkeypatch.setattr("mireviewer.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
     runner.run(_job(provider="azure", azure_project="p", azure_repo="r"), lambda: False)
 
 
@@ -429,13 +429,13 @@ def test_worker_run_retry_and_400(tmp_config, tmp_path, monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr("creasy.jobs.worker.start_serve", lambda **k: handle)
-    monkeypatch.setattr("creasy.jobs.worker.stop_serve", lambda h: None)
-    monkeypatch.setattr("creasy.jobs.worker.stop_job_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
-    monkeypatch.setattr("creasy.jobs.worker.OpenCodeClient", FakeClient)
-    monkeypatch.setattr("creasy.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
-    monkeypatch.setattr("creasy.jobs.worker.diff_stat", lambda *a, **k: DiffIndex(merge_base="base", stat="a | 1", paths=["a.py"], statuses={}))
-    monkeypatch.setattr("creasy.jobs.worker.fetch_and_checkout", lambda *a, **k: "sha")
+    monkeypatch.setattr("mireviewer.jobs.worker.start_serve", lambda **k: handle)
+    monkeypatch.setattr("mireviewer.jobs.worker.stop_serve", lambda h: None)
+    monkeypatch.setattr("mireviewer.jobs.worker.stop_job_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
+    monkeypatch.setattr("mireviewer.jobs.worker.OpenCodeClient", FakeClient)
+    monkeypatch.setattr("mireviewer.jobs.worker.resolve_merge_base", lambda *a, **k: "base")
+    monkeypatch.setattr("mireviewer.jobs.worker.diff_stat", lambda *a, **k: DiffIndex(merge_base="base", stat="a | 1", paths=["a.py"], statuses={}))
+    monkeypatch.setattr("mireviewer.jobs.worker.fetch_and_checkout", lambda *a, **k: "sha")
     job = _job(trigger="ask", comment_text="why?")
     out = runner.run(job, lambda: False)
     assert out.error or out.text
@@ -444,7 +444,7 @@ def test_worker_run_retry_and_400(tmp_config, tmp_path, monkeypatch):
         def list_messages(self, sid):
             raise OpenCodeError("dead", status_code=500)
 
-    monkeypatch.setattr("creasy.jobs.worker.OpenCodeClient", DeadClient)
+    monkeypatch.setattr("mireviewer.jobs.worker.OpenCodeClient", DeadClient)
     try:
         runner.run(_job(), lambda: False)
     except Exception:
@@ -463,7 +463,7 @@ def test_worker_run_retry_and_400(tmp_config, tmp_path, monkeypatch):
         def resume_or_create(self, inbound, title):
             return "not-ses", False
 
-    monkeypatch.setattr("creasy.jobs.worker.OpenCodeClient", RetryClient)
+    monkeypatch.setattr("mireviewer.jobs.worker.OpenCodeClient", RetryClient)
     out = runner.run(_job(), lambda: False)
     assert out.error
 
@@ -476,6 +476,6 @@ def test_worker_run_retry_and_400(tmp_config, tmp_path, monkeypatch):
         def wait_idle(self, *a, **k):
             raise OpenCodeError("hang")
 
-    monkeypatch.setattr("creasy.jobs.worker.OpenCodeClient", CancelClient)
+    monkeypatch.setattr("mireviewer.jobs.worker.OpenCodeClient", CancelClient)
     out = runner.run(_job(), lambda: (n.__setitem__("i", n["i"] + 1) or n["i"] > 2))
     assert out.cancelled or out.error

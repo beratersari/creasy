@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from creasy.api import dashboard
-from creasy.paths import bundled_dir
-from creasy.version import version_path
+from mireviewer.api import dashboard
+from mireviewer.paths import bundled_dir
+from mireviewer.version import version_path
 
 
 def test_spa_dir_uses_repo_web_dist_when_not_frozen() -> None:

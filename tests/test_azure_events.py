@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from creasy.azure.events import classify_azure_webhook, reset_reviewer_cache
-from creasy.azure.identity import azure_mr_key, azure_project_num
-from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
+from mireviewer.azure.events import classify_azure_webhook, reset_reviewer_cache
+from mireviewer.azure.identity import azure_mr_key, azure_project_num
+from mireviewer.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger
 
 
 PROJECT = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -159,7 +159,7 @@ def test_changed_reviewer_list_and_listed_is_assign():
 
 def test_changed_reviewer_list_title_added_still_assigns_when_listed():
     """'(Added title)' is not 'added as a reviewer', but listed + list-change is assign."""
-    from creasy.azure.events import azure_message_adds_bot
+    from mireviewer.azure.events import azure_message_adds_bot
 
     pr = _pr()
     pr["reviewers"] = [

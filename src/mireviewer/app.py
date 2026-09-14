@@ -1,0 +1,104 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from mireviewer import PRODUCT_NAME, __version__
+from mireviewer.api.dashboard import attach_spa, router as dashboard_router
+from mireviewer.api.health import router as health_router
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.api.webhook_azure import router as azure_webhook_router
+from mireviewer.azure.client import AzureClient
+from mireviewer.config import Config, load_config
+from mireviewer.gitlab.client import GitLabClient
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.diag import log_diag
+from mireviewer.logging import setup_logging
+from mireviewer.settings import apply_runtime_settings
+from mireviewer.workspace.store import WorkspaceStore
+
+
+def create_app(config: Config | None = None) -> FastAPI:
+    cfg = config or load_config()
+    apply_runtime_settings(cfg)
+    log = setup_logging(cfg.log_level, cfg.log_dir)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        gitlab = GitLabClient(cfg.gitlab_url, cfg.gitlab_token)
+        azure = (
+            AzureClient(cfg.azure_url, cfg.azure_token, api_version=cfg.azure_api_version)
+            if cfg.azure_enabled
+            else None
+        )
+        workspaces = WorkspaceStore(cfg.data_dir / "workspace_meta")
+        runner = OpenCodeRunner(cfg, workspaces, gitlab, azure=azure)
+        manager = Manager(cfg, runner, workspaces=workspaces)
+        app.state.config = cfg
+        app.state.manager = manager
+        app.state.gitlab = gitlab
+        app.state.azure = azure
+        gl_user = gitlab.current_user()
+        app.state.bot_user_id = gl_user["id"] if gl_user else None
+        app.state.bot_mention_names = list((gl_user or {}).get("names") or [])
+        app.state.bot_user_resolved = True
+        az_user = azure.current_user() if azure is not None else None
+        app.state.azure_bot_user_id = az_user["id"] if az_user else None
+        app.state.azure_bot_mention_names = list((az_user or {}).get("names") or [])
+        log.info(
+            "ok start version=%s host=%s port=%s gitlab=%s gitlab_token=%s azure=%s azure_enabled=%s",
+            __version__,
+            cfg.host,
+            cfg.port,
+            cfg.gitlab_url,
+            "set" if cfg.gitlab_token else "unset",
+            cfg.azure_url or "-",
+            cfg.azure_enabled,
+        )
+        log_diag(
+            "system",
+            "start",
+            version=__version__,
+            host=cfg.host,
+            port=cfg.port,
+            gitlab_url=cfg.gitlab_url,
+            gitlab_token_set=bool(cfg.gitlab_token),
+            azure_enabled=cfg.azure_enabled,
+            azure_url=cfg.azure_url or "",
+            azure_token_set=bool(cfg.azure_token),
+            azure_api_version=cfg.azure_api_version,
+            data_dir=str(cfg.data_dir),
+            max_concurrent_jobs=cfg.max_concurrent_jobs,
+            opencode_bin=cfg.opencode_bin,
+            opencode_model=cfg.opencode_model,
+            log_level=cfg.log_level,
+        )
+        manager.boot()
+        yield
+        manager.shutdown()
+        gitlab.close()
+        if azure is not None:
+            azure.close()
+        log.info("ok stop version=%s", __version__)
+
+    app = FastAPI(title=PRODUCT_NAME, version=__version__, lifespan=lifespan)
+    app.state.config = cfg
+    app.include_router(health_router)
+    app.include_router(webhook_router)
+    app.include_router(azure_webhook_router)
+    app.include_router(dashboard_router)
+    attach_spa(app)
+    return app
+
+
+def main() -> None:
+    import uvicorn
+
+    cfg = load_config()
+    uvicorn.run(create_app(cfg), host=cfg.host, port=cfg.port, log_level=cfg.log_level.lower())
+
+
+if __name__ == "__main__":
+    main()
