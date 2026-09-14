@@ -11,6 +11,13 @@ if [ ! -f "${ROOT}/web/dist/index.html" ]; then
 fi
 mkdir -p "${ROOT}/dist/exe"
 
+if [ "${UBUNTU}" = "18.04" ]; then
+  # Bionic apt is gone and the image has no objdump. Build on the
+  # host with standalone CPython (glibc 2.17) instead.
+  CREASY_LINUX_SUFFIX="${SUFFIX}" bash "${ROOT}/packaging/linux_exe_portable.sh"
+  exit 0
+fi
+
 # Ubuntu 18.04 apt mirrors are gone. A musl uv binary needs no apt.
 UV_VER="${CREASY_UV_VERSION:-0.8.22}"
 UV_DIR="$(mktemp -d)"

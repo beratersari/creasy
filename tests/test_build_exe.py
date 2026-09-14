@@ -93,6 +93,9 @@ def test_drop_bundled_libz() -> None:
     assert mod.drop_bundled_libz("libz.so.1.2.11")
     assert not mod.drop_bundled_libz("libssl.so.3")
     assert not mod.drop_bundled_libz("libpython3.11.so.1.0")
+    assert mod.drop_portable_system_lib("libssl.so.3")
+    assert mod.drop_portable_system_lib("libcrypto.so.1.1")
+    assert not mod.drop_portable_system_lib("libpython3.11.so.1.0")
     assert mod.release_suffixes() == [
         "windows-x64",
         "linux-ubuntu-18.04-x64",

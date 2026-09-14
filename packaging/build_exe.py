@@ -12,6 +12,7 @@ No `.git`, vendor, tests, README, or installers from that submodule.
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import shutil
 import subprocess
@@ -172,6 +173,7 @@ def write_pyinstaller_spec(root: Path, spec_path: Path) -> None:
     spec_path = Path(spec_path)
     spec_path.parent.mkdir(parents=True, exist_ok=True)
     linux = sys.platform.startswith("linux")
+    portable = linux and os.environ.get("CREASY_LINUX_PORTABLE", "").strip() in {"1", "true", "yes"}
     spec_path.write_text(
         "\n".join(
             [
@@ -204,11 +206,20 @@ def write_pyinstaller_spec(root: Path, spec_path: Path) -> None:
                 ")",
                 "",
                 f"LINUX = {linux!r}",
+                f"PORTABLE = {portable!r}",
                 "if LINUX:",
+                "    _drop_pref = ('libz.so.', 'libssl.so.', 'libcrypto.so.', 'libffi.so.',",
+                "                  'libbz2.so.', 'liblzma.so.', 'libtinfo.so.', 'libreadline.so.',",
+                "                  'libncurses.so.', 'libncursesw.so.', 'libsqlite3.so.',",
+                "                  'libnsl.so.', 'libuuid.so.', 'libexpat.so.')",
                 "    def _keep(item):",
                 "        name = str(item[0] if item else '')",
                 "        base = name.replace('\\\\', '/').rsplit('/', 1)[-1]",
-                "        return base != 'libz.so.1' and not base.startswith('libz.so.')",
+                "        if base == 'libz.so.1' or base.startswith('libz.so.'):",
+                "            return False",
+                "        if PORTABLE and any(base.startswith(p) for p in _drop_pref):",
+                "            return False",
+                "        return True",
                 "    a.binaries = [item for item in a.binaries if _keep(item)]",
                 "",
                 "pyz = PYZ(a.pure)",

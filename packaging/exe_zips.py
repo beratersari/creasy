@@ -26,3 +26,29 @@ def drop_bundled_libz(dest_name: str) -> bool:
     """True when PyInstaller should omit this binary (use the OS copy)."""
     base = str(dest_name or "").replace("\\", "/").rsplit("/", 1)[-1]
     return base == "libz.so.1" or base.startswith("libz.so.")
+
+
+PORTABLE_DROP_PREFIXES = (
+    "libz.so.",
+    "libssl.so.",
+    "libcrypto.so.",
+    "libffi.so.",
+    "libbz2.so.",
+    "liblzma.so.",
+    "libtinfo.so.",
+    "libreadline.so.",
+    "libncurses.so.",
+    "libncursesw.so.",
+    "libsqlite3.so.",
+    "libnsl.so.",
+    "libuuid.so.",
+    "libexpat.so.",
+)
+
+
+def drop_portable_system_lib(dest_name: str) -> bool:
+    """True for host libs that would raise the glibc floor above 18.04."""
+    base = str(dest_name or "").replace("\\", "/").rsplit("/", 1)[-1]
+    if drop_bundled_libz(dest_name):
+        return True
+    return any(base.startswith(prefix) for prefix in PORTABLE_DROP_PREFIXES)
