@@ -9,14 +9,18 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.16 — 2026-09-14
+
+The product is MIReviewer. Download `mireviewer-*.zip` and point
+hooks at `/mireviewer/webhook/*`. Old Creasy URLs and the old
+token header still work.
+
 ### Changed
 
-- The product is MIReviewer end to end: package `mireviewer`,
-  webhooks `/mireviewer/webhook/gitlab` and
-  `/mireviewer/webhook/azure`, zips `mireviewer-X.Y.Z-*.zip`,
-  binary `mireviewer` / `mireviewer.exe`, and header
-  `X-MIReviewer-Token`. Old `/creasy/webhook/*` URLs and
-  `X-Creasy-Token` still work.
+- Package, CLI, executable zips, and webhook paths use
+  `mireviewer`. Dashboard notes and release titles already said
+  MIReviewer. `X-MIReviewer-Token` is the script header.
+  `/creasy/webhook/*` and `X-Creasy-Token` remain aliases.
 
 ## 0.9.15 — 2026-09-14
 
