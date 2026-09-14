@@ -8,10 +8,12 @@ Daily work is on `develop`. `main` is release-only: never push
 commits directly to `main`; open a pull request / merge request.
 Version is the `VERSION` file. Every bump needs a `CHANGELOG.md`
 `## X.Y.Z` section (that text becomes the GitHub Release body).
-The operator download is the three executable zips on the GitHub
-Release (binary, `.env.example`, `opencoderman/agents`,
-`opencoderman/skills`, `install-review-agent` scripts), not the
-tag “Source code” zip.
+The operator download is the executable zips on the GitHub
+Release (Windows, Darwin, one Linux zip per Ubuntu LTS, plus
+`linux-x64` as Ubuntu 22.04). Each zip is the binary,
+`.env.example`, `opencoderman/agents`, `opencoderman/skills`,
+and `install-review-agent` scripts, not the tag “Source code”
+zip.
 The binding checklist is in [AGENTS.md](AGENTS.md)
 (Branches and releases).
 

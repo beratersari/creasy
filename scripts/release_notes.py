@@ -28,13 +28,20 @@ def extract(changelog: str, version: str) -> str:
 
 
 def downloads_body(version: str) -> str:
-    zips = [
-        f"creasy-{version}-windows-x64.zip",
-        f"creasy-{version}-linux-x64.zip",
-        f"creasy-{version}-darwin-arm64.zip",
-    ]
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "packaging" / "exe_zips.py"
+    spec = importlib.util.spec_from_file_location("creasy_exe_zips", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load {path}")
+    zips_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(zips_mod)
+    zips = [f"creasy-{version}-{suffix}.zip" for suffix in zips_mod.release_suffixes()]
     lines = [
         "Each zip is one Creasy executable, `.env.example`, `opencoderman/agents`, `opencoderman/skills`, and `install-review-agent` scripts.",
+        "",
+        "Linux: pick the zip that matches your Ubuntu. `linux-x64` is the Ubuntu 22.04 build.",
         "",
     ]
     lines.extend(f"- `{name}`" for name in zips)

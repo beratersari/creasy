@@ -149,8 +149,6 @@ jobs:
         include:
           - os: windows-latest
             suffix: windows-x64
-          - os: ubuntu-latest
-            suffix: linux-x64
           - os: macos-latest
             suffix: darwin-arm64
     steps:
@@ -184,6 +182,64 @@ jobs:
         with:
           name: creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
           path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  exe-linux:
+    name: Executable linux-ubuntu-${{ matrix.ubuntu }}-x64
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["18.04", "20.04", "22.04", "24.04"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build dashboard
+        run: |
+          set -euo pipefail
+          npm --prefix web ci
+          npm --prefix web run build
+          test -f web/dist/index.html
+      - name: Build exe in Ubuntu ${{ matrix.ubuntu }}
+        run: bash packaging/linux_exe_in_docker.sh ${{ matrix.ubuntu }}
+      - name: Read product version
+        id: ver
+        run: echo "version=$(python3 -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Alias Ubuntu 22.04 as linux-x64
+        if: matrix.ubuntu == '22.04'
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          cp "dist/exe/creasy-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/creasy-${v}-linux-x64.zip"
+      - name: Assert zip is exe + config + review pack
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          suffix="linux-ubuntu-${{ matrix.ubuntu }}-x64"
+          zip="dist/exe/creasy-${v}-${suffix}.zip"
+          test -f "$zip"
+          python3 -c "import importlib.util; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('creasy_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.assert_exe_zip(Path('$zip'), expect_exe='creasy')"
+          if [ "${{ matrix.ubuntu }}" = "22.04" ]; then
+            test -f "dist/exe/creasy-${v}-linux-x64.zip"
+          fi
+      - name: Upload Ubuntu zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload linux-x64 alias
+        if: matrix.ubuntu == '22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-x64.zip
           if-no-files-found: error
           retention-days: 30
 

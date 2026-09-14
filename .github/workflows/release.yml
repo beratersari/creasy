@@ -1,9 +1,10 @@
 name: release
 
-# Tag push or Actions → Run workflow. Publishes one executable zip
-# per platform (creasy[.exe] + .env.example + opencoderman review
-# pack + install-review-agent scripts). The tag's "Source code" zip
-# is not an operator download.
+# Tag push or Actions → Run workflow. Publishes executable zips
+# (creasy[.exe] + .env.example + opencoderman review pack +
+# install-review-agent scripts). Linux is one zip per Ubuntu LTS
+# plus linux-x64 (Ubuntu 22.04). The tag's "Source code" zip is
+# not an operator download.
 
 on:
   push:
@@ -27,8 +28,6 @@ jobs:
         include:
           - os: windows-latest
             suffix: windows-x64
-          - os: ubuntu-latest
-            suffix: linux-x64
           - os: macos-latest
             suffix: darwin-arm64
     steps:
@@ -56,8 +55,53 @@ jobs:
           path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
           if-no-files-found: error
 
+  exe-linux:
+    name: Executable linux-ubuntu-${{ matrix.ubuntu }}-x64
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ubuntu: ["18.04", "20.04", "22.04", "24.04"]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build dashboard
+        run: |
+          set -euo pipefail
+          npm --prefix web ci
+          npm --prefix web run build
+          test -f web/dist/index.html
+      - name: Build exe in Ubuntu ${{ matrix.ubuntu }}
+        run: bash packaging/linux_exe_in_docker.sh ${{ matrix.ubuntu }}
+      - name: Read product version
+        id: ver
+        run: echo "version=$(python3 -c "from pathlib import Path; print(Path('VERSION').read_text(encoding='utf-8').strip())")" >> "$GITHUB_OUTPUT"
+      - name: Alias Ubuntu 22.04 as linux-x64
+        if: matrix.ubuntu == '22.04'
+        run: |
+          set -euo pipefail
+          v="${{ steps.ver.outputs.version }}"
+          cp "dist/exe/creasy-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/creasy-${v}-linux-x64.zip"
+      - name: Upload Ubuntu zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
+          if-no-files-found: error
+      - name: Upload linux-x64 alias
+        if: matrix.ubuntu == '22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-x64.zip
+          if-no-files-found: error
+
   publish:
-    needs: exe
+    needs: [exe, exe-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -77,10 +121,12 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          for suffix in windows-x64 linux-x64 darwin-arm64; do
+          for suffix in windows-x64 darwin-arm64 linux-x64 \
+            linux-ubuntu-18.04-x64 linux-ubuntu-20.04-x64 \
+            linux-ubuntu-22.04-x64 linux-ubuntu-24.04-x64; do
             test -f "dist/exe/creasy-${v}-${suffix}.zip"
           done
-          test "$(ls -1 dist/exe/*.zip | wc -l)" = "3"
+          test "$(ls -1 dist/exe/*.zip | wc -l)" = "7"
       - name: Write release notes
         run: python scripts/release_notes.py --version "${{ steps.ver.outputs.version }}" --out release-notes.md
       - name: Publish GitHub Release
@@ -92,6 +138,7 @@ jobs:
           files: |
             dist/exe/creasy-*-windows-x64.zip
             dist/exe/creasy-*-linux-x64.zip
+            dist/exe/creasy-*-linux-ubuntu-*-x64.zip
             dist/exe/creasy-*-darwin-arm64.zip
           fail_on_unmatched_files: true
           make_latest: true

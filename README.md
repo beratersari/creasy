@@ -60,8 +60,11 @@ Bump with `python scripts/bump_version.py minor`. What changed is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 Download **GitHub Release** executable zips
-(`creasy-<version>-windows-x64.zip`, `linux-x64`, `darwin-arm64`),
-not the tag’s “Source code” zip. Each zip is one `creasy` /
+(`creasy-<version>-windows-x64.zip`, `linux-ubuntu-22.04-x64`,
+`linux-ubuntu-24.04-x64`, `linux-ubuntu-20.04-x64`,
+`linux-ubuntu-18.04-x64`, `linux-x64` for Ubuntu 22.04,
+`darwin-arm64`), not the tag’s “Source code” zip. Pick the Linux
+zip that matches your Ubuntu. Each zip is one `creasy` /
 `creasy.exe`, `.env.example`, `opencoderman/agents`,
 `opencoderman/skills`, and `install-review-agent` scripts. Copy the
 example to `.env` next to the binary and run it. Reviews still need
