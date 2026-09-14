@@ -9,6 +9,11 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.14 — 2026-09-14
+
+GitLab identity misses no longer stall later comment webhooks. A
+killed first clone no longer leaves that MR stuck.
+
 ### Fixed
 
 - A failed GitLab `/user` lookup is not retried on later note
