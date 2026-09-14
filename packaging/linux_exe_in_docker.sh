@@ -10,10 +10,26 @@ if [ ! -f "${ROOT}/web/dist/index.html" ]; then
   exit 1
 fi
 mkdir -p "${ROOT}/dist/exe"
+
+# Ubuntu 18.04 apt mirrors are gone. A musl uv binary needs no apt.
+UV_VER="${CREASY_UV_VERSION:-0.8.22}"
+UV_DIR="$(mktemp -d)"
+trap 'rm -rf "${UV_DIR}"' EXIT
+curl -fsSL \
+  "https://github.com/astral-sh/uv/releases/download/${UV_VER}/uv-x86_64-unknown-linux-musl.tar.gz" \
+  -o "${UV_DIR}/uv.tgz"
+tar -xzf "${UV_DIR}/uv.tgz" -C "${UV_DIR}"
+UV_BIN="$(find "${UV_DIR}" -type f -name uv | head -n 1)"
+if [ -z "${UV_BIN}" ] || [ ! -x "${UV_BIN}" ]; then
+  echo "failed to unpack musl uv ${UV_VER}" >&2
+  exit 1
+fi
+
 docker run --rm \
   -e DEBIAN_FRONTEND=noninteractive \
   -e CREASY_LINUX_SUFFIX="${SUFFIX}" \
   -v "${ROOT}:/src" \
+  -v "${UV_BIN}:/usr/local/bin/uv:ro" \
   -w /src \
   "ubuntu:${UBUNTU}" \
   bash /src/packaging/linux_exe_container.sh

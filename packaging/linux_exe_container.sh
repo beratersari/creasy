@@ -26,34 +26,39 @@ _point_apt_old_releases() {
   fi
 }
 
+APT_OK=0
 if [ "${VERSION_CODENAME:-}" = "bionic" ] || [ "${VERSION_ID:-}" = "18.04" ]; then
   _point_apt_old_releases
 fi
-
-if ! apt-get update; then
-  _point_apt_old_releases
-  apt-get update
+if apt-get update; then
+  apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gcc \
+    g++ \
+    make \
+    pkg-config \
+    unzip \
+    xz-utils \
+    zlib1g \
+    zlib1g-dev \
+    libffi-dev \
+    libssl-dev
+  APT_OK=1
 fi
-apt-get install -y --no-install-recommends \
-  ca-certificates \
-  curl \
-  gcc \
-  g++ \
-  make \
-  pkg-config \
-  unzip \
-  xz-utils \
-  zlib1g \
-  zlib1g-dev \
-  libffi-dev \
-  libssl-dev
 
 if [ -d /src/.git ]; then
   git config --global --add safe.directory /src || true
 fi
 
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="${HOME}/.local/bin:${PATH}"
+if ! command -v uv >/dev/null 2>&1; then
+  if [ "${APT_OK}" != "1" ]; then
+    echo "apt is unavailable and /usr/local/bin/uv is missing" >&2
+    exit 1
+  fi
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  export PATH="${HOME}/.local/bin:${PATH}"
+fi
 uv python install 3.11
 VENV=/tmp/creasy-build-venv
 uv venv --python 3.11 "${VENV}"
