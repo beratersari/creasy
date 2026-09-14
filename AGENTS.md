@@ -69,9 +69,9 @@ These look like bugs. They are not.
    `#### N. \`path:lines\` — title` headings become threads.
    A heading without backticks is Overview text only. Do not
    scrape `#### 1. path — title`.
-9. **Azure PAT identity is resolved once per process.** A failed
-   `current_user` is not retried. Set `REVIEW_MENTION` if TFS
-   identity is flaky. Do not call identity on every webhook
+9. **GitLab and Azure PAT identity is resolved once per process.**
+   A failed `current_user` is not retried. Set `REVIEW_MENTION`
+   if identity is flaky. Do not call identity on every webhook
    after the first miss.
 
 ## Hard rules

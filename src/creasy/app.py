@@ -43,6 +43,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         gl_user = gitlab.current_user()
         app.state.bot_user_id = gl_user["id"] if gl_user else None
         app.state.bot_mention_names = list((gl_user or {}).get("names") or [])
+        app.state.bot_user_resolved = True
         az_user = azure.current_user() if azure is not None else None
         app.state.azure_bot_user_id = az_user["id"] if az_user else None
         app.state.azure_bot_mention_names = list((az_user or {}).get("names") or [])

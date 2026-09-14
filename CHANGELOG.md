@@ -9,6 +9,20 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.14 — 2026-09-14
+
+GitLab identity misses no longer stall later comment webhooks. A
+killed first clone no longer leaves that MR stuck.
+
+### Fixed
+
+- A failed GitLab `/user` lookup is not retried on later note
+  webhooks, so a flaky identity endpoint cannot hold the ack.
+  `REVIEW_MENTION` still matches after that miss.
+- A leftover partial clone (`.git` present but unusable) is deleted
+  and cloned again. A killed first clone no longer blocks later
+  jobs for that MR.
+
 ## 0.9.13 — 2026-09-12
 
 Reviews stay on the live merge-base after a rebase. Finding threads

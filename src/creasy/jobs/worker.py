@@ -37,6 +37,7 @@ from creasy.review.prompt import (
 from creasy.workspace.diffmap import parse_unified_diff
 from creasy.workspace.gitops import (
     GitError,
+    clone_is_usable,
     clone_repo,
     delete_clone,
     diff_stat,
@@ -550,7 +551,62 @@ class OpenCodeRunner:
         if not http_url:
             raise GitError("no http repo url for project")
         git_kw = self._git_kw(job, should_stop)
-        if not dest.exists() or not (dest / ".git").exists():
+        sha = self._checkout_workspace(
+            dest,
+            mr,
+            http_url=http_url,
+            token=token,
+            auth_scheme=auth_scheme,
+            should_stop=should_stop,
+            git_kw=git_kw,
+        )
+        record.clone_path = str(dest)
+        record.source_branch = mr.source_branch
+        record.target_branch = mr.target_branch
+        record.last_sha = sha
+        record.http_url = http_url
+        record.web_url = mr.web_url
+        record.last_job_id = job.job_id
+        return self.workspaces.save(record)
+
+    def _checkout_workspace(
+        self,
+        dest: Path,
+        mr: MergeRequest,
+        *,
+        http_url: str,
+        token: str,
+        auth_scheme: str,
+        should_stop: Callable[[], bool],
+        git_kw: dict,
+    ) -> str:
+        if not clone_is_usable(dest):
+            if dest.exists():
+                log_ok(logger, "re-clone workspace", path=dest, reason="unusable")
+                delete_clone(dest)
+            clone_repo(
+                http_url,
+                dest,
+                token,
+                timeout=self.config.git_timeout,
+                auth_scheme=auth_scheme,
+                **git_kw,
+            )
+        try:
+            return fetch_and_checkout(
+                dest,
+                source_branch=mr.source_branch,
+                target_branch=mr.target_branch,
+                sha=mr.sha,
+                token=token,
+                timeout=self.config.git_timeout,
+                auth_scheme=auth_scheme,
+                **git_kw,
+            )
+        except GitError:
+            if should_stop() or clone_is_usable(dest):
+                raise
+            log_ok(logger, "re-clone workspace", path=dest, reason="corrupt after fetch")
             if dest.exists():
                 delete_clone(dest)
             clone_repo(
@@ -561,24 +617,16 @@ class OpenCodeRunner:
                 auth_scheme=auth_scheme,
                 **git_kw,
             )
-        sha = fetch_and_checkout(
-            dest,
-            source_branch=mr.source_branch,
-            target_branch=mr.target_branch,
-            sha=mr.sha,
-            token=token,
-            timeout=self.config.git_timeout,
-            auth_scheme=auth_scheme,
-            **git_kw,
-        )
-        record.clone_path = str(dest)
-        record.source_branch = mr.source_branch
-        record.target_branch = mr.target_branch
-        record.last_sha = sha
-        record.http_url = http_url
-        record.web_url = mr.web_url
-        record.last_job_id = job.job_id
-        return self.workspaces.save(record)
+            return fetch_and_checkout(
+                dest,
+                source_branch=mr.source_branch,
+                target_branch=mr.target_branch,
+                sha=mr.sha,
+                token=token,
+                timeout=self.config.git_timeout,
+                auth_scheme=auth_scheme,
+                **git_kw,
+            )
 
     def _post_result_body(self, job: JobRecord, body: str) -> str:
         """Reply on the request thread when we have one; else post the overview."""

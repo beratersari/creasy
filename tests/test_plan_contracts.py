@@ -563,13 +563,24 @@ def test_worker_clone_auth_failure_posts_error_note(tmp_config, monkeypatch):
 def test_worker_fetch_auth_failure_keeps_clone_and_posts_error(tmp_config, monkeypatch):
     dest = tmp_config.work_dir / "1-1"
     dest.mkdir(parents=True)
-    (dest / ".git").mkdir()
+    subprocess.run(["git", "init"], cwd=dest, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "remote", "add", "origin", "http://example/repo.git"],
+        cwd=dest,
+        check=True,
+        capture_output=True,
+    )
     spy = SpyGitlab()
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     started: list[int] = []
     import creasy.jobs.worker as w
 
+    monkeypatch.setattr(
+        w,
+        "clone_repo",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("usable clone must not be replaced")),
+    )
     monkeypatch.setattr(
         w,
         "fetch_and_checkout",

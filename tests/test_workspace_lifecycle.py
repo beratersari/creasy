@@ -3,7 +3,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from creasy.gitlab.client import GitLabClient, MergeRequest
+from creasy.jobs.models import JobRecord
+from creasy.jobs.worker import OpenCodeRunner
 from creasy.workspace.gitops import (
+    clone_is_usable,
     clone_repo,
     delete_clone,
     diff_stat,
@@ -36,6 +40,85 @@ def _init_repo(root: Path) -> Path:
     _git(repo, "commit", "-m", "change")
     _git(repo, "checkout", "main")
     return repo
+
+
+def test_clone_is_usable_rejects_partial_git_dir(tmp_path: Path, tmp_config):
+    dest = clone_path_for(tmp_config.work_dir, "42-7")
+    dest.mkdir(parents=True)
+    (dest / ".git").mkdir()
+    (dest / ".git" / "BROKEN").write_text("partial clone", encoding="utf-8")
+    assert clone_is_usable(dest) is False
+
+
+def test_ensure_workspace_reclones_broken_dot_git(tmp_path: Path, tmp_config):
+    tmp_config.gitlab_token = ""
+    origin = _init_repo(tmp_path / "src")
+    dest = clone_path_for(tmp_config.work_dir, "42-7")
+    dest.mkdir(parents=True)
+    (dest / ".git").mkdir()
+    marker = dest / ".git" / "BROKEN"
+    marker.write_text("partial clone", encoding="utf-8")
+    runner = OpenCodeRunner(
+        tmp_config,
+        WorkspaceStore(tmp_config.data_dir / "workspace_meta"),
+        GitLabClient("http://127.0.0.1:1", "x", timeout=1.0),
+    )
+    job = JobRecord(job_id="job_reclone", mr_key="42-7", project_id=42, mr_iid=7, trigger="review")
+    mr = MergeRequest(
+        project_id=42,
+        iid=7,
+        title="feat",
+        description="",
+        author="alice",
+        source_branch="feat",
+        target_branch="main",
+        sha="",
+        base_sha="",
+        start_sha="",
+        web_url="http://example/mr/7",
+        http_url=origin.as_uri(),
+        draft=False,
+        state="opened",
+    )
+    rec = runner._ensure_workspace(job, mr, lambda: False)
+    assert rec.last_sha
+    assert clone_is_usable(dest)
+    assert not marker.exists()
+    assert (dest / "app.py").is_file()
+
+
+def test_ensure_workspace_keeps_a_healthy_clone(tmp_path: Path, tmp_config):
+    tmp_config.gitlab_token = ""
+    origin = _init_repo(tmp_path / "src")
+    dest = clone_path_for(tmp_config.work_dir, "1-1")
+    clone_repo(origin.as_uri(), dest, token="", timeout=60)
+    keep = dest / ".git" / "CREASY_KEEP"
+    keep.write_text("keep", encoding="utf-8")
+    runner = OpenCodeRunner(
+        tmp_config,
+        WorkspaceStore(tmp_config.data_dir / "workspace_meta"),
+        GitLabClient("http://127.0.0.1:1", "x", timeout=1.0),
+    )
+    job = JobRecord(job_id="job_keep", mr_key="1-1", project_id=1, mr_iid=1, trigger="review")
+    mr = MergeRequest(
+        project_id=1,
+        iid=1,
+        title="feat",
+        description="",
+        author="alice",
+        source_branch="feat",
+        target_branch="main",
+        sha="",
+        base_sha="",
+        start_sha="",
+        web_url="http://example/mr/1",
+        http_url=origin.as_uri(),
+        draft=False,
+        state="opened",
+    )
+    runner._ensure_workspace(job, mr, lambda: False)
+    assert keep.is_file()
+    assert clone_is_usable(dest)
 
 
 def test_clone_fetch_diff_and_delete(tmp_path: Path, tmp_config):

@@ -95,13 +95,18 @@ class GitLabClient:
         )
         self._user_id: Optional[int] = None
         self._user: Optional[dict[str, Any]] = None
+        self._user_resolved = False
 
     def close(self) -> None:
         self._http.close()
 
     def current_user(self) -> Optional[dict[str, Any]]:
-        if self._user is not None:
+        # Same rule as Azure: one lookup per process. A miss is not retried,
+        # so a flaky /user cannot hold later webhook acks. REVIEW_MENTION
+        # still matches after the first miss.
+        if self._user_resolved:
             return self._user
+        self._user_resolved = True
         if not self.token:
             return None
         try:
