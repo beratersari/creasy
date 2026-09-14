@@ -3,9 +3,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from creasy.azure.auth import azure_basic_auth
-from creasy.azure.client import _is_git_http, _is_http, _ssh_to_https
-from creasy.workspace.gitops import inject_token, isolated_git_env
+from mireviewer.azure.auth import azure_basic_auth
+from mireviewer.azure.client import _is_git_http, _is_http, _ssh_to_https
+from mireviewer.workspace.gitops import inject_token, isolated_git_env
 
 
 def test_azure_token_uses_pat_user_not_oauth2():

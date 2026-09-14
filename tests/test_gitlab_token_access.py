@@ -8,8 +8,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from creasy.gitlab.client import GitLabClient, GitLabError
-from creasy.workspace.gitops import (
+from mireviewer.gitlab.client import GitLabClient, GitLabError
+from mireviewer.workspace.gitops import (
     GitError,
     _run_git,
     clone_repo,
@@ -108,7 +108,7 @@ def test_clone_repo_injects_oauth2_into_git_args(tmp_path: Path, monkeypatch) ->
         seen["args"] = list(args)
         raise GitError("git failed (128): Authentication failed")
 
-    monkeypatch.setattr("creasy.workspace.gitops._run_git", fake_run)
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git", fake_run)
     dest = tmp_path / "clone"
     with pytest.raises(GitError, match="Authentication failed"):
         clone_repo("https://gitlab.example/group/repo.git", dest, token="secret-pat", timeout=5)
@@ -124,7 +124,7 @@ def test_clone_repo_empty_token_does_not_rewrite_url(tmp_path: Path, monkeypatch
         seen["args"] = list(args)
         raise GitError("git failed (128): Authentication failed")
 
-    monkeypatch.setattr("creasy.workspace.gitops._run_git", fake_run)
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git", fake_run)
     dest = tmp_path / "clone"
     url = "https://gitlab.example/group/repo.git"
     with pytest.raises(GitError):
@@ -157,7 +157,7 @@ def test_fetch_auth_failure_scrubs_origin_and_keeps_clone(tmp_path: Path, monkey
             raise GitError("git failed (128): HTTP Basic: Access denied")
         return original(args, **kwargs)
 
-    monkeypatch.setattr("creasy.workspace.gitops._run_git", wrapped)
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git", wrapped)
     with pytest.raises(GitError, match="Access denied"):
         fetch_and_checkout(
             dest,

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from creasy.opencode.session import last_assistant_text, looks_like_review, turn_assistant_text
-from creasy.review.prompt import HANG_RESUME
+from mireviewer.opencode.session import last_assistant_text, looks_like_review, turn_assistant_text
+from mireviewer.review.prompt import HANG_RESUME
 
 
 def _msg(role: str, text: str) -> dict:

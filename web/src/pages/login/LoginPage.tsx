@@ -27,9 +27,9 @@ export function LoginPage({ hasUsername }: { hasUsername: boolean }) {
         onSubmit={(event) => void onSubmit(event)}
       >
         <div className="flex items-center gap-3">
-          <div className="vd-mark">CR</div>
+          <div className="vd-mark">MI</div>
           <div>
-            <div className="text-sm font-semibold">Creasy</div>
+            <div className="text-sm font-semibold">MIReviewer</div>
             <div className="text-[11px] text-text-muted">Sign in to the dashboard</div>
           </div>
         </div>

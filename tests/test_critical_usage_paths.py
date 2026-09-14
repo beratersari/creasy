@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from creasy.azure.events import reset_reviewer_cache
+from mireviewer.azure.events import reset_reviewer_cache
 from test_azure_webhook import _app, _auth, _pr_with_bot
 
 CHANGED = (
@@ -28,7 +28,7 @@ def test_usage_job_must_not_drop_a_tfs_assign(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[BOT])
     client = TestClient(app)
     usage = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {
@@ -40,7 +40,7 @@ def test_usage_job_must_not_drop_a_tfs_assign(tmp_config):
     )
     assert usage.json()["status"] == "accepted", usage.json()
     assign = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "message": {"text": CHANGED},

@@ -6,10 +6,10 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.opencode.session import snapshot_chat
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.opencode.session import snapshot_chat
 from conftest import FakeRunner
 
 
@@ -111,7 +111,7 @@ def test_live_chat_reads_from_this_jobs_serve(tmp_config) -> None:
             kwargs["transport"] = transport
             super().__init__(*args, **kwargs)
 
-    import creasy.opencode.session as session_mod
+    import mireviewer.opencode.session as session_mod
 
     original = session_mod.httpx.Client
     session_mod.httpx.Client = FakeClient  # type: ignore[misc]

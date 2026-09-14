@@ -703,7 +703,7 @@ def main(argv: list[str] | None = None) -> int:
     ver = read_versions(root / "packaging" / "versions.env")
     os_name, arch = host_platform()
     version = os.environ.get("CREASY_PRODUCT_VERSION") or product_version(root)
-    prefix = args.dist_name or f"creasy-{version}"
+    prefix = args.dist_name or f"mireviewer-{version}"
     reqs = runtime_requirements(root)
     wheel_versions = [
         x.strip()

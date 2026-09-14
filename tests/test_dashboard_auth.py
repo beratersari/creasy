@@ -6,15 +6,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.api.dashboard_auth import (
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.api.dashboard_auth import (
     SESSION_COOKIE,
     credentials_ok,
     dashboard_auth_required,
     make_session,
     session_ok,
 )
-from creasy.jobs.manager import Manager
+from mireviewer.jobs.manager import Manager
 from conftest import FakeRunner
 
 
@@ -82,8 +82,10 @@ def test_login_sets_httponly_cookie_and_unlocks_jobs(tmp_config) -> None:
 def test_dashboard_token_header_still_works(tmp_config) -> None:
     client, manager = _client(tmp_config, dashboard_token="dash-secret")
     assert client.get("/api/jobs").status_code == 401
-    ok = client.get("/api/jobs", headers={"X-Creasy-Token": "dash-secret"})
+    ok = client.get("/api/jobs", headers={"X-MIReviewer-Token": "dash-secret"})
     assert ok.status_code == 200
+    legacy = client.get("/api/jobs", headers={"X-Creasy-Token": "dash-secret"})
+    assert legacy.status_code == 200
     bearer = client.get("/api/jobs", headers={"Authorization": "Bearer dash-secret"})
     assert bearer.status_code == 200
     manager.shutdown()

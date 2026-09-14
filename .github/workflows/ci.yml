@@ -50,56 +50,56 @@ jobs:
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
           for pack in linux-x64 windows-x64 darwin windows-linux; do
-            test -f "dist/stage/creasy-${v}-${pack}/.env.example"
+            test -f "dist/stage/mireviewer-${v}-${pack}/.env.example"
           done
-          test -f "dist/stage/creasy-${v}-windows-x64/vendor/python/windows/python.exe"
-          test -f "dist/stage/creasy-${v}-windows-x64/vendor/bin/windows/opencode.exe"
-          test -f "dist/stage/creasy-${v}-windows-x64/vendor/bin/windows/rg.exe"
-          test -f "dist/stage/creasy-${v}-linux-x64/vendor/python/linux/bin/python3"
-          test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/opencode"
-          test -f "dist/stage/creasy-${v}-linux-x64/vendor/bin/linux/rg"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin-arm64/bin/python3"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/python/darwin-x64/bin/python3"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin-arm64/opencode"
-          test -f "dist/stage/creasy-${v}-darwin/vendor/bin/darwin-x64/opencode"
-          test -f "dist/stage/creasy-${v}-windows-linux/vendor/python/windows/python.exe"
-          test -f "dist/stage/creasy-${v}-windows-linux/vendor/bin/linux/opencode"
+          test -f "dist/stage/mireviewer-${v}-windows-x64/vendor/python/windows/python.exe"
+          test -f "dist/stage/mireviewer-${v}-windows-x64/vendor/bin/windows/opencode.exe"
+          test -f "dist/stage/mireviewer-${v}-windows-x64/vendor/bin/windows/rg.exe"
+          test -f "dist/stage/mireviewer-${v}-linux-x64/vendor/python/linux/bin/python3"
+          test -f "dist/stage/mireviewer-${v}-linux-x64/vendor/bin/linux/opencode"
+          test -f "dist/stage/mireviewer-${v}-linux-x64/vendor/bin/linux/rg"
+          test -f "dist/stage/mireviewer-${v}-darwin/vendor/python/darwin-arm64/bin/python3"
+          test -f "dist/stage/mireviewer-${v}-darwin/vendor/python/darwin-x64/bin/python3"
+          test -f "dist/stage/mireviewer-${v}-darwin/vendor/bin/darwin-arm64/opencode"
+          test -f "dist/stage/mireviewer-${v}-darwin/vendor/bin/darwin-x64/opencode"
+          test -f "dist/stage/mireviewer-${v}-windows-linux/vendor/python/windows/python.exe"
+          test -f "dist/stage/mireviewer-${v}-windows-linux/vendor/bin/linux/opencode"
       - name: Upload Linux pack
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
-          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-linux-x64/
+          name: mireviewer-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/stage/mireviewer-${{ steps.ver.outputs.version }}-linux-x64/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
       - name: Upload Windows pack
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-windows-x64
-          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-x64/
+          name: mireviewer-${{ steps.ver.outputs.version }}-windows-x64
+          path: dist/stage/mireviewer-${{ steps.ver.outputs.version }}-windows-x64/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
       - name: Upload Darwin pack
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-darwin
-          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-darwin/
+          name: mireviewer-${{ steps.ver.outputs.version }}-darwin
+          path: dist/stage/mireviewer-${{ steps.ver.outputs.version }}-darwin/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
       - name: Upload Windows+Linux pack
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-windows-linux
-          path: dist/stage/creasy-${{ steps.ver.outputs.version }}-windows-linux/
+          name: mireviewer-${{ steps.ver.outputs.version }}-windows-linux
+          path: dist/stage/mireviewer-${{ steps.ver.outputs.version }}-windows-linux/
           if-no-files-found: error
           include-hidden-files: true
           retention-days: 30
       - name: Install + start from the Linux pack
         run: |
           set -euo pipefail
-          root="dist/stage/creasy-${{ steps.ver.outputs.version }}-linux-x64"
+          root="dist/stage/mireviewer-${{ steps.ver.outputs.version }}-linux-x64"
           test -f "$root/pyproject.toml"
           chmod +x "$root"/scripts/*.sh "$root"/*.sh || true
           (cd "$root" && scripts/install.sh)
@@ -132,7 +132,7 @@ jobs:
           echo
           code=$(curl -sf -o /tmp/jobs.html -w "%{http_code}" "http://127.0.0.1:9001/jobs")
           test "$code" = "200"
-          grep -q "Creasy" /tmp/jobs.html
+          grep -q "MIReviewer" /tmp/jobs.html
           grep -q "/assets/" /tmp/jobs.html
           kill "$(cat /tmp/creasy.pid)" 2>/dev/null || true
           wait "$(cat /tmp/creasy.pid)" 2>/dev/null || true
@@ -174,14 +174,14 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          zip="dist/exe/creasy-${v}-${{ matrix.suffix }}.zip"
+          zip="dist/exe/mireviewer-${v}-${{ matrix.suffix }}.zip"
           test -f "$zip"
-          python -c "import importlib.util,sys; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('creasy_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); exe='creasy.exe' if 'windows' in sys.argv[2] else 'creasy'; m.assert_exe_zip(Path(sys.argv[1]), expect_exe=exe)" "$zip" "${{ matrix.suffix }}"
+          python -c "import importlib.util,sys; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('mireviewer_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); exe='mireviewer.exe' if 'windows' in sys.argv[2] else 'mireviewer'; m.assert_exe_zip(Path(sys.argv[1]), expect_exe=exe)" "$zip" "${{ matrix.suffix }}"
       - name: Upload executable zip
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-${{ matrix.suffix }}.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -215,31 +215,31 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
-          cp "dist/exe/creasy-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/creasy-${v}-linux-x64.zip"
+          cp "dist/exe/mireviewer-${v}-linux-ubuntu-22.04-x64.zip" "dist/exe/mireviewer-${v}-linux-x64.zip"
       - name: Assert zip is exe + config + review pack
         run: |
           set -euo pipefail
           v="${{ steps.ver.outputs.version }}"
           suffix="linux-ubuntu-${{ matrix.ubuntu }}-x64"
-          zip="dist/exe/creasy-${v}-${suffix}.zip"
+          zip="dist/exe/mireviewer-${v}-${suffix}.zip"
           test -f "$zip"
-          python3 -c "import importlib.util; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('creasy_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.assert_exe_zip(Path('$zip'), expect_exe='creasy')"
+          python3 -c "import importlib.util; from pathlib import Path; p=Path('packaging/build_exe.py'); spec=importlib.util.spec_from_file_location('mireviewer_build_exe', p); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); m.assert_exe_zip(Path('$zip'), expect_exe='mireviewer')"
           if [ "${{ matrix.ubuntu }}" = "22.04" ]; then
-            test -f "dist/exe/creasy-${v}-linux-x64.zip"
+            test -f "dist/exe/mireviewer-${v}-linux-x64.zip"
           fi
       - name: Upload Ubuntu zip
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-linux-ubuntu-${{ matrix.ubuntu }}-x64.zip
           if-no-files-found: error
           retention-days: 30
       - name: Upload linux-x64 alias
         if: matrix.ubuntu == '22.04'
         uses: actions/upload-artifact@v4
         with:
-          name: creasy-${{ steps.ver.outputs.version }}-linux-x64
-          path: dist/exe/creasy-${{ steps.ver.outputs.version }}-linux-x64.zip
+          name: mireviewer-${{ steps.ver.outputs.version }}-linux-x64
+          path: dist/exe/mireviewer-${{ steps.ver.outputs.version }}-linux-x64.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -281,5 +281,5 @@ jobs:
         run: |
           call scripts\start.bat
           curl -sf http://127.0.0.1:9001/health
-          curl -sf http://127.0.0.1:9001/jobs | findstr /C:"Creasy"
+          curl -sf http://127.0.0.1:9001/jobs | findstr /C:"MIReviewer"
           curl -sf http://127.0.0.1:9001/jobs | findstr /C:"/assets/"

@@ -13,9 +13,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from creasy.jobs.queue import JobQueue
-from creasy.paths import bundled_dir, bundled_file, executable_dir, is_frozen, meipass
-from creasy.version import bump_version, parse_version, read_version, write_version
+from mireviewer.jobs.queue import JobQueue
+from mireviewer.paths import bundled_dir, bundled_file, executable_dir, is_frozen, meipass
+from mireviewer.version import bump_version, parse_version, read_version, write_version
 
 
 def _fake_os(monkeypatch, module, name: str) -> None:
@@ -33,7 +33,7 @@ def _fake_os(monkeypatch, module, name: str) -> None:
 def test_paths_frozen_and_bundled(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
-    monkeypatch.setattr(sys, "executable", str(tmp_path / "creasy.exe"))
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "mireviewer.exe"))
     (tmp_path / "a.txt").write_text("x", encoding="utf-8")
     (tmp_path / "d").mkdir()
     assert is_frozen()
@@ -95,7 +95,7 @@ def test_queue_corrupt_and_fifo(tmp_path):
 
 
 def test_load_config_frozen_and_ints(tmp_path, monkeypatch):
-    from creasy import config as cfgmod
+    from mireviewer import config as cfgmod
 
     env = tmp_path / ".env"
     env.write_text("HOST=127.0.0.1\n", encoding="utf-8")
@@ -139,7 +139,7 @@ def test_load_config_frozen_and_ints(tmp_path, monkeypatch):
 
 
 def test_create_app_lifespan_without_azure(tmp_config, monkeypatch):
-    from creasy import app as appmod
+    from mireviewer import app as appmod
 
     tmp_config.azure_url = ""
     tmp_config.azure_token = ""
@@ -162,7 +162,7 @@ def test_create_app_lifespan_without_azure(tmp_config, monkeypatch):
 
 
 def test_create_app_lifespan_with_azure(tmp_config, monkeypatch):
-    from creasy import app as appmod
+    from mireviewer import app as appmod
 
     tmp_config.azure_url = "https://tfs.example/tfs/Col"
     tmp_config.azure_token = "pat"
@@ -184,7 +184,7 @@ def test_create_app_lifespan_with_azure(tmp_config, monkeypatch):
 
 
 def test_create_app_loads_config_when_none(tmp_config, monkeypatch):
-    from creasy import app as appmod
+    from mireviewer import app as appmod
 
     monkeypatch.setattr(appmod, "load_config", lambda: tmp_config)
     monkeypatch.setattr(appmod, "GitLabClient", lambda *a, **k: MagicMock(current_user=lambda: None))
@@ -199,7 +199,7 @@ def test_create_app_loads_config_when_none(tmp_config, monkeypatch):
 
 
 def test_main_calls_uvicorn(monkeypatch, tmp_config):
-    from creasy import app as appmod
+    from mireviewer import app as appmod
 
     monkeypatch.setattr(appmod, "load_config", lambda: tmp_config)
     monkeypatch.setattr(appmod, "create_app", lambda cfg: "APP")
@@ -214,11 +214,11 @@ def test_main_calls_uvicorn(monkeypatch, tmp_config):
 
 
 def test_dunder_main_and_app_main(monkeypatch):
-    import creasy.__main__ as m
+    import mireviewer.__main__ as m
 
     assert callable(m.main)
-    monkeypatch.setattr("creasy.app.main", lambda: None)
-    runpy.run_module("creasy.__main__", run_name="__main__")
+    monkeypatch.setattr("mireviewer.app.main", lambda: None)
+    runpy.run_module("mireviewer.__main__", run_name="__main__")
     exec(
         "if __name__ == '__main__':\n    main()\n",
         {"__name__": "__main__", "main": lambda: None},
@@ -226,7 +226,7 @@ def test_dunder_main_and_app_main(monkeypatch):
 
 
 def test_hard_delete_missing_and_posix(tmp_path, monkeypatch):
-    from creasy.cleanup import rmtree as rm
+    from mireviewer.cleanup import rmtree as rm
 
     missing = tmp_path / "nope"
     assert rm.hard_delete(missing) is True
@@ -256,7 +256,7 @@ def test_hard_delete_missing_and_posix(tmp_path, monkeypatch):
 
 
 def test_hard_delete_windows_path(tmp_path, monkeypatch):
-    from creasy.cleanup import rmtree as rm
+    from mireviewer.cleanup import rmtree as rm
 
     target = tmp_path / "wintree"
     target.mkdir()
@@ -279,7 +279,7 @@ def test_hard_delete_windows_path(tmp_path, monkeypatch):
 
 
 def test_windows_del_reserved(tmp_path, monkeypatch):
-    from creasy.cleanup import rmtree as rm
+    from mireviewer.cleanup import rmtree as rm
 
     root = tmp_path / "r"
     root.mkdir()
@@ -300,7 +300,7 @@ def test_windows_del_reserved(tmp_path, monkeypatch):
 
 
 def test_kill_helpers_and_safe_roots(tmp_path):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     assert k.parse_windows_process_json("") == []
     assert k.parse_windows_process_json("not-json") == []
@@ -368,7 +368,7 @@ def test_kill_helpers_and_safe_roots(tmp_path):
 
 
 def test_kill_pid_taskkill(monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     monkeypatch.setattr(k, "may_kill", lambda pid: True)
     monkeypatch.setattr(k, "_as_pid", lambda pid: int(pid) if pid else None)
@@ -405,7 +405,7 @@ def test_kill_pid_taskkill(monkeypatch):
 
 
 def test_reap_path_and_work_dir(tmp_path, monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     root = tmp_path / "ws" / "1-1"
     root.mkdir(parents=True)
@@ -444,7 +444,7 @@ def test_reap_path_and_work_dir(tmp_path, monkeypatch):
 
 
 def test_iter_processes_fallback(monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     _fake_os(monkeypatch, k, "posix")
     monkeypatch.setattr(k, "_is_wsl", lambda: False)
@@ -481,7 +481,7 @@ def test_iter_processes_fallback(monkeypatch):
 
 
 def test_file_holders_and_path_has_holders(tmp_path, monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     monkeypatch.setattr(k, "reap_root_is_safe", lambda r: True)
     monkeypatch.setattr(k, "query_windows_restart_manager", lambda p: k.RmHelperResult(pids=[99], died=False))
@@ -519,7 +519,7 @@ def test_file_holders_and_path_has_holders(tmp_path, monkeypatch):
 
 
 def test_linux_process_iter(tmp_path, monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     proc_root = tmp_path / "proc"
     proc = proc_root / "42"
@@ -552,7 +552,7 @@ def test_linux_process_iter(tmp_path, monkeypatch):
 
 
 def test_parent_pid_and_protected(monkeypatch, tmp_path):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     assert k._parent_pid(os.getpid()) in {None, os.getppid()} or isinstance(k._parent_pid(os.getpid()), int)
     class BoomOs:
@@ -566,7 +566,7 @@ def test_parent_pid_and_protected(monkeypatch, tmp_path):
 
     monkeypatch.setattr(k, "os", BoomOs())
     assert k.protected_pids() == set()
-    from creasy.cleanup import kill as k2
+    from mireviewer.cleanup import kill as k2
 
     _fake_os(monkeypatch, k2, "posix")
     stat = tmp_path / "stat"
@@ -598,7 +598,7 @@ def test_parent_pid_and_protected(monkeypatch, tmp_path):
 
 
 def test_windows_cwd_and_rm(monkeypatch, tmp_path):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     _fake_os(monkeypatch, k, "posix")
     assert k._windows_cwd(99) is None
@@ -649,7 +649,7 @@ def test_windows_cwd_and_rm(monkeypatch, tmp_path):
 
 
 def test_ps_and_wsl(monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     _fake_os(monkeypatch, k, "nt")
     assert k._is_wsl() is False
@@ -698,7 +698,7 @@ def test_ps_and_wsl(monkeypatch):
 
 
 def test_decode_windows_stdout_and_rows(monkeypatch):
-    from creasy.cleanup import kill as k
+    from mireviewer.cleanup import kill as k
 
     assert isinstance(k._decode_windows_stdout("hi".encode("utf-16-le")), str)
     assert k._decode_windows_stdout(b"abc") == "abc"
@@ -715,17 +715,17 @@ def test_decode_windows_stdout_and_rows(monkeypatch):
 
 
 def test_version_and_settings_edges(tmp_path, monkeypatch):
-    from creasy import settings as s
-    from creasy import version as v
-    from creasy.config import Config
+    from mireviewer import settings as s
+    from mireviewer import version as v
+    from mireviewer.config import Config
 
     (tmp_path / "VERSION").write_text("1.2.3\n", encoding="utf-8")
-    monkeypatch.setattr("creasy.paths.is_frozen", lambda: True)
-    monkeypatch.setattr("creasy.paths.bundled_file", lambda *p: tmp_path / "VERSION")
+    monkeypatch.setattr("mireviewer.paths.is_frozen", lambda: True)
+    monkeypatch.setattr("mireviewer.paths.bundled_file", lambda *p: tmp_path / "VERSION")
     assert v.version_path() == tmp_path / "VERSION"
     assert v.read_version() == "1.2.3"
-    monkeypatch.setattr("creasy.paths.bundled_file", lambda *p: None)
-    monkeypatch.setattr("creasy.paths.executable_dir", lambda: tmp_path)
+    monkeypatch.setattr("mireviewer.paths.bundled_file", lambda *p: None)
+    monkeypatch.setattr("mireviewer.paths.executable_dir", lambda: tmp_path)
     assert v.version_path() == tmp_path / "VERSION"
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -784,7 +784,7 @@ def test_version_and_settings_edges(tmp_path, monkeypatch):
 
 
 def test_workspace_store_corrupt(tmp_path):
-    from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+    from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 
     store = WorkspaceStore(tmp_path)
     (tmp_path / "bad.json").write_text("not-json", encoding="utf-8")
@@ -809,13 +809,13 @@ def test_workspace_store_corrupt(tmp_path):
         Path(dst).write_text(Path(src).read_text(encoding="utf-8"), encoding="utf-8")
 
     rec2 = WorkspaceRecord(mr_key="5-6", project_id=5, mr_iid=6)
-    with patch("creasy.workspace.store.os.replace", flaky_replace):
+    with patch("mireviewer.workspace.store.os.replace", flaky_replace):
         store.save(rec2)
 
 
 def test_job_store_edges(tmp_path, monkeypatch):
-    from creasy.jobs.models import JobRecord
-    from creasy.jobs.store import JobStore
+    from mireviewer.jobs.models import JobRecord
+    from mireviewer.jobs.store import JobStore
 
     store = JobStore(tmp_path)
     assert store.get("missing") is None
@@ -839,15 +839,15 @@ def test_job_store_edges(tmp_path, monkeypatch):
         n["i"] += 1
         raise OSError("locked")
 
-    monkeypatch.setattr("creasy.jobs.store.os.replace", flaky)
-    monkeypatch.setattr("creasy.jobs.store.time.sleep", lambda *_: None)
+    monkeypatch.setattr("mireviewer.jobs.store.os.replace", flaky)
+    monkeypatch.setattr("mireviewer.jobs.store.time.sleep", lambda *_: None)
     job2 = JobRecord(job_id="job_lock", mr_key="1-2", project_id=1, mr_iid=2, trigger="ask")
     store.save(job2)
 
 
 def test_identity_edges(tmp_path):
-    from creasy.azure.identity import azure_project_num
-    from creasy.workspace.identity import IdentityError, clone_path_for, mr_key, parse_mr_key
+    from mireviewer.azure.identity import azure_project_num
+    from mireviewer.workspace.identity import IdentityError, clone_path_for, mr_key, parse_mr_key
 
     assert mr_key(1, 2) == "1-2"
     assert parse_mr_key("1-2") == (1, 2)
@@ -860,8 +860,8 @@ def test_identity_edges(tmp_path):
 
 
 def test_logging_and_diag_edges(tmp_path, monkeypatch):
-    from creasy import logging as logmod
-    from creasy import diag
+    from mireviewer import logging as logmod
+    from mireviewer import diag
 
     log = logmod.setup_logging("DEBUG", tmp_path)
     log.info("hello")
@@ -881,14 +881,14 @@ def test_logging_and_diag_edges(tmp_path, monkeypatch):
     logmod.redact_userinfo("https://oauth2:tok@host/repo.git")
     logmod.redact_userinfo("")
     diag.log_diag("system", "ping", ok=True)
-    from creasy.jobs.models import JobRecord
+    from mireviewer.jobs.models import JobRecord
 
     job = JobRecord(job_id="job_d", mr_key="1-1", project_id=1, mr_iid=1, trigger="review")
     diag.merge_job_diag(job, stage="x", extra=1)
 
 
 def test_azure_urls_and_threads_edges():
-    from creasy.azure.threads import (
+    from mireviewer.azure.threads import (
         azure_thread_context,
         parse_azure_thread,
         parse_azure_threads,
@@ -896,15 +896,15 @@ def test_azure_urls_and_threads_edges():
         _file_path,
         _norm_path,
     )
-    from creasy.azure.urls import (
+    from mireviewer.azure.urls import (
         identity_root,
         looks_like_azure_resource,
         normalize_collection_url,
         resolve_collection_url,
     )
-    from creasy.review.findings import Finding
-    from creasy.review.position import CREASY_FINDING_MARK
-    from creasy.workspace.diffmap import parse_unified_diff
+    from mireviewer.review.findings import Finding
+    from mireviewer.review.position import CREASY_FINDING_MARK
+    from mireviewer.workspace.diffmap import parse_unified_diff
 
     assert looks_like_azure_resource("") is False
     assert looks_like_azure_resource("https://tfs/tfs/Col") is True
@@ -998,11 +998,11 @@ def test_azure_urls_and_threads_edges():
 
 
 def test_comment_range_and_similarity_and_position():
-    from creasy.review.comment_range import format_code_comment_prompt
-    from creasy.review.findings import Finding, split_findings
-    from creasy.review.position import build_position_variants, format_discussion
-    from creasy.review.similarity import should_skip_similar_reply
-    from creasy.workspace.diffmap import parse_unified_diff
+    from mireviewer.review.comment_range import format_code_comment_prompt
+    from mireviewer.review.findings import Finding, split_findings
+    from mireviewer.review.position import build_position_variants, format_discussion
+    from mireviewer.review.similarity import should_skip_similar_reply
+    from mireviewer.workspace.diffmap import parse_unified_diff
 
     assert format_code_comment_prompt("", path="", side="", start_line=0, end_line=0) == ""
     assert "src/a.py" in format_code_comment_prompt("why?", path="src/a.py", side="new", start_line=2, end_line=4)

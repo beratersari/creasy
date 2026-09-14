@@ -8,8 +8,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api import dashboard
-from creasy.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
+from mireviewer.api import dashboard
+from mireviewer.api.web_mimetypes import ensure_spa_mimetypes, media_type_for_path
 
 
 def test_ensure_spa_mimetypes_overrides_text_plain_js() -> None:

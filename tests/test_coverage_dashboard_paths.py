@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import (
+from mireviewer.api.dashboard import (
     _chat_payload,
     _live_chat_rows,
     _spa_file,
@@ -18,8 +18,8 @@ from creasy.api.dashboard import (
     router,
     spa_dir,
 )
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
 from conftest import FakeRunner
 
 
@@ -88,7 +88,7 @@ def test_dashboard_job_routes(tmp_config):
     assert client.get("/api/queue").status_code == 200
     assert client.get("/api/queue", params={"mr_key": "7"}).status_code == 200
     assert client.get("/api/queue", params={"mr_key": "nope"}).status_code == 200
-    assert client.get("/api/meta").json()["app_name"] == "creasy"
+    assert client.get("/api/meta").json()["app_name"] == "MIReviewer"
     assert client.get("/api/settings").status_code == 200
     assert client.put("/api/settings", content="not-json").status_code in {200, 400}
     assert client.put("/api/settings", json=["x"]).status_code in {200, 400}
@@ -130,9 +130,9 @@ def test_chat_payload_and_live(monkeypatch):
     job.serve_base_url = "http://x"
     job.session_id = "ses"
     job.clone_path = "/tmp"
-    monkeypatch.setattr("creasy.api.dashboard.fetch_live_chat", lambda *a, **k: [{"role": "user", "parts": []}])
+    monkeypatch.setattr("mireviewer.api.dashboard.fetch_live_chat", lambda *a, **k: [{"role": "user", "parts": []}])
     assert _live_chat_rows(job)
-    monkeypatch.setattr("creasy.api.dashboard.fetch_live_chat", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.api.dashboard.fetch_live_chat", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     assert _live_chat_rows(job) is None
     job.serve_base_url = ""
     assert _live_chat_rows(job) is None
@@ -146,7 +146,7 @@ def test_attach_spa_and_pages(tmp_config, tmp_path, monkeypatch):
     (dist / "index.html").write_text("<html>Creasy</html>", encoding="utf-8")
     (dist / "favicon.svg").write_text("<svg></svg>", encoding="utf-8")
     (dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
-    monkeypatch.setattr("creasy.api.dashboard.spa_dir", lambda: dist)
+    monkeypatch.setattr("mireviewer.api.dashboard.spa_dir", lambda: dist)
     app = FastAPI()
     app.state.config = tmp_config
     app.state.manager = MagicMock()
@@ -162,7 +162,7 @@ def test_attach_spa_and_pages(tmp_config, tmp_path, monkeypatch):
     assert resp.path
     empty = tmp_path / "empty"
     empty.mkdir()
-    monkeypatch.setattr("creasy.api.dashboard.spa_dir", lambda: empty)
+    monkeypatch.setattr("mireviewer.api.dashboard.spa_dir", lambda: empty)
     app2 = FastAPI()
     app2.state.config = tmp_config
     attach_spa(app2)
@@ -171,5 +171,5 @@ def test_attach_spa_and_pages(tmp_config, tmp_path, monkeypatch):
     assert body.status_code == 200
     assert client2.get("/login").status_code == 404
     assert spa_dir().name == "dist"
-    monkeypatch.setattr("creasy.paths.bundled_dir", lambda *a, **k: dist)
+    monkeypatch.setattr("mireviewer.paths.bundled_dir", lambda *a, **k: dist)
     assert spa_dir() == dist

@@ -13,10 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from creasy.gitlab.events import ReviewTrigger
-from creasy.jobs.manager import Manager
-from creasy.jobs.worker import RunResult
-from creasy.opencode.serve import wait_health
+from mireviewer.gitlab.events import ReviewTrigger
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.worker import RunResult
+from mireviewer.opencode.serve import wait_health
 
 
 def _trig() -> ReviewTrigger:

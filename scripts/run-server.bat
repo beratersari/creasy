@@ -1,5 +1,5 @@
 @echo off
-REM Runs Creasy in the Creasy window. Do not nest this inside a quoted cmd /c.
+REM Runs MIReviewer in this window. Do not nest this inside a quoted cmd /c.
 setlocal EnableDelayedExpansion
 cd /d "%~dp0\.."
 set "GIT_TERMINAL_PROMPT=0"
@@ -18,10 +18,10 @@ if not exist "%CREASY_PY%" (
     pause
     exit /b 1
 )
-"%CREASY_PY%" -m creasy
+"%CREASY_PY%" -m mireviewer
 set "EC=!ERRORLEVEL!"
 echo.
-echo Creasy exited. code=!EC!
+echo MIReviewer exited. code=!EC!
 >>"%CD%\logs\wrapper-exit.log" echo %DATE% %TIME% exit=!EC!
 if not "!EC!"=="0" echo No Python traceback usually means the process was killed from outside.
 pause

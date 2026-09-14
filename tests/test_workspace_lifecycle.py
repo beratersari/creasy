@@ -3,10 +3,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from creasy.gitlab.client import GitLabClient, MergeRequest
-from creasy.jobs.models import JobRecord
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.workspace.gitops import (
+from mireviewer.gitlab.client import GitLabClient, MergeRequest
+from mireviewer.jobs.models import JobRecord
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.workspace.gitops import (
     clone_is_usable,
     clone_repo,
     delete_clone,
@@ -14,8 +14,8 @@ from creasy.workspace.gitops import (
     fetch_and_checkout,
     resolve_merge_base,
 )
-from creasy.workspace.identity import clone_path_for
-from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+from mireviewer.workspace.identity import clone_path_for
+from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 
 
 def _git(cwd: Path, *args: str) -> str:

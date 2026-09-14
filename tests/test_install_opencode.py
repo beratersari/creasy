@@ -283,7 +283,7 @@ def test_extra_skills_state_when_to_load() -> None:
 
 
 def test_default_agent_is_gitlab_reviewer() -> None:
-    from creasy.config import Config
+    from mireviewer.config import Config
 
     assert Config().opencode_agent == "code-reviewer"
 
@@ -375,7 +375,7 @@ def test_missing_configs_submodule_fails(tmp_path: Path) -> None:
 
 
 def test_restricted_child_env_disables_models_fetch_and_gcm() -> None:
-    from creasy.opencode.serve import restricted_child_env
+    from mireviewer.opencode.serve import restricted_child_env
 
     env = restricted_child_env({"PATH": "x"})
     assert env["OPENCODE_DISABLE_MODELS_FETCH"] == "1"
@@ -386,7 +386,7 @@ def test_restricted_child_env_disables_models_fetch_and_gcm() -> None:
 
 
 def test_seed_ripgrep_cache_copies_from_opencode_bin(tmp_path: Path) -> None:
-    from creasy.opencode.serve import seed_ripgrep_cache
+    from mireviewer.opencode.serve import seed_ripgrep_cache
 
     name = "rg.exe" if os.name == "nt" else "rg"
     src = tmp_path / "home" / ".opencode" / "bin" / name

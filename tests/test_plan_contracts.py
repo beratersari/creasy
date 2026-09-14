@@ -17,17 +17,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.gitlab.client import GitLabError, MergeRequest
-from creasy.gitlab.events import ReviewTrigger, first_command
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.opencode.serve import ServeHandle
-from creasy.opencode.session import OpenCodeClient, OpenCodeError
-from creasy.review.format import format_cancelled, format_failure, format_success
-from creasy.logging import redact_userinfo
-from creasy.workspace.gitops import (
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.gitlab.client import GitLabError, MergeRequest
+from mireviewer.gitlab.events import ReviewTrigger, first_command
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.opencode.serve import ServeHandle
+from mireviewer.opencode.session import OpenCodeClient, OpenCodeError
+from mireviewer.review.format import format_cancelled, format_failure, format_success
+from mireviewer.logging import redact_userinfo
+from mireviewer.workspace.gitops import (
     DiffIndex,
     GitError,
     _run_git,
@@ -36,7 +36,7 @@ from creasy.workspace.gitops import (
     isolated_git_env,
     public_git_url,
 )
-from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 from conftest import FakeRunner
 
 
@@ -162,7 +162,7 @@ class _FakeServeClient:
 
 def _patch_worker(monkeypatch, tmp_config, client_factory, dest) -> None:
     dest.mkdir(parents=True, exist_ok=True)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -248,7 +248,7 @@ new file mode 100644
 
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
     result = runner.run(_job(), lambda: False)
@@ -317,7 +317,7 @@ new file mode 100644
 
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
     result = runner.run(_job(), lambda: False)
@@ -331,8 +331,8 @@ new file mode 100644
 
 def test_worker_skips_similar_thread_reply(tmp_config, monkeypatch):
     dest = tmp_config.work_dir / "1-1"
-    from creasy.review.findings import Finding
-    from creasy.review.position import format_discussion
+    from mireviewer.review.findings import Finding
+    from mireviewer.review.position import format_discussion
 
     same = format_discussion(
         Finding(
@@ -387,7 +387,7 @@ new file mode 100644
 
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
     result = runner.run(_job(), lambda: False)
@@ -442,7 +442,7 @@ new file mode 100644
 
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "unified_diff", lambda *a, **k: diff)
     result = runner.run(_job(), lambda: False)
@@ -478,7 +478,7 @@ ok
 
     _patch_worker(monkeypatch, tmp_config, lambda *a, **k: _FakeServeClient(wait=reply), dest)
     monkeypatch.setattr(runner, "_ensure_workspace", _ensure)
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -536,7 +536,7 @@ def test_worker_clone_auth_failure_posts_error_note(tmp_config, monkeypatch):
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     started: list[int] = []
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -574,7 +574,7 @@ def test_worker_fetch_auth_failure_keeps_clone_and_posts_error(tmp_config, monke
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     started: list[int] = []
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -611,7 +611,7 @@ def test_worker_mr_fetch_401_posts_error_note(tmp_config, monkeypatch):
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     started: list[int] = []
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
     monkeypatch.setattr(w, "stop_serve", lambda h: None)
@@ -633,7 +633,7 @@ def test_worker_missing_repo_url_posts_error_note(tmp_config, monkeypatch):
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     started: list[int] = []
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(w, "start_serve", lambda **k: started.append(1))
     monkeypatch.setattr(w, "stop_serve", lambda h: None)
@@ -683,7 +683,7 @@ def test_worker_empty_token_is_passed_to_clone(tmp_config, monkeypatch):
     workspaces = WorkspaceStore(tmp_config.data_dir / "ws")
     runner = OpenCodeRunner(tmp_config, workspaces, spy)
     seen: dict[str, object] = {}
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     def _clone(url, dest_path, token, *, timeout, **_kwargs):
         seen["url"] = url
@@ -908,7 +908,7 @@ def test_dashboard_token_required_when_set(tmp_config):
     client = TestClient(app)
     assert client.get("/api/jobs").status_code == 401
     assert client.post("/api/jobs/job_missing/cancel").status_code == 401
-    ok = client.get("/api/jobs", headers={"X-Creasy-Token": "dash-secret"})
+    ok = client.get("/api/jobs", headers={"X-MIReviewer-Token": "dash-secret"})
     assert ok.status_code == 200
     bearer = client.get("/api/jobs", headers={"Authorization": "Bearer dash-secret"})
     assert bearer.status_code == 200
@@ -947,7 +947,7 @@ def test_dashboard_ws_requires_token_when_set(tmp_config):
             raise AssertionError("unauthenticated websocket should not connect")
     except WebSocketDisconnect as exc:
         assert exc.code == 1008
-    with client.websocket_connect("/ws", headers={"X-Creasy-Token": "dash-secret"}) as ws:
+    with client.websocket_connect("/ws", headers={"X-MIReviewer-Token": "dash-secret"}) as ws:
         payload = ws.receive_json()
         assert "running" in payload
     manager.shutdown()
@@ -986,7 +986,7 @@ def test_run_git_does_not_log_or_raise_oauth_token():
     buf = io.StringIO()
     handler = logging.StreamHandler(buf)
     handler.setLevel(logging.DEBUG)
-    log = logging.getLogger("creasy.gitops")
+    log = logging.getLogger("mireviewer.gitops")
     log.addHandler(handler)
     log.setLevel(logging.DEBUG)
     try:

@@ -9,8 +9,8 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from creasy.gitlab.client import GitLabClient, GitLabError, _http_detail, _parse_labels
-from creasy.opencode.serve import (
+from mireviewer.gitlab.client import GitLabClient, GitLabError, _http_detail, _parse_labels
+from mireviewer.opencode.serve import (
     ServeHandle,
     free_port,
     read_serve_log,
@@ -22,7 +22,7 @@ from creasy.opencode.serve import (
     wait_health,
     _vendor_ripgrep,
 )
-from creasy.opencode.session import (
+from mireviewer.opencode.session import (
     OpenCodeClient,
     OpenCodeError,
     fetch_live_chat,
@@ -282,7 +282,7 @@ def test_session_text_helpers():
     assert "Summary" in turn_assistant_text(msgs)
     assert turn_assistant_text(msgs, prefer_review=False)
     hang = [{"role": "user", "parts": [{"type": "text", "text": "continue the previous turn"}]}]
-    from creasy.review.prompt import HANG_RESUME
+    from mireviewer.review.prompt import HANG_RESUME
 
     hang[0]["parts"][0]["text"] = HANG_RESUME.strip()
     assert turn_assistant_text(hang + msgs) or True
@@ -457,7 +457,7 @@ def test_fetch_live_chat(monkeypatch):
         def close(self):
             return None
 
-    monkeypatch.setattr("creasy.opencode.session.OpenCodeClient", Fake)
+    monkeypatch.setattr("mireviewer.opencode.session.OpenCodeClient", Fake)
     assert fetch_live_chat("http://x", "/tmp", "ses")
 
 
@@ -489,17 +489,17 @@ def test_serve_helpers(tmp_path, monkeypatch):
     proc.wait.side_effect = RuntimeError("x")
     proc._creasy_log_f = MagicMock()
     proc._creasy_log_f.close.side_effect = RuntimeError("x")
-    monkeypatch.setattr("creasy.opencode.serve.kill_pid", lambda pid: None)
+    monkeypatch.setattr("mireviewer.opencode.serve.kill_pid", lambda pid: None)
     stop_serve(ServeHandle(pid=1, port=2, base_url="http://x", proc=proc, log_path=log))
 
-    monkeypatch.setattr("creasy.opencode.serve.shutil.which", lambda n: None)
-    monkeypatch.setattr("creasy.opencode.serve.free_port", lambda: 9)
-    monkeypatch.setattr("creasy.opencode.serve.seed_ripgrep_cache", lambda: None)
+    monkeypatch.setattr("mireviewer.opencode.serve.shutil.which", lambda n: None)
+    monkeypatch.setattr("mireviewer.opencode.serve.free_port", lambda: 9)
+    monkeypatch.setattr("mireviewer.opencode.serve.seed_ripgrep_cache", lambda: None)
 
     def boom_popen(*a, **k):
         raise OSError("no bin")
 
-    monkeypatch.setattr("creasy.opencode.serve.subprocess.Popen", boom_popen)
+    monkeypatch.setattr("mireviewer.opencode.serve.subprocess.Popen", boom_popen)
     with pytest.raises(OSError):
         start_serve(bin_name="opencode", cwd=tmp_path, log_path=tmp_path / "x.log", timeout=1)
     with pytest.raises(RuntimeError):
@@ -513,8 +513,8 @@ def test_serve_helpers(tmp_path, monkeypatch):
         def poll(self):
             return None
 
-    monkeypatch.setattr("creasy.opencode.serve.subprocess.Popen", lambda *a, **k: FakeProc())
-    monkeypatch.setattr("creasy.opencode.serve.wait_health", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr("mireviewer.opencode.serve.subprocess.Popen", lambda *a, **k: FakeProc())
+    monkeypatch.setattr("mireviewer.opencode.serve.wait_health", lambda *a, **k: {"ok": True})
     spawned = []
     handle = start_serve(
         bin_name="opencode",
@@ -524,8 +524,8 @@ def test_serve_helpers(tmp_path, monkeypatch):
         on_spawn=lambda h: spawned.append(h),
     )
     assert spawned
-    monkeypatch.setattr("creasy.opencode.serve.wait_health", lambda *a, **k: (_ for _ in ()).throw(TimeoutError("x")))
-    monkeypatch.setattr("creasy.opencode.serve.stop_serve", lambda h: None)
+    monkeypatch.setattr("mireviewer.opencode.serve.wait_health", lambda *a, **k: (_ for _ in ()).throw(TimeoutError("x")))
+    monkeypatch.setattr("mireviewer.opencode.serve.stop_serve", lambda h: None)
     with pytest.raises(TimeoutError):
         start_serve(bin_name="opencode", cwd=tmp_path, log_path=tmp_path / "bad.log", timeout=1)
 

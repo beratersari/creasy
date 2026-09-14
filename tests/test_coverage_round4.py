@@ -7,14 +7,14 @@ from unittest.mock import MagicMock
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.webhook import router as gitlab_router
-from creasy.api.webhook_azure import router as azure_router
-from creasy.azure.client import AzureError
-from creasy.gitlab.events import classify_webhook
-from creasy.jobs.manager import Manager
-from creasy.review.findings import Finding
-from creasy.review.position import build_position_variants
-from creasy.workspace.diffmap import parse_unified_diff
+from mireviewer.api.webhook import router as gitlab_router
+from mireviewer.api.webhook_azure import router as azure_router
+from mireviewer.azure.client import AzureError
+from mireviewer.gitlab.events import classify_webhook
+from mireviewer.jobs.manager import Manager
+from mireviewer.review.findings import Finding
+from mireviewer.review.position import build_position_variants
+from mireviewer.workspace.diffmap import parse_unified_diff
 from conftest import FakeRunner
 from test_azure_events import PROJECT, REPO, _pr
 from test_azure_webhook import FakeAzure, _auth
@@ -94,8 +94,8 @@ def test_azure_webhook_json_reviewers_cleanup(tmp_config):
 
     app.state.azure = KwAzure([{"id": "bot-id", "displayName": "creasy"}])
     client = TestClient(app)
-    assert client.post("/creasy/webhook/azure", content="not-json", headers=_auth()).status_code == 400
-    assert client.post("/creasy/webhook/azure", json=["x"], headers=_auth()).status_code == 400
+    assert client.post("/mireviewer/webhook/azure", content="not-json", headers=_auth()).status_code == 400
+    assert client.post("/mireviewer/webhook/azure", json=["x"], headers=_auth()).status_code == 400
     pr = _pr()
     pr["reviewers"] = [{"id": "bot-id", "displayName": "creasy"}]
     payload = {
@@ -103,21 +103,21 @@ def test_azure_webhook_json_reviewers_cleanup(tmp_config):
         "message": {"text": "Alice changed the reviewer list for pull request 12 (Title)"},
         "resource": pr,
     }
-    client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    client.post("/mireviewer/webhook/azure", json=payload, headers=_auth())
 
     class ErrAzure(FakeAzure):
         def list_reviewers(self, *a, **k):
             raise AzureError("down")
 
     app.state.azure = ErrAzure()
-    client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    client.post("/mireviewer/webhook/azure", json=payload, headers=_auth())
 
     app.state.azure = FakeAzure()
     cleanup = {
         "eventType": "git.pullrequest.merged",
         "resource": {**pr, "status": "completed"},
     }
-    client.post("/creasy/webhook/azure", json=cleanup, headers=_auth())
+    client.post("/mireviewer/webhook/azure", json=cleanup, headers=_auth())
 
     manager.ready = False
     assign = {
@@ -125,20 +125,20 @@ def test_azure_webhook_json_reviewers_cleanup(tmp_config):
         "message": {"text": "Alice added creasy as a reviewer"},
         "resource": pr,
     }
-    client.post("/creasy/webhook/azure", json=assign, headers=_auth())
+    client.post("/mireviewer/webhook/azure", json=assign, headers=_auth())
     runner.release.set()
     manager.shutdown()
 
 
 def test_more_branch_edges(tmp_config):
-    from creasy.azure.threads import azure_thread_context, parse_azure_thread
-    from creasy.jobs.manager import _real_review_busy
-    from creasy.jobs.models import JobRecord
-    from creasy.jobs.store import JobStore
-    from creasy.opencode.session import OpenCodeClient, _role, _text_parts
-    from creasy.review.findings import _coerce
-    from creasy.review.position import CREASY_FINDING_MARK
-    from creasy.workspace.diffmap import parse_unified_diff
+    from mireviewer.azure.threads import azure_thread_context, parse_azure_thread
+    from mireviewer.jobs.manager import _real_review_busy
+    from mireviewer.jobs.models import JobRecord
+    from mireviewer.jobs.store import JobStore
+    from mireviewer.opencode.session import OpenCodeClient, _role, _text_parts
+    from mireviewer.review.findings import _coerce
+    from mireviewer.review.position import CREASY_FINDING_MARK
+    from mireviewer.workspace.diffmap import parse_unified_diff
 
     diff = parse_unified_diff(
         """diff --git a/a.py b/a.py
@@ -180,11 +180,11 @@ def test_more_branch_edges(tmp_config):
     assert _text_parts({"info": {"parts": [{"type": "text", "text": ""}]}}) == []
     assert _coerce({"path": "a.py", "start_line": 1, "end_line": None, "title": "t"})
     assert _coerce({"path": "a.py", "start_line": 1, "end_line": "bad", "title": "t"})
-    from creasy.azure.urls import normalize_collection_url
+    from mireviewer.azure.urls import normalize_collection_url
 
     normalize_collection_url("https://host/_git/repo")
-    from creasy.review.format import format_success
-    from creasy.jobs.models import JobRecord
+    from mireviewer.review.format import format_success
+    from mireviewer.jobs.models import JobRecord
 
     format_success(JobRecord(job_id="job_f", mr_key="1-1", project_id=1, mr_iid=1, trigger="review", text="# Title\n**Bold**"))
     store = JobStore(tmp_config.job_dir)
@@ -220,7 +220,7 @@ def test_more_branch_edges(tmp_config):
 
 
 def test_gitlab_webhook_invalid_json(tmp_config):
-    from creasy.api.webhook import router
+    from mireviewer.api.webhook import router
 
     tmp_config.webhook_secret = ""
     manager = Manager(tmp_config, FakeRunner())

@@ -9,6 +9,15 @@ section in the same change.
 
 ## Unreleased
 
+### Changed
+
+- The product is MIReviewer end to end: package `mireviewer`,
+  webhooks `/mireviewer/webhook/gitlab` and
+  `/mireviewer/webhook/azure`, zips `mireviewer-X.Y.Z-*.zip`,
+  binary `mireviewer` / `mireviewer.exe`, and header
+  `X-MIReviewer-Token`. Old `/creasy/webhook/*` URLs and
+  `X-Creasy-Token` still work.
+
 ## 0.9.15 — 2026-09-14
 
 Linux operators download a zip built on their Ubuntu. The old

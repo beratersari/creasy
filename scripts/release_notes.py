@@ -37,9 +37,9 @@ def downloads_body(version: str) -> str:
         raise SystemExit(f"cannot load {path}")
     zips_mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(zips_mod)
-    zips = [f"creasy-{version}-{suffix}.zip" for suffix in zips_mod.release_suffixes()]
+    zips = [f"mireviewer-{version}-{suffix}.zip" for suffix in zips_mod.release_suffixes()]
     lines = [
-        "Each zip is one Creasy executable, `.env.example`, `opencoderman/agents`, `opencoderman/skills`, and `install-review-agent` scripts.",
+        "Each zip is one MIReviewer executable, `.env.example`, `opencoderman/agents`, `opencoderman/skills`, and `install-review-agent` scripts.",
         "",
         "Linux: pick the zip that matches your Ubuntu. `linux-x64` is the Ubuntu 22.04 build.",
         "",

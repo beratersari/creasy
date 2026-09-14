@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from creasy.azure.events import classify_azure_webhook, reset_reviewer_cache
-from creasy.gitlab.events import Ignore, ReviewTrigger, classify_webhook
+from mireviewer.azure.events import classify_azure_webhook, reset_reviewer_cache
+from mireviewer.gitlab.events import Ignore, ReviewTrigger, classify_webhook
 from test_azure_events import _pr
 from test_azure_webhook import _app, _auth, _pr_with_bot
 from test_events import mr_payload
@@ -135,7 +135,7 @@ def test_webhook_get_verifies_add(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[BOT])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json=_update(ADDED_BOT, [ALICE]),
         headers=_auth(),
     )
@@ -149,7 +149,7 @@ def test_webhook_get_rejects_add_when_bot_not_listed(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[ALICE])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json=_update(ADDED_BOT, [BOT]),
         headers=_auth(),
     )
@@ -163,7 +163,7 @@ def test_webhook_get_does_not_run_on_comment(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from creasy.config import Config
-from creasy.jobs.worker import RunResult
+from mireviewer.config import Config
+from mireviewer.jobs.worker import RunResult
 
 
 class FakeRunner:

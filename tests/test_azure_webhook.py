@@ -7,11 +7,11 @@ from fastapi.testclient import TestClient
 
 import pytest
 
-from creasy.azure.events import reset_reviewer_cache
-from creasy.api.webhook import router as gitlab_router
-from creasy.api.webhook_azure import router as azure_router
-from creasy.azure.identity import azure_project_num
-from creasy.jobs.manager import Manager
+from mireviewer.azure.events import reset_reviewer_cache
+from mireviewer.api.webhook import router as gitlab_router
+from mireviewer.api.webhook_azure import router as azure_router
+from mireviewer.azure.identity import azure_project_num
+from mireviewer.jobs.manager import Manager
 from conftest import FakeRunner
 from test_azure_events import PROJECT, REPO, _pr
 
@@ -88,7 +88,7 @@ def test_azure_route_does_not_change_gitlab_webhook(tmp_config):
         },
         "reviewers": [{"id": 99, "username": "creasy"}],
     }
-    res = client.post("/creasy/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
+    res = client.post("/mireviewer/webhook/gitlab", json=payload, headers={"X-Gitlab-Token": "secret"})
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     job = manager.store.get(res.json()["job_id"])
@@ -102,7 +102,7 @@ def test_azure_payload_on_gitlab_route_is_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json={"eventType": "git.pullrequest.created", "resource": _pr()},
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -116,7 +116,7 @@ def test_azure_created_accepted(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot()},
         headers=_auth(),
     )
@@ -139,7 +139,7 @@ def test_reviewer_change_get_confirms_add(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -162,7 +162,7 @@ def test_reviewer_change_get_without_bot_ignores_stale_add(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[{"id": "alice", "displayName": "Alice"}])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -180,7 +180,7 @@ def test_reviewer_change_get_listed_generic_message_starts_review(tmp_config):
     app, manager, runner = _app(tmp_config, reviewers=[{"id": "bot-id", "displayName": "creasy"}])
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.updated",
             "notificationType": "ReviewersUpdateNotification",
@@ -213,9 +213,9 @@ def test_second_assign_hook_is_ignored_while_review_runs(tmp_config):
         },
         "resource": _pr_with_bot(),
     }
-    first = client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    first = client.post("/mireviewer/webhook/azure", json=payload, headers=_auth())
     assert first.json()["status"] == "accepted", first.json()
-    second = client.post("/creasy/webhook/azure", json=payload, headers=_auth())
+    second = client.post("/mireviewer/webhook/azure", json=payload, headers=_auth())
     assert second.json()["status"] == "ignored"
     reviews = [job for job in manager.store.list_all() if job.trigger == "review"]
     assert len(reviews) == 1
@@ -240,7 +240,7 @@ def test_azure_mention_comment_is_accepted(tmp_config):
     app, manager, runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={
             "eventType": "git.pullrequest.commented",
             "resource": {
@@ -265,7 +265,7 @@ def test_azure_update_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={"eventType": "git.pullrequest.updated", "resource": _pr()},
         headers=_auth(),
     )
@@ -291,7 +291,7 @@ def test_gitlab_secret_does_not_lock_azure_route(tmp_config):
     app.include_router(azure_router)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr_with_bot(pullRequestId=3)},
     )
     assert res.status_code == 200
@@ -304,7 +304,7 @@ def test_azure_secret_required_when_set(tmp_config):
     app, manager, _runner = _app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/azure",
+        "/mireviewer/webhook/azure",
         json={"eventType": "git.pullrequest.created", "resource": _pr()},
     )
     assert res.status_code == 401
@@ -350,7 +350,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
             ),
         },
     }
-    res = client.post("/creasy/webhook/azure", json=payload)
+    res = client.post("/mireviewer/webhook/azure", json=payload)
     assert res.status_code == 200
     assert res.json()["status"] == "accepted"
     assert order[0].startswith("user:")
@@ -366,7 +366,7 @@ def test_azure_bot_id_is_resolved_before_collection_rebase(tmp_config):
 def test_azure_disabled_is_ignored(tmp_config):
     app, manager, _runner = _app(tmp_config, azure=False)
     client = TestClient(app)
-    res = client.post("/creasy/webhook/azure", json={"eventType": "git.pullrequest.created", "resource": _pr()})
+    res = client.post("/mireviewer/webhook/azure", json={"eventType": "git.pullrequest.created", "resource": _pr()})
     assert res.status_code == 200
     assert res.json()["reason"] == "azure not configured"
     manager.shutdown()

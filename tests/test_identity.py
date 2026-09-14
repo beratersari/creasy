@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from creasy.workspace.identity import IdentityError, clone_path_for, mr_key
+from mireviewer.workspace.identity import IdentityError, clone_path_for, mr_key
 
 
 def test_mr_key_and_path(tmp_path: Path):

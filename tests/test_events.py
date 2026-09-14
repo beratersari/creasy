@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from creasy.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, classify_webhook, first_command
-from creasy.review.mention import USAGE_MARKER
+from mireviewer.gitlab.events import CleanupTrigger, Ignore, ReviewTrigger, classify_webhook, first_command
+from mireviewer.review.mention import USAGE_MARKER
 
 
 def mr_payload(action: str, **attrs):

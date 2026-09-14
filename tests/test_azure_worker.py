@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from creasy.gitlab.client import MergeRequest
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.review.findings import Finding
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.review.findings import Finding
+from mireviewer.workspace.store import WorkspaceStore
 from test_azure_events import PROJECT, REPO
 from test_fixes import SpyGitlab
 
@@ -264,8 +264,8 @@ def test_top_level_ask_does_not_use_itself_as_parent(tmp_config):
 
 
 def test_ask_prompt_same_for_gitlab_and_azure(tmp_config):
-    from creasy.workspace.gitops import DiffIndex
-    from creasy.workspace.store import WorkspaceRecord
+    from mireviewer.workspace.gitops import DiffIndex
+    from mireviewer.workspace.store import WorkspaceRecord
 
     runner = OpenCodeRunner(tmp_config, WorkspaceStore(tmp_config.data_dir / "ws"), SpyGitlab())
     mr = MergeRequest(

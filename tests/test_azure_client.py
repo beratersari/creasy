@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from creasy.azure.client import AzureClient
+from mireviewer.azure.client import AzureClient
 
 
 def _client(handler) -> AzureClient:

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from creasy.gitlab.events import CleanupTrigger, ReviewTrigger
-from creasy.jobs.manager import Manager
+from mireviewer.gitlab.events import CleanupTrigger, ReviewTrigger
+from mireviewer.jobs.manager import Manager
 from conftest import FakeRunner
 
 

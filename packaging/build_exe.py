@@ -51,11 +51,11 @@ def host_suffix() -> str:
 
 
 def exe_name() -> str:
-    return "creasy.exe" if sys.platform.startswith("win") else "creasy"
+    return "mireviewer.exe" if sys.platform.startswith("win") else "mireviewer"
 
 
 def zip_name(version: str, suffix: str) -> str:
-    return f"creasy-{version}-{suffix}.zip"
+    return f"mireviewer-{version}-{suffix}.zip"
 
 
 REVIEW_AGENT_SCRIPTS = (
@@ -184,7 +184,7 @@ def write_pyinstaller_spec(root: Path, spec_path: Path) -> None:
                 f"ROOT = Path({str(root)!r})",
                 "datas = [(str(ROOT / 'VERSION'), '.'), (str(ROOT / 'web' / 'dist'), 'web/dist')]",
                 "binaries = []",
-                "hidden = ['creasy', 'creasy.app']",
+                "hidden = ['mireviewer', 'mireviewer.app']",
                 "from PyInstaller.utils.hooks import collect_all",
                 "for _pkg in ('uvicorn', 'fastapi', 'starlette'):",
                 "    _d, _b, _h = collect_all(_pkg)",
@@ -193,7 +193,7 @@ def write_pyinstaller_spec(root: Path, spec_path: Path) -> None:
                 "    hidden += _h",
                 "",
                 "a = Analysis(",
-                "    [str(ROOT / 'src' / 'creasy' / '__main__.py')]",
+                "    [str(ROOT / 'src' / 'mireviewer' / '__main__.py')]",
                 "    , pathex=[str(ROOT / 'src')]",
                 "    , binaries=binaries",
                 "    , datas=datas",
@@ -229,7 +229,7 @@ def write_pyinstaller_spec(root: Path, spec_path: Path) -> None:
                 "    a.binaries,",
                 "    a.datas,",
                 "    [],",
-                "    name='creasy',",
+                "    name='mireviewer',",
                 "    debug=False,",
                 "    bootloader_ignore_signals=False,",
                 "    strip=False,",

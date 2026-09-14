@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from creasy.azure.threads import azure_thread_context, parse_azure_thread, parse_azure_threads
-from creasy.review.findings import Finding
-from creasy.review.position import CREASY_FINDING_MARK
-from creasy.review.threads import match_creasy_thread
-from creasy.workspace.diffmap import parse_unified_diff
+from mireviewer.azure.threads import azure_thread_context, parse_azure_thread, parse_azure_threads
+from mireviewer.review.findings import Finding
+from mireviewer.review.position import CREASY_FINDING_MARK
+from mireviewer.review.threads import match_creasy_thread
+from mireviewer.workspace.diffmap import parse_unified_diff
 
 
 def _finding(**kwargs) -> Finding:
@@ -70,7 +70,7 @@ def test_parse_and_match_azure_thread():
 
 
 def test_old_job_json_defaults_to_gitlab():
-    from creasy.jobs.models import JobRecord
+    from mireviewer.jobs.models import JobRecord
 
     raw = (
         '{"job_id":"job_ab","mr_key":"1-2","project_id":1,"mr_iid":2,'

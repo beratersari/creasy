@@ -36,10 +36,10 @@ def test_vendor_scripts_call_build_dist():
 
 def test_default_ports_do_not_collide_with_virtual_developer():
     """virtual_developer binds 8080 + Vite 5173. Creasy uses 9001 + 5174."""
-    from creasy.config import Config
+    from mireviewer.config import Config
 
     assert Config().port == 9001
-    assert 'port=_int("PORT", 9001)' in _read("src/creasy/config.py")
+    assert 'port=_int("PORT", 9001)' in _read("src/mireviewer/config.py")
     assert 'DASH_PORT="${PORT:-9001}"' in _read("scripts/start.sh")
     assert 'set "DASH_PORT=9001"' in _read("scripts/start.bat")
     vite = _read("web/vite.config.ts")
@@ -61,7 +61,7 @@ def test_start_scripts_launch_creasy():
     bat = _read("scripts/start.bat")
     sh = _read("scripts/start.sh")
     assert "run-server.bat" in bat
-    assert "-m creasy" in sh
+    assert "-m mireviewer" in sh
     assert "GIT_TERMINAL_PROMPT" in bat
     assert "GIT_TERMINAL_PROMPT" in sh
     assert "GIT_SSL_NO_VERIFY" in bat
@@ -140,10 +140,10 @@ def test_ci_runs_vendor_install_start():
     assert "upload-artifact" in workflow
     assert "include-hidden-files: true" in workflow
     assert "packaging/build_exe.py" in workflow
-    assert "creasy.exe" in workflow
+    assert "mireviewer.exe" in workflow
     assert "test -f" in workflow and ".env.example" in workflow
     assert "assert_exe_zip" in workflow
-    assert "dist/stage/creasy-" in workflow
+    assert "dist/stage/mireviewer-" in workflow
     assert "dist/creasy-*.zip" not in workflow
     assert "creasy-offline-zips" not in workflow
     assert "run-server.bat" in _read("scripts/start.bat")

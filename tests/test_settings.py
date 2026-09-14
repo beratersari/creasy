@@ -5,10 +5,10 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.gitlab.events import ReviewTrigger
-from creasy.jobs.manager import Manager
-from creasy.settings import apply_runtime_settings, normalize_model, settings_path
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.gitlab.events import ReviewTrigger
+from mireviewer.jobs.manager import Manager
+from mireviewer.settings import apply_runtime_settings, normalize_model, settings_path
 from conftest import FakeRunner
 
 
@@ -106,12 +106,12 @@ def test_settings_requires_token_when_set(tmp_config) -> None:
     client, manager, runner = _app(tmp_config, token="dash-secret")
     assert client.get("/api/settings").status_code == 401
     assert client.put("/api/settings", json={"opencode_model": "acme/fast"}).status_code == 401
-    ok = client.get("/api/settings", headers={"X-Creasy-Token": "dash-secret"})
+    ok = client.get("/api/settings", headers={"X-MIReviewer-Token": "dash-secret"})
     assert ok.status_code == 200
     saved = client.put(
         "/api/settings",
         json={"opencode_model": "acme/fast", "opencode_timeout": 45},
-        headers={"X-Creasy-Token": "dash-secret"},
+        headers={"X-MIReviewer-Token": "dash-secret"},
     )
     assert saved.status_code == 200
     runner.release.set()

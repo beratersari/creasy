@@ -1,7 +1,7 @@
 [project]
-name = "creasy"
+name = "mireviewer"
 dynamic = ["version"]
-description = "Code review easy — GitLab webhook reviews driven by OpenCode"
+description = "MIReviewer — GitLab webhook reviews driven by OpenCode"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115",
@@ -15,7 +15,8 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-creasy = "creasy.app:main"
+mireviewer = "mireviewer.app:main"
+creasy = "mireviewer.app:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -11,11 +11,11 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import job_matches_query, router as dashboard_router
-from creasy.api.webhook import router as webhook_router
-from creasy.gitlab.events import Ignore, ReviewTrigger, classify_webhook
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord
+from mireviewer.api.dashboard import job_matches_query, router as dashboard_router
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.gitlab.events import Ignore, ReviewTrigger, classify_webhook
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord
 from conftest import FakeRunner
 from test_events import note_payload
 from test_user_facing_integration import _boot, _note_body, _shutdown, _wait_job
@@ -48,7 +48,7 @@ def test_mention_without_command_starts_usage_job(tmp_config):
     payload = note_payload("@creasy please check auth")
     payload["object_attributes"]["discussion_id"] = "disc_help"
     res = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json=payload,
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -71,7 +71,7 @@ def test_review_command_starts_a_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json=note_payload("@creasy /review."),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -89,7 +89,7 @@ def test_question_written_before_ask_starts_a_job(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json=note_payload("This overflow looks wrong.\n@creasy /ask"),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -106,7 +106,7 @@ def test_ask_with_a_question_mark_still_asks(tmp_config):
     app, manager, runner = _webhook_app(tmp_config)
     client = TestClient(app)
     res = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json=note_payload("@creasy /ask? is C++98 enough?"),
         headers={"X-Gitlab-Token": "secret"},
     )
@@ -126,11 +126,11 @@ def test_editing_a_review_comment_does_not_start_another_job(tmp_config):
     headers = {"X-Gitlab-Token": "secret"}
     created = note_payload("@creasy /ask focus on auth")
     created["object_attributes"]["action"] = "create"
-    first = client.post("/creasy/webhook/gitlab", json=created, headers=headers)
+    first = client.post("/mireviewer/webhook/gitlab", json=created, headers=headers)
     assert first.json()["status"] == "accepted"
     edited = note_payload("@creasy /ask focus on auth and tests")
     edited["object_attributes"]["action"] = "update"
-    second = client.post("/creasy/webhook/gitlab", json=edited, headers=headers)
+    second = client.post("/mireviewer/webhook/gitlab", json=edited, headers=headers)
     assert second.json()["status"] == "ignored"
     assert second.json()["reason"] == "note edit"
     assert len(manager.store.list_all()) == 1
@@ -163,7 +163,7 @@ def test_ask_answer_does_not_open_diff_threads(tmp_config, tmp_path: Path):
     )
     try:
         ask = client.post(
-            "/creasy/webhook/gitlab",
+            "/mireviewer/webhook/gitlab",
             json=_note_body("@creasy /ask Does this change assume C++17, or is C++98 enough?"),
             headers={"X-Gitlab-Token": "secret"},
         )

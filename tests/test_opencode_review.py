@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from creasy.gitlab.client import MergeRequest
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.workspace.store import WorkspaceStore
 from planted import init_planted_origin
 
 
@@ -237,6 +237,6 @@ def test_opencode_second_review_replies_on_overlap(tmp_path, tmp_config, monkeyp
 
 
 def first_command_safe(body: str):
-    from creasy.gitlab.events import first_command
+    from mireviewer.gitlab.events import first_command
 
     return first_command(body)

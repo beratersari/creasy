@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.report import (
+from mireviewer.api.report import (
     build_report_context,
     public_settings,
     read_capped_text,
@@ -22,14 +22,14 @@ from creasy.api.report import (
     _runtime,
     _serve_log_names,
 )
-from creasy.api.webhook import router as webhook_router
-from creasy.cleanup.end import delete_clone_path, protect_pids, retry_windows_delete_if_held, stop_job_holders
-from creasy.gitlab.events import CleanupTrigger, ReviewTrigger
-from creasy.jobs.manager import Manager, _real_review_busy
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.store import JobStore
-from creasy.workspace.diffmap import parse_unified_diff
-from creasy.workspace.gitops import (
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.cleanup.end import delete_clone_path, protect_pids, retry_windows_delete_if_held, stop_job_holders
+from mireviewer.gitlab.events import CleanupTrigger, ReviewTrigger
+from mireviewer.jobs.manager import Manager, _real_review_busy
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.store import JobStore
+from mireviewer.workspace.diffmap import parse_unified_diff
+from mireviewer.workspace.gitops import (
     GitError,
     askpass_path,
     delete_clone,
@@ -39,7 +39,7 @@ from creasy.workspace.gitops import (
     _kill_git,
     _run_git,
 )
-from creasy.workspace.store import WorkspaceRecord
+from mireviewer.workspace.store import WorkspaceRecord
 from conftest import FakeRunner
 
 
@@ -76,82 +76,82 @@ def test_gitops_helpers(tmp_path, monkeypatch):
     proc = MagicMock()
     proc.pid = 99
     proc.wait.side_effect = RuntimeError("x")
-    monkeypatch.setattr("creasy.cleanup.kill.kill_job_tree", lambda pids: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.kill.kill_job_tree", lambda pids: (_ for _ in ()).throw(RuntimeError("x")))
     proc.kill.side_effect = OSError("x")
     _kill_git(proc)
     monkeypatch.setattr(
-        "creasy.workspace.gitops.subprocess.run",
+        "mireviewer.workspace.gitops.subprocess.run",
         lambda *a, **k: SimpleNamespace(returncode=0, stdout="ok", stderr=""),
     )
     _run_git(["status"], cwd=tmp_path, timeout=1)
     env_az = isolated_git_env("tok", auth_scheme="azure")
     _run_git(["status"], cwd=tmp_path, env=env_az, timeout=1)
-    monkeypatch.setattr("creasy.workspace.gitops._run_git_killable", lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("mireviewer.workspace.gitops._run_git_killable", lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""))
     _run_git(["status"], cwd=tmp_path, timeout=1, on_pid=lambda p: None, should_stop=lambda: False)
     delete_clone(None)
     missing = tmp_path / "gone"
     delete_clone(missing)
     tree = tmp_path / "tree"
     tree.mkdir()
-    monkeypatch.setattr("creasy.cleanup.end.delete_clone_path", lambda *a, **k: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.delete_clone_path", lambda *a, **k: True)
     delete_clone(tree)
 
 
 def test_cleanup_end(tmp_path, monkeypatch):
-    from creasy.jobs.models import JobRecord
+    from mireviewer.jobs.models import JobRecord
 
     job = JobRecord(job_id="j", mr_key="1-1", project_id=1, mr_iid=1, trigger="review", serve_pid=9, extra_pids=[8])
     assert 9 not in protect_pids(None, ["x", 2, 99]) or True
     assert 99 in protect_pids([99])
-    monkeypatch.setattr("creasy.cleanup.end.kill_job_tree", lambda p: None)
-    monkeypatch.setattr("creasy.cleanup.end.reap_path", lambda *a, **k: 0)
-    monkeypatch.setattr("creasy.cleanup.end.kill_file_holders", lambda *a, **k: 0)
-    monkeypatch.setattr("creasy.cleanup.end.drop_git_locks", lambda *a, **k: None)
-    monkeypatch.setattr("creasy.cleanup.end.path_has_holders", lambda *a, **k: False)
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_job_tree", lambda p: None)
+    monkeypatch.setattr("mireviewer.cleanup.end.reap_path", lambda *a, **k: 0)
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_file_holders", lambda *a, **k: 0)
+    monkeypatch.setattr("mireviewer.cleanup.end.drop_git_locks", lambda *a, **k: None)
+    monkeypatch.setattr("mireviewer.cleanup.end.path_has_holders", lambda *a, **k: False)
     stop_job_holders(job, None)
     clone = tmp_path / "c"
     clone.mkdir()
     stop_job_holders(job, clone)
-    from creasy.cleanup import end as endmod
+    from mireviewer.cleanup import end as endmod
 
     _fake_os(monkeypatch, endmod, "posix")
-    monkeypatch.setattr("creasy.cleanup.end.path_has_holders", lambda *a, **k: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.path_has_holders", lambda *a, **k: True)
     stop_job_holders(job, clone)
-    monkeypatch.setattr("creasy.cleanup.end.kill_job_tree", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_job_tree", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
     stop_job_holders(job, clone)
-    monkeypatch.setattr("creasy.cleanup.end.kill_job_tree", lambda p: None)
-    monkeypatch.setattr("creasy.cleanup.end.reap_path", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_job_tree", lambda p: None)
+    monkeypatch.setattr("mireviewer.cleanup.end.reap_path", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     stop_job_holders(job, clone)
-    monkeypatch.setattr("creasy.cleanup.end.reap_path", lambda *a, **k: 0)
-    monkeypatch.setattr("creasy.cleanup.end.kill_file_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.reap_path", lambda *a, **k: 0)
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_file_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     stop_job_holders(job, clone)
     stop_job_holders(job, tmp_path / "boom")
     assert delete_clone_path(None, reason="x") is True
-    monkeypatch.setattr("creasy.cleanup.end.hard_delete", lambda p: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.hard_delete", lambda p: True)
     gone = tmp_path / "gone"
     assert delete_clone_path(gone, reason="x") is True
     stay = tmp_path / "stay"
     stay.mkdir()
-    monkeypatch.setattr("creasy.cleanup.end.hard_delete", lambda p: False)
-    from creasy.cleanup import end as endmod
+    monkeypatch.setattr("mireviewer.cleanup.end.hard_delete", lambda p: False)
+    from mireviewer.cleanup import end as endmod
 
     _fake_os(monkeypatch, endmod, "nt")
-    monkeypatch.setattr("creasy.cleanup.end.retry_windows_delete_if_held", lambda p: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.retry_windows_delete_if_held", lambda p: True)
     delete_clone_path(stay, reason="x")
-    monkeypatch.setattr("creasy.cleanup.end.retry_windows_delete_if_held", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.retry_windows_delete_if_held", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
     delete_clone_path(stay, reason="x")
-    monkeypatch.setattr("creasy.cleanup.end.hard_delete", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.hard_delete", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
     delete_clone_path(stay, reason="x")
-    monkeypatch.setattr("creasy.cleanup.end.query_windows_restart_manager", lambda p: SimpleNamespace(pids=[99], died=True))
-    monkeypatch.setattr("creasy.cleanup.end.may_kill", lambda p: True)
-    monkeypatch.setattr("creasy.cleanup.end.kill_pid", lambda p: None)
-    monkeypatch.setattr("creasy.cleanup.end.hard_delete", lambda p: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.query_windows_restart_manager", lambda p: SimpleNamespace(pids=[99], died=True))
+    monkeypatch.setattr("mireviewer.cleanup.end.may_kill", lambda p: True)
+    monkeypatch.setattr("mireviewer.cleanup.end.kill_pid", lambda p: None)
+    monkeypatch.setattr("mireviewer.cleanup.end.hard_delete", lambda p: True)
     retry_windows_delete_if_held(stay, protect=[1])
-    monkeypatch.setattr("creasy.cleanup.end.query_windows_restart_manager", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
-    monkeypatch.setattr("creasy.cleanup.end.hard_delete", lambda p: False)
+    monkeypatch.setattr("mireviewer.cleanup.end.query_windows_restart_manager", lambda p: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.cleanup.end.hard_delete", lambda p: False)
     retry_windows_delete_if_held(stay)
-    monkeypatch.setattr("creasy.cleanup.end.query_windows_restart_manager", lambda p: SimpleNamespace(pids=[1], died=False))
-    monkeypatch.setattr("creasy.cleanup.end.may_kill", lambda p: False)
+    monkeypatch.setattr("mireviewer.cleanup.end.query_windows_restart_manager", lambda p: SimpleNamespace(pids=[1], died=False))
+    monkeypatch.setattr("mireviewer.cleanup.end.may_kill", lambda p: False)
     retry_windows_delete_if_held(stay)
     missing = tmp_path / "nope"
     assert retry_windows_delete_if_held(missing) is True
@@ -225,8 +225,8 @@ def test_manager_edges(tmp_config, monkeypatch):
     )
     manager.store.save(leftover)
     manager.store.save(queued)
-    monkeypatch.setattr("creasy.jobs.manager.kill_job_tree", lambda p: None)
-    monkeypatch.setattr("creasy.jobs.manager.reap_work_dir", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.jobs.manager.kill_job_tree", lambda p: None)
+    monkeypatch.setattr("mireviewer.jobs.manager.reap_work_dir", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     runner.release.set()
     manager.boot()
     assert manager.ready
@@ -280,19 +280,19 @@ def test_manager_edges(tmp_config, monkeypatch):
     run = JobRecord(job_id="job_run1", mr_key="4-4", project_id=4, mr_iid=4, trigger="review", status="running", clone_path=str(tmp_config.work_dir / "4-4"))
     manager.store.save(run)
     manager._cancel["job_run1"] = __import__("threading").Event()
-    monkeypatch.setattr("creasy.jobs.manager.stop_job_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
-    monkeypatch.setattr("creasy.jobs.manager.kill_job_tree", lambda p: None)
+    monkeypatch.setattr("mireviewer.jobs.manager.stop_job_holders", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.jobs.manager.kill_job_tree", lambda p: None)
     ok, msg = manager.cancel_job("job_run1")
     assert ok
-    monkeypatch.setattr("creasy.jobs.manager.delete_clone_path", lambda *a, **k: True)
-    monkeypatch.setattr("creasy.jobs.manager.stop_job_holders", lambda *a, **k: None)
+    monkeypatch.setattr("mireviewer.jobs.manager.delete_clone_path", lambda *a, **k: True)
+    monkeypatch.setattr("mireviewer.jobs.manager.stop_job_holders", lambda *a, **k: None)
     manager.cleanup_mr(CleanupTrigger(action="close", project_id=5, mr_iid=5))
     rec = WorkspaceRecord(mr_key="5-5", project_id=5, mr_iid=5, clone_path=str(tmp_config.work_dir / "5-5"))
     manager.workspaces.save(rec)
-    monkeypatch.setattr("creasy.jobs.manager.delete_clone_path", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr("mireviewer.jobs.manager.delete_clone_path", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     manager.cancel_mr(5, 5, delete_clone_dir=True)
     manager.health()
-    from creasy.jobs.worker import RunResult
+    from mireviewer.jobs.worker import RunResult
 
     job = JobRecord(job_id="f1", mr_key="1-1", project_id=1, mr_iid=1, trigger="review")
     manager._finish(job, RunResult(text="t", session_id="s", clone_path="c", merge_base="m", sha="h", diff_stat="d", changed_paths=["a"], chat_snapshot=[], serve_pid=1, serve_port=2, posted=True), status="success")
@@ -321,7 +321,7 @@ def test_report_and_webhook(tmp_config, tmp_path, monkeypatch):
     manager = Manager(tmp_config, FakeRunner())
     manager.ready = True
     ctx = build_report_context(manager)
-    assert ctx["meta"]["app_name"] == "creasy"
+    assert ctx["meta"]["app_name"] == "MIReviewer"
     boom = SimpleNamespace()
     ctx2 = build_report_context(boom)
     assert "meta" in ctx2
@@ -338,7 +338,7 @@ def test_report_and_webhook(tmp_config, tmp_path, monkeypatch):
     _queue_items(SimpleNamespace())
     _runtime(tmp_config, running=0, queued=0)
     _cli_version("git")
-    monkeypatch.setattr("creasy.api.report.shutil.which", lambda b: None)
+    monkeypatch.setattr("mireviewer.api.report.shutil.which", lambda b: None)
     _cli_version("nope")
     _opencode_cli_logs()
     (tmp_config.serve_dir / "a.log").write_text("x", encoding="utf-8")
@@ -351,18 +351,18 @@ def test_report_and_webhook(tmp_config, tmp_path, monkeypatch):
     app.include_router(webhook_router)
     client = TestClient(app)
     assert client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json={"object_kind": "note"},
         headers={"X-Gitlab-Token": "secret"},
     ).status_code == 200
-    bad = client.post("/creasy/webhook/gitlab", content="not-json", headers={"X-Gitlab-Token": "secret"})
+    bad = client.post("/mireviewer/webhook/gitlab", content="not-json", headers={"X-Gitlab-Token": "secret"})
     assert bad.status_code == 400
     tmp_config.webhook_secret = ""
     client2 = TestClient(app)
-    client2.post("/creasy/webhook/gitlab", json=["x"])
+    client2.post("/mireviewer/webhook/gitlab", json=["x"])
     app.state.bot_user_id = None
     app.state.gitlab = None
-    client.post("/creasy/webhook/gitlab", json={"object_kind": "note"})
+    client.post("/mireviewer/webhook/gitlab", json={"object_kind": "note"})
     runner = FakeRunner()
     runner.release.set()
     manager.shutdown()

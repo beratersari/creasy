@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.dashboard import router as dashboard_router
-from creasy.jobs.manager import Manager
+from mireviewer.api.dashboard import router as dashboard_router
+from mireviewer.jobs.manager import Manager
 from conftest import FakeRunner
 
 
@@ -33,7 +33,7 @@ def _client(tmp_config, token: str = "") -> TestClient:
 def test_report_context_is_safe_and_includes_logs(tmp_config) -> None:
     client, manager = _client(tmp_config)
     body = client.get("/api/report-context").json()
-    assert body["meta"]["app_name"] == "creasy"
+    assert body["meta"]["app_name"] == "MIReviewer"
     assert "glpat-SHOULD-NOT-LEAK" not in str(body)
     assert "azure-pat-SHOULD-NOT-LEAK" not in str(body)
     assert "hook-secret" not in str(body)
@@ -55,6 +55,6 @@ def test_report_context_is_safe_and_includes_logs(tmp_config) -> None:
 def test_report_context_requires_token_when_set(tmp_config) -> None:
     client, manager = _client(tmp_config, token="dash-secret")
     assert client.get("/api/report-context").status_code == 401
-    ok = client.get("/api/report-context", headers={"X-Creasy-Token": "dash-secret"})
+    ok = client.get("/api/report-context", headers={"X-MIReviewer-Token": "dash-secret"})
     assert ok.status_code == 200
     manager.shutdown()

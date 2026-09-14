@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from creasy.azure.client import (
+from mireviewer.azure.client import (
     AzureClient,
     AzureError,
     _identity_name_values,
@@ -223,7 +223,7 @@ def test_list_reviewers_shapes_and_status():
     client = _client(list_body)
     try:
         assert client.list_reviewers("p", "r", 1) == []
-        from creasy.gitlab.client import MergeRequest
+        from mireviewer.gitlab.client import MergeRequest
 
         mr = MergeRequest(
             project_id=0,
@@ -251,7 +251,7 @@ def test_list_reviewers_shapes_and_status():
 
     client = _client(boom)
     try:
-        from creasy.gitlab.client import MergeRequest
+        from mireviewer.gitlab.client import MergeRequest
 
         mr = MergeRequest(
             project_id=0,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.worker import OpenCodeRunner
-from creasy.workspace.store import WorkspaceStore
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.worker import OpenCodeRunner
+from mireviewer.workspace.store import WorkspaceStore
 
 
 def test_result_replies_on_request_thread(tmp_config) -> None:

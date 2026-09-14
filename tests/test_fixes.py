@@ -13,17 +13,17 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from creasy.api.webhook import router as webhook_router
-from creasy.gitlab.client import MergeRequest
-from creasy.jobs.manager import Manager
-from creasy.jobs.models import JobRecord, mint_job_id
-from creasy.jobs.store import JobStore
-from creasy.jobs.worker import OpenCodeRunner, RunResult
-from creasy.opencode.serve import ServeHandle
-from creasy.opencode.session import OpenCodeClient, OpenCodeError
-from creasy.review.prompt import hang_resume_prompt
-from creasy.workspace.gitops import DiffIndex
-from creasy.workspace.store import WorkspaceRecord, WorkspaceStore
+from mireviewer.api.webhook import router as webhook_router
+from mireviewer.gitlab.client import MergeRequest
+from mireviewer.jobs.manager import Manager
+from mireviewer.jobs.models import JobRecord, mint_job_id
+from mireviewer.jobs.store import JobStore
+from mireviewer.jobs.worker import OpenCodeRunner, RunResult
+from mireviewer.opencode.serve import ServeHandle
+from mireviewer.opencode.session import OpenCodeClient, OpenCodeError
+from mireviewer.review.prompt import hang_resume_prompt
+from mireviewer.workspace.gitops import DiffIndex
+from mireviewer.workspace.store import WorkspaceRecord, WorkspaceStore
 
 
 def _mr(**kwargs) -> MergeRequest:
@@ -86,8 +86,8 @@ class SpyGitlab:
 
 
 def test_record_spawn_persists_pid_and_job_log(tmp_config):
-    from creasy.log_context import bound
-    from creasy.logging import setup_logging
+    from mireviewer.log_context import bound
+    from mireviewer.logging import setup_logging
 
     setup_logging("INFO", tmp_config.log_dir)
     store = JobStore(tmp_config.job_dir)
@@ -345,7 +345,7 @@ def test_hang_retry_posts_resume_not_original(tmp_config, monkeypatch):
         def close(self):
             return None
 
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -420,7 +420,7 @@ def test_hang_exhausted_does_not_repost_prior_text(tmp_config, monkeypatch):
         def close(self):
             return None
 
-    import creasy.jobs.worker as w
+    import mireviewer.jobs.worker as w
 
     monkeypatch.setattr(
         w,
@@ -488,7 +488,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     app.include_router(webhook_router)
     client = TestClient(app)
     opened = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {
@@ -508,7 +508,7 @@ def test_webhook_close_returns_without_waiting(tmp_config):
     assert runner.started.wait(2)
     t0 = time.time()
     closed = client.post(
-        "/creasy/webhook/gitlab",
+        "/mireviewer/webhook/gitlab",
         json={
             "object_kind": "merge_request",
             "object_attributes": {"action": "close", "iid": 11, "target_project_id": 6},
