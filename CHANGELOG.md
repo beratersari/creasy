@@ -9,6 +9,12 @@ section in the same change.
 
 ## Unreleased
 
+## 0.9.15 — 2026-09-14
+
+Linux operators download a zip built on their Ubuntu. The old
+single `linux-x64` zip was Ubuntu 24.04 and failed to start on
+other hosts.
+
 ### Added
 
 - Linux executable zips are built on Ubuntu 18.04, 20.04, 22.04,
