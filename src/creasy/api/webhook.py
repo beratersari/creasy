@@ -14,14 +14,42 @@ router = APIRouter()
 logger = get_logger("webhook")
 
 
+def _remember_gitlab_user(request: Request, user: object) -> None:
+    request.app.state.bot_user_resolved = True
+    if not isinstance(user, dict):
+        return
+    uid = user.get("id")
+    if uid is not None:
+        request.app.state.bot_user_id = uid
+    names = list(user.get("names") or [])
+    if names:
+        request.app.state.bot_mention_names = names
+
+
 def _bot_user_id(request: Request) -> Optional[int]:
     cached = getattr(request.app.state, "bot_user_id", None)
     if cached is not None:
         return cached
+    if getattr(request.app.state, "bot_user_resolved", False):
+        return None
     gitlab = getattr(request.app.state, "gitlab", None)
     if gitlab is None:
+        request.app.state.bot_user_resolved = True
         return None
-    uid = gitlab.current_user_id()
+    current = getattr(gitlab, "current_user", None)
+    if callable(current):
+        user = current()
+        _remember_gitlab_user(request, user)
+        cached = getattr(request.app.state, "bot_user_id", None)
+        if cached is not None:
+            return cached
+        try:
+            return int(user["id"]) if isinstance(user, dict) and user.get("id") is not None else None
+        except (TypeError, ValueError):
+            return None
+    uid_fn = getattr(gitlab, "current_user_id", None)
+    uid = uid_fn() if callable(uid_fn) else None
+    request.app.state.bot_user_resolved = True
     if uid is not None:
         request.app.state.bot_user_id = uid
     return uid
@@ -30,16 +58,16 @@ def _bot_user_id(request: Request) -> Optional[int]:
 def _mention_names(request: Request) -> list[str]:
     cfg = request.app.state.config
     cached = getattr(request.app.state, "bot_mention_names", None) or []
-    gitlab = getattr(request.app.state, "gitlab", None)
-    live: list[str] = []
-    current = getattr(gitlab, "current_user", None) if gitlab is not None else None
-    if callable(current):
-        user = current()
-        if isinstance(user, dict):
-            live = list(user.get("names") or [])
-            if live:
-                request.app.state.bot_mention_names = live
-    return collect_names(parse_mention_aliases(getattr(cfg, "review_mention", "")), cached, live)
+    aliases = parse_mention_aliases(getattr(cfg, "review_mention", ""))
+    if not getattr(request.app.state, "bot_user_resolved", False):
+        gitlab = getattr(request.app.state, "gitlab", None)
+        current = getattr(gitlab, "current_user", None) if gitlab is not None else None
+        if callable(current):
+            _remember_gitlab_user(request, current())
+            cached = getattr(request.app.state, "bot_mention_names", None) or cached
+        else:
+            request.app.state.bot_user_resolved = True
+    return collect_names(aliases, cached)
 
 
 def _verify_secret(request: Request) -> None:

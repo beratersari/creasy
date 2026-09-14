@@ -96,6 +96,23 @@ def test_gitlab_helpers_and_user():
         client.close()
 
 
+def test_gitlab_current_user_miss_is_not_retried():
+    hits = {"n": 0}
+
+    def boom(request: httpx.Request) -> httpx.Response:
+        hits["n"] += 1
+        return httpx.Response(500, json={"message": "unavailable"})
+
+    client = _gl(boom)
+    try:
+        assert client.current_user() is None
+        assert client.current_user() is None
+        assert client.current_user_id() is None
+        assert hits["n"] == 1
+    finally:
+        client.close()
+
+
 def test_gitlab_mr_notes_discussions():
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path

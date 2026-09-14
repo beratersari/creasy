@@ -46,6 +46,35 @@ def test_ask_runs_when_bot_id_unknown_if_mention_alias_is_set(tmp_config):
     manager.shutdown()
 
 
+def test_note_webhook_does_not_recall_gitlab_user_after_miss(tmp_config):
+    tmp_config.review_mention = "creasy"
+    app, manager, runner = _app(tmp_config)
+    app.state.bot_user_id = None
+    hits = {"n": 0}
+
+    class Gitlab:
+        def current_user(self):
+            hits["n"] += 1
+            return None
+
+    app.state.gitlab = Gitlab()
+    client = TestClient(app)
+    note = {
+        "object_kind": "note",
+        "user": {"id": 1},
+        "object_attributes": {"noteable_type": "MergeRequest", "note": "@creasy /ask why this lock?"},
+        "merge_request": {"iid": 4, "target_project_id": 5, "source_branch": "f", "target_branch": "main"},
+    }
+    first = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
+    second = client.post("/creasy/webhook/gitlab", json=note, headers={"X-Gitlab-Token": "secret"})
+    assert first.status_code == 200
+    assert first.json()["status"] in {"accepted", "queued"}
+    assert second.json()["status"] in {"accepted", "queued"}
+    assert hits["n"] == 1
+    runner.release.set()
+    manager.shutdown()
+
+
 def test_note_ignored_when_bot_and_mention_unknown(tmp_config):
     tmp_config.review_mention = ""
     app, manager, runner = _app(tmp_config)
